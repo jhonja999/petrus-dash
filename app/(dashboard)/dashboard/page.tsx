@@ -25,7 +25,7 @@ export default function DashboardPage() {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
         <Card className="col-span-4">
           <CardHeader>
-            <CardTitle>Consumo de Combustible</CardTitle>
+            <CardTitle>Análisis Consumo</CardTitle>
             <CardDescription>Análisis de consumo de combustible por tipo y período</CardDescription>
           </CardHeader>
           <CardContent>
