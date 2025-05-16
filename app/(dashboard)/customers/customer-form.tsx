@@ -89,7 +89,6 @@ export function CustomerForm({ customer, onClose, redirectAfterSubmit = false }:
 
       if (redirectAfterSubmit) {
         router.push("/customers")
-        router.refresh()
       } else if (onClose) {
         onClose()
       }

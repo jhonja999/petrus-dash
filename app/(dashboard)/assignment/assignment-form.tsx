@@ -58,12 +58,10 @@ export function AssignmentForm({
 
   const { data: fetchedTrucks, isLoading: trucksLoading } = useApi<any[]>("/api/trucks", {
     queryParams: { state: "Activo" },
-    enabled: !propTrucks,
   })
 
   const { data: fetchedDrivers, isLoading: driversLoading } = useApi<any[]>("/api/users", {
     queryParams: { role: "Conductor", state: "Activo" },
-    enabled: !propDrivers,
   })
 
   const trucks = propTrucks || fetchedTrucks || []
@@ -123,7 +121,6 @@ export function AssignmentForm({
 
       if (redirectAfterSubmit) {
         router.push("/assignment")
-        router.refresh()
       } else if (onClose) {
         onClose()
       }

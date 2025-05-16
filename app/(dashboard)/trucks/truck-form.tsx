@@ -56,7 +56,7 @@ export function TruckForm({ truck, onClose, redirectAfterSubmit = false }: Truck
     setIsSubmitting(true)
     try {
       const response = await fetch("/api/trucks", {
-        method: truck ? "PUT" : "POST",
+        method: truck ? "PATCH" : "POST",
         headers: {
           "Content-Type": "application/json",
         },
@@ -78,7 +78,6 @@ export function TruckForm({ truck, onClose, redirectAfterSubmit = false }: Truck
 
       if (redirectAfterSubmit) {
         router.push("/trucks")
-        router.refresh()
       } else if (onClose) {
         onClose()
       }

@@ -82,7 +82,6 @@ export function UserForm({ user, onClose, redirectAfterSubmit = false }: UserFor
 
       if (redirectAfterSubmit) {
         router.push("/users")
-        router.refresh()
       } else if (onClose) {
         onClose()
       }
