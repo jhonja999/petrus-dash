@@ -1,0 +1,120 @@
+// This is the Prisma schema file for the Fuel Dispatch System
+// More information: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Roles disponibles en el sistema
+enum Role {
+  Conductor    // Usuario que maneja los camiones
+  ADMIN        // Administrador del sistema
+}
+
+/// Estados posibles para usuarios
+enum UserState {
+  Activo      // Usuario operativo
+  Inactivo    // Usuario temporalmente deshabilitado
+  Suspendido  // Usuario suspendido por razones administrativas
+  Eliminado   // Usuario eliminado del sistema
+  Asignado    // Usuario asignado a una tarea
+}
+
+/// Modelo de Usuario
+model User {
+  id         Int          @id @default(autoincrement())
+  dni        String       @unique    // Documento de identidad
+  name       String                  // Nombre del usuario
+  lastname   String                  // Apellidos del usuario
+  email      String       @unique    // Correo electrónico
+  password   String       @default("peru2025++")
+  role       Role         @default(Conductor)
+  state      UserState    @default(Activo)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  Assignment Assignment[]  // Relación con asignaciones
+
+  @@index([role, state])
+}
+
+/// Estados posibles para camiones
+enum TruckState {
+  Activo        // Camión disponible para asignaciones
+  Inactivo      // Camión fuera de servicio
+  Mantenimiento // Camión en mantenimiento
+  Transito      // Camión en ruta
+  Descarga      // Camión realizando descarga
+  Asignado      // Camión asignado a una tarea
+}
+
+/// Modelo de Camión
+model Truck {
+  id          Int          @id @default(autoincrement())
+  placa       String       @unique    // Placa del vehículo
+  typefuel    String                  // Tipo de combustible (DIESEL_B5, GASOLINA_90, GASOLINA_95, GLP, ELECTRICA)
+  capacitygal Decimal      @db.Decimal(10, 2)  // Capacidad en galones
+  state       TruckState   @default(Activo)
+  Assignment  Assignment[] // Relación con asignaciones
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([state])
+}
+
+/// Modelo de Cliente
+model Customer {
+  id           Int         @id @default(autoincrement())
+  companyname  String      @unique    // Nombre de la empresa
+  ruc          String      @unique    // RUC de la empresa
+  address      String                 // Dirección
+  contactName  String?                // Nombre de contacto
+  contactPhone String?                // Teléfono de contacto
+  contactEmail String?                // Email de contacto
+  Discharge    Discharge[] // Relación con descargas
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+/// Modelo de Asignación
+model Assignment {
+  id             Int       @id @default(autoincrement())
+  truckId        Int                  // ID del camión
+  driverId       Int                  // ID del conductor
+  totalLoaded    Decimal    @db.Decimal(10, 2)  // Total cargado
+  totalRemaining Decimal    @db.Decimal(10, 2)  // Total restante
+  fuelType       String               // Tipo de combustible
+  notes          String?              // Notas adicionales
+
+  truck      Truck       @relation(fields: [truckId], references: [id])
+  driver     User        @relation(fields: [driverId], references: [id])
+  discharges Discharge[] // Relación con descargas
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([truckId])
+  @@index([driverId])
+}
+
+/// Modelo de Descarga
+model Discharge {
+  id              Int       @id @default(autoincrement())
+  assignmentId    Int                  // ID de la asignación
+  customerId      Int                  // ID del cliente
+  totalDischarged Decimal    @db.Decimal(10, 2)  // Total descargado
+  notes           String?              // Notas adicionales
+  
+  assignment Assignment @relation(fields: [assignmentId], references: [id])
+  customer   Customer   @relation(fields: [customerId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([assignmentId])
+  @@index([customerId])
+}
