@@ -4,21 +4,18 @@ import type { ColumnDef } from "@tanstack/react-table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
-import { Edit } from "lucide-react"
+import { Edit, Eye, Trash } from "lucide-react"
 import { formatDate } from "@/lib/utils"
-import { useAuth } from "@clerk/nextjs"
-import { Eye, Trash } from "lucide-react"
 
+// Move the useAuth hook outside of the component function
+// to avoid conditional hook calls
 interface UserColumnsProps {
   onEdit: (user: any) => void
   onDelete: (id: number) => Promise<void>
+  isAdmin: boolean
 }
 
-export function UserColumns({ onEdit, onDelete }: UserColumnsProps): ColumnDef<any>[] {
-  const { sessionClaims } = useAuth()
-  const userRole = sessionClaims?.metadata?.role as string
-  const isAdmin = userRole === "admin"
-
+export function UserColumns({ onEdit, onDelete, isAdmin }: UserColumnsProps): ColumnDef<any>[] {
   return [
     {
       accessorKey: "name",

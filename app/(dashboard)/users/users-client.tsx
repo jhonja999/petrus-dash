@@ -13,6 +13,7 @@ import { Users, Plus, Search } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import Link from "next/link"
+import { useAuth } from "@clerk/nextjs"
 
 export function UsersClient() {
   const [isFormOpen, setIsFormOpen] = useState(false)
@@ -20,6 +21,11 @@ export function UsersClient() {
   const [searchQuery, setSearchQuery] = useState("")
   const [roleFilter, setRoleFilter] = useState("all")
   const [stateFilter, setStateFilter] = useState("all")
+
+  // Move the useAuth hook to the top level of the component
+  const { sessionClaims } = useAuth()
+  const userRole = sessionClaims?.metadata?.role as string
+  const isAdmin = userRole === "admin"
 
   const { data: users, isLoading, error, refetch } = useApi<any[]>("/api/users")
 
@@ -153,6 +159,7 @@ export function UsersClient() {
         columns={UserColumns({
           onEdit: handleEdit,
           onDelete: handleDelete,
+          isAdmin: isAdmin,
         })}
         data={filteredUsers}
         searchColumn="name"
