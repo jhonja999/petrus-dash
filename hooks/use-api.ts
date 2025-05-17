@@ -1,145 +1,119 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect } from "react"
 
-interface FetchOptions {
-  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
-  body?: any
-  headers?: Record<string, string>
+interface UseApiOptions {
   queryParams?: Record<string, string>
   enabled?: boolean
+  revalidateOnFocus?: boolean
+  revalidateOnReconnect?: boolean
+  dedupingInterval?: number
 }
 
-interface ApiResponse<T> {
-  data: T | null
-  isLoading: boolean
-  error: Error | null
-  refetch: () => Promise<void>
-  mutate: (method?: "POST" | "PUT" | "PATCH" | "DELETE", data?: any) => Promise<T | null>
-}
+// Create a simple cache
+const cache: Record<string, { data: any; timestamp: number }> = {}
 
-export function useApi<T>(endpoint: string, options: FetchOptions = {}): ApiResponse<T> {
+export function useApi<T>(
+  url: string,
+  options: UseApiOptions = {
+    enabled: true,
+    revalidateOnFocus: true,
+    revalidateOnReconnect: true,
+    dedupingInterval: 5000, // 5 seconds
+  },
+) {
   const [data, setData] = useState<T | null>(null)
-  const [isLoading, setIsLoading] = useState<boolean>(true)
+  const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
 
-  const fetchData = useCallback(async () => {
+  // Build the full URL with query parameters
+  const queryString = options.queryParams
+    ? "?" +
+      Object.entries(options.queryParams)
+        .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+        .join("&")
+    : ""
+  const fullUrl = `${url}${queryString}`
+
+  // Function to fetch data
+  const fetchData = async () => {
     setIsLoading(true)
     setError(null)
 
     try {
-      // Build URL with query parameters
-      let url = endpoint
-      if (options.queryParams) {
-        const params = new URLSearchParams()
-        Object.entries(options.queryParams).forEach(([key, value]) => {
-          if (value) params.append(key, value)
-        })
-        url = `${url}?${params.toString()}`
-      }
-
-      // Set up request options
-      const requestOptions: RequestInit = {
-        method: options.method || "GET",
-        headers: {
-          "Content-Type": "application/json",
-          ...options.headers,
-        },
-      }
-
-      if (options.body && (options.method === "POST" || options.method === "PUT" || options.method === "PATCH")) {
-        requestOptions.body = JSON.stringify(options.body)
-      }
-
-      const response = await fetch(url, requestOptions)
-
-      if (!response.ok) {
-        let errorMessage = `Error ${response.status}: ${response.statusText}`
-
-        try {
-          const errorData = await response.json()
-          errorMessage = errorData.error || errorData.message || errorMessage
-        } catch (e) {
-          // If response is not JSON, use the status text
-          console.error("Error parsing error response:", e)
-        }
-
-        throw new Error(errorMessage)
-      }
-
-      // For DELETE requests, we might not have a response body
-      if (options.method === "DELETE") {
-        setData(null)
+      // Check if we have a valid cached response
+      const now = Date.now()
+      const cachedResponse = cache[fullUrl]
+      if (cachedResponse && now - cachedResponse.timestamp < (options.dedupingInterval || 5000)) {
+        setData(cachedResponse.data)
+        setIsLoading(false)
         return
       }
 
+      const response = await fetch(fullUrl)
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`)
+      }
+
       const result = await response.json()
       setData(result)
+
+      // Cache the response
+      cache[fullUrl] = {
+        data: result,
+        timestamp: now,
+      }
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)))
-      console.error(`Error fetching from ${endpoint}:`, err)
     } finally {
       setIsLoading(false)
     }
-  }, [endpoint, options.method, options.body, options.headers, options.queryParams])
+  }
+
+  // Function to refetch data
+  const refetch = () => {
+    // Remove from cache to force a fresh fetch
+    delete cache[fullUrl]
+    fetchData()
+  }
 
   useEffect(() => {
-    fetchData()
-  }, [fetchData])
-  
-  const mutate = async (
-    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" = "GET",
-    data?: any
-  ): Promise<T | null> => {
-    setIsLoading(true)
-    setError(null)
-
-    try {
-      const response = await fetch(endpoint, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          ...options.headers,
-        },
-        body: data ? JSON.stringify(data) : undefined,
-      })
-
-      if (!response.ok) {
-        let errorMessage = `Error ${response.status}: ${response.statusText}`
-
-        try {
-          const errorData = await response.json()
-          errorMessage = errorData.error || errorData.message || errorMessage
-        } catch (e) {
-          // If response is not JSON, use the status text
-          console.error("Error parsing error response:", e)
-        }
-
-        throw new Error(errorMessage)
-      }
-
-      if (method === "DELETE") {
-        setData(null)
-        return null
-      }
-
-      const result = await response.json()
-      setData(result)
-      return result
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error(String(err)))
-      console.error(`Error mutating ${endpoint}:`, err)
-      throw err
-    } finally {
+    if (options.enabled !== false) {
+      fetchData()
+    } else {
       setIsLoading(false)
     }
-  }
 
-  return {
-    data,
-    isLoading,
-    error,
-    refetch: fetchData,
-    mutate,
-  }
+    // Set up event listeners for revalidation
+    const handleFocus = () => {
+      if (options.revalidateOnFocus) {
+        refetch()
+      }
+    }
+
+    const handleReconnect = () => {
+      if (options.revalidateOnReconnect) {
+        refetch()
+      }
+    }
+
+    if (options.revalidateOnFocus) {
+      window.addEventListener("focus", handleFocus)
+    }
+
+    if (options.revalidateOnReconnect) {
+      window.addEventListener("online", handleReconnect)
+    }
+
+    return () => {
+      if (options.revalidateOnFocus) {
+        window.removeEventListener("focus", handleFocus)
+      }
+      if (options.revalidateOnReconnect) {
+        window.removeEventListener("online", handleReconnect)
+      }
+    }
+  }, [fullUrl, options.enabled, options.revalidateOnFocus, options.revalidateOnReconnect])
+
+  return { data, isLoading, error, refetch }
 }

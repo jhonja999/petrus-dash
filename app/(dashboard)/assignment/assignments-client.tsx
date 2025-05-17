@@ -35,22 +35,31 @@ export function AssignmentsClient() {
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingAssignment, setEditingAssignment] = useState<any | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
-  const [trucks, setTrucks] = useState([])
-  const [drivers, setDrivers] = useState([])
+  const [trucks, setTrucks] = useState<Truck[]>([])
+  const [drivers, setDrivers] = useState<Driver[]>([])
 
-  const { data: assignments, isLoading, error, refetch } = useApi<any[]>("/api/assignments")
+   // Use the useApi hook with proper caching to prevent excessive API calls
+   const {
+    data: assignments,
+    isLoading,
+    error,
+    refetch,
+  } = useApi<any[]>("/api/assignments", {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+  })
 
   // Fetch trucks and drivers
   useEffect(() => {
     const fetchTrucksAndDrivers = async () => {
       try {
         const [trucksRes, driversRes] = await Promise.all([
-          fetch("/api/trucks").then((res) => res.json()),
-          fetch("/api/users").then((res) => res.json()),
+          fetch("/api/trucks?state=Activo").then((res) => res.json()),
+          fetch("/api/users?role=Conductor&state=Activo").then((res) => res.json()),
         ])
 
-        setTrucks(trucksRes.filter((truck: Truck) => truck.state === "Activo"))
-        setDrivers(driversRes.filter((driver: Driver) => driver.state === "Activo" && driver.role === "conductor"))
+        setTrucks(trucksRes)
+        setDrivers(driversRes.filter((driver: Driver) => driver.role.toLowerCase() === "conductor"))
       } catch (error) {
         console.error("Error fetching trucks or drivers:", error)
         toast({

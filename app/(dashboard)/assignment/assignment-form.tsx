@@ -109,7 +109,7 @@ export function AssignmentForm({
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => null)
-        throw new Error(errorData || `Error ${response.status}: ${response.statusText}`)
+        throw new Error(errorData?.error || `Error ${response.status}: ${response.statusText}`)
       }
 
       toast({
@@ -201,11 +201,17 @@ export function AssignmentForm({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {trucks?.map((truck) => (
-                        <SelectItem key={truck.id} value={truck.id.toString()}>
-                          {truck.placa} - {truck.typefuel} ({truck.capacitygal} gal)
+                      {trucks?.length > 0 ? (
+                        trucks.map((truck) => (
+                          <SelectItem key={truck.id} value={truck.id.toString()}>
+                            {truck.placa} - {truck.typefuel} ({truck.capacitygal} gal)
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="loading" disabled>
+                          {trucksLoading ? "Cargando camiones..." : "No hay camiones disponibles"}
                         </SelectItem>
-                      ))}
+                      )}
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -230,11 +236,17 @@ export function AssignmentForm({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {drivers?.map((driver) => (
-                        <SelectItem key={driver.id} value={driver.id.toString()}>
-                          {driver.name} {driver.lastname} - {driver.dni}
+                      {drivers?.length > 0 ? (
+                        drivers.map((driver) => (
+                          <SelectItem key={driver.id} value={driver.id.toString()}>
+                            {driver.name} {driver.lastname} - {driver.dni}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="loading" disabled>
+                          {driversLoading ? "Cargando conductores..." : "No hay conductores disponibles"}
                         </SelectItem>
-                      ))}
+                      )}
                     </SelectContent>
                   </Select>
                   <FormMessage />
