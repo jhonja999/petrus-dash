@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { useApi } from "@/hooks/use-api"
 import { DataTable } from "@/components/ui/data-table"
 import { Button } from "@/components/ui/button"
@@ -13,7 +14,6 @@ import { Droplet, Plus, Search } from "lucide-react"
 import { toast } from "@/hooks/use-toast"
 import Link from "next/link"
 
-// Add these interfaces at the top of the file
 interface Truck {
   id: number
   placa: string
@@ -32,14 +32,15 @@ interface Driver {
 }
 
 export function AssignmentsClient() {
+  const router = useRouter()
+
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingAssignment, setEditingAssignment] = useState<any | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [trucks, setTrucks] = useState<Truck[]>([])
   const [drivers, setDrivers] = useState<Driver[]>([])
 
-   // Use the useApi hook with proper caching to prevent excessive API calls
-   const {
+  const {
     data: assignments,
     isLoading,
     error,
@@ -49,7 +50,7 @@ export function AssignmentsClient() {
     revalidateOnReconnect: false,
   })
 
-  // Fetch trucks and drivers
+  // Fetch trucks and drivers once
   useEffect(() => {
     const fetchTrucksAndDrivers = async () => {
       try {
@@ -59,9 +60,13 @@ export function AssignmentsClient() {
         ])
 
         setTrucks(trucksRes)
-        setDrivers(driversRes.filter((driver: Driver) => driver.role.toLowerCase() === "conductor"))
-      } catch (error) {
-        console.error("Error fetching trucks or drivers:", error)
+        setDrivers(
+          driversRes.filter((driver: Driver) =>
+            driver.role.toLowerCase() === "conductor"
+          )
+        )
+      } catch (err) {
+        console.error("Error fetching trucks or drivers:", err)
         toast({
           title: "Error",
           description: "No se pudieron cargar los camiones o conductores",
@@ -73,9 +78,9 @@ export function AssignmentsClient() {
     fetchTrucksAndDrivers()
   }, [])
 
+  // Redirect to the "new" page
   const handleCreate = () => {
-    setEditingAssignment(null)
-    setIsFormOpen(true)
+    router.push("/assignment/new")
   }
 
   const handleEdit = (assignment: any) => {
@@ -100,11 +105,12 @@ export function AssignmentsClient() {
       })
 
       refetch()
-    } catch (error) {
-      console.error("Error deleting assignment:", error)
+    } catch (err) {
+      console.error("Error deleting assignment:", err)
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Error al eliminar la asignación",
+        description:
+          err instanceof Error ? err.message : "Error al eliminar la asignación",
         variant: "destructive",
       })
     }
@@ -122,7 +128,9 @@ export function AssignmentsClient() {
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center p-8">
-        <p className="text-destructive">Error al cargar las asignaciones: {error.message}</p>
+        <p className="text-destructive">
+          Error al cargar las asignaciones: {error.message}
+        </p>
         <Button onClick={() => refetch()} className="mt-4">
           Reintentar
         </Button>
@@ -130,7 +138,6 @@ export function AssignmentsClient() {
     )
   }
 
-  // Filter assignments based on search query
   const filteredAssignments = assignments
     ? assignments.filter((assignment) => {
         const searchFields = [
@@ -142,6 +149,7 @@ export function AssignmentsClient() {
           .filter(Boolean)
           .join(" ")
           .toLowerCase()
+
         return searchFields.includes(searchQuery.toLowerCase())
       })
     : []
@@ -168,17 +176,16 @@ export function AssignmentsClient() {
           </Link>
         </Button>
       </div>
+
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-1 items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar asignación..."
-              className="pl-8"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
+        <div className="relative flex-1">
+          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar asignación..."
+            className="pl-8"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
         </div>
       </div>
 
@@ -187,9 +194,7 @@ export function AssignmentsClient() {
           onEdit: handleEdit,
           onDelete: handleDelete,
           onView: (assignment) => {
-            // Add view functionality here
             console.log("Viewing assignment:", assignment)
-            // You could navigate to a detail page or open a modal
           },
         })}
         data={filteredAssignments}
@@ -198,7 +203,12 @@ export function AssignmentsClient() {
       />
 
       {isFormOpen && (
-        <AssignmentForm assignment={editingAssignment} onClose={handleFormClose} trucks={trucks} drivers={drivers} />
+        <AssignmentForm
+          assignment={editingAssignment}
+          onClose={handleFormClose}
+          trucks={trucks}
+          drivers={drivers}
+        />
       )}
     </div>
   )

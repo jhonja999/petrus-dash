@@ -1,24 +1,43 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { useForm } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import * as z from "zod"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { toast } from "@/hooks/use-toast"
-import { Loader2, ArrowRight, Save } from "lucide-react"
-import { useApi } from "@/hooks/use-api"
-import { Textarea } from "@/components/ui/textarea"
-import Link from "next/link"
-import { DataPreview } from "@/components/ui/data-preview"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "@/hooks/use-toast";
+import { Loader2, ArrowRight, Save } from "lucide-react";
+import { useApi } from "@/hooks/use-api";
+import { Textarea } from "@/components/ui/textarea";
+import Link from "next/link";
+import { DataPreview } from "@/components/ui/data-preview";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 
 const assignmentSchema = z.object({
   truckId: z.string().min(1, "Seleccione un camión"),
@@ -29,17 +48,15 @@ const assignmentSchema = z.object({
     .positive("La cantidad debe ser mayor a 0")
     .max(10000, "La cantidad máxima es 10,000 galones"),
   notes: z.string().optional(),
-})
-
-// Define the type from the schema
+});
 type AssignmentFormValues = z.infer<typeof assignmentSchema>;
 
 interface AssignmentFormProps {
-  assignment?: any
-  onClose?: () => void
-  redirectAfterSubmit?: boolean
-  trucks?: any[]
-  drivers?: any[]
+  assignment?: any;
+  onClose?: () => void;
+  redirectAfterSubmit?: boolean;
+  trucks?: any[];
+  drivers?: any[];
 }
 
 export function AssignmentForm({
@@ -49,92 +66,52 @@ export function AssignmentForm({
   trucks: propTrucks,
   drivers: propDrivers,
 }: AssignmentFormProps) {
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [activeTab, setActiveTab] = useState("form")
-  const router = useRouter()
-  const isEditing = !!assignment
+  const router = useRouter();
+  const isEditing = !!assignment;
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeTab, setActiveTab] = useState<"form" | "preview">("form");
+  const [selectedTruck, setSelectedTruck] = useState<any>(null);
 
-  const [selectedTruck, setSelectedTruck] = useState<any>(null)
+  // Fetch trucks & drivers if not passed as props
+  const { data: fetchedTrucks, isLoading: trucksLoading } = useApi<any[]>(
+    "/api/trucks",
+    {
+      queryParams: { state: "Activo" },
+    }
+  );
+  const { data: fetchedDrivers, isLoading: driversLoading } = useApi<any[]>(
+    "/api/users",
+    {
+      queryParams: { role: "Conductor", state: "Activo" },
+    }
+  );
 
-  const { data: fetchedTrucks, isLoading: trucksLoading } = useApi<any[]>("/api/trucks", {
-    queryParams: { state: "Activo" },
-  })
-
-  const { data: fetchedDrivers, isLoading: driversLoading } = useApi<any[]>("/api/users", {
-    queryParams: { role: "Conductor", state: "Activo" },
-  })
-
-  const trucks = propTrucks || fetchedTrucks || []
-  const drivers = propDrivers || fetchedDrivers || []
+  const trucks = propTrucks || fetchedTrucks || [];
+  const drivers = propDrivers || fetchedDrivers || [];
 
   const form = useForm<AssignmentFormValues>({
     resolver: zodResolver(assignmentSchema),
     defaultValues: {
-      truckId: assignment?.truck?.id?.toString() || "",
-      driverId: assignment?.driver?.id?.toString() || "",
+      truckId: assignment?.truckId?.toString() || "",
+      driverId: assignment?.driverId?.toString() || "",
       fuelType: assignment?.fuelType || "",
       totalLoaded: assignment?.totalLoaded?.toString() || "",
       notes: assignment?.notes || "",
     },
-  })
+  });
 
-  const watchedValues = form.watch()
-  const watchedTruckId = form.watch("truckId")
+  const watchedValues = form.watch();
+  const watchedTruckId = watchedValues.truckId;
 
-  // Update selected truck when truckId changes
   useEffect(() => {
-    if (watchedTruckId && trucks.length > 0) {
-      const truck = trucks.find((t) => t.id.toString() === watchedTruckId)
-      if (truck) {
-        setSelectedTruck(truck)
-        form.setValue("fuelType", truck.typefuel)
+    if (watchedTruckId && trucks.length) {
+      const t = trucks.find((x) => x.id.toString() === watchedTruckId);
+      if (t) {
+        setSelectedTruck(t);
+        form.setValue("fuelType", t.typefuel);
       }
     }
-  }, [watchedTruckId, trucks, form])
-
-  const onSubmit = async (data: AssignmentFormValues) => {
-    setIsSubmitting(true)
-    try {
-      const url = "/api/assignments"
-      const method = isEditing ? "PATCH" : "POST"
-      const body = isEditing ? { id: assignment.id, ...data } : data
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null)
-        throw new Error(errorData?.error || `Error ${response.status}: ${response.statusText}`)
-      }
-
-      toast({
-        title: isEditing ? "Asignación actualizada" : "Asignación creada",
-        description: isEditing
-          ? "La asignación ha sido actualizada correctamente"
-          : "La asignación ha sido creada correctamente",
-      })
-
-      if (redirectAfterSubmit) {
-        router.push("/assignment")
-      } else if (onClose) {
-        onClose()
-      }
-    } catch (error) {
-      console.error("Error submitting form:", error)
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Ocurrió un error inesperado",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
+  }, [watchedTruckId, trucks, form]);
 
   const fuelTypeLabels: Record<string, string> = {
     DIESEL_B5: "Diesel B5",
@@ -142,41 +119,92 @@ export function AssignmentForm({
     GASOLINA_95: "Gasolina 95",
     GLP: "GLP",
     ELECTRICA: "Eléctrica",
-  }
+  };
 
-  type FormatterKey = keyof AssignmentFormValues;
-  
-  // Type-safe formatters
-  const formatters: {
-    [K in FormatterKey]?: (value: any) => React.ReactNode;
-  } = {
-    truckId: (value: string) => {
-      const truck = trucks.find((t) => t.id.toString() === value)
-      return truck ? `${truck.placa} (${truck.typefuel})` : value
-    },
-    driverId: (value: string) => {
-      const driver = drivers.find((d) => d.id.toString() === value)
-      return driver ? `${driver.name} ${driver.lastname}` : value
-    },
-    fuelType: (value: string) => <Badge>{fuelTypeLabels[value] || value}</Badge>,
-    totalLoaded: (value: number) => `${value} galones`,
-  }
+  const formatters = {
+    truckId: (val: string) =>
+      trucks.find((t) => t.id.toString() === val)
+        ? `${trucks.find((t) => t.id.toString() === val)!.placa}`
+        : val,
+    driverId: (val: string) =>
+      drivers.find((d) => d.id.toString() === val)
+        ? `${drivers.find((d) => d.id.toString() === val)!.name} ${
+            drivers.find((d) => d.id.toString() === val)!.lastname
+          }`
+        : val,
+    fuelType: (val: string) => <Badge>{fuelTypeLabels[val] || val}</Badge>,
+    totalLoaded: (val: number) => `${val} galones`,
+  };
 
-  // Type-safe way to check if a field exists and has a value
-  const hasValue = (field: keyof AssignmentFormValues): boolean => {
-    return !!watchedValues[field];
-  }
+  const hasValue = (key: keyof AssignmentFormValues) => !!watchedValues[key];
 
-  // Form content that will be used in both modal and page versions
+  const onSubmit = async (data: AssignmentFormValues) => {
+    setIsSubmitting(true);
+    try {
+      /* const cap = parseFloat(selectedTruck.capacitygal)
+const totalRemaining = cap - data.totalLoaded */
+
+      const totalRemaining = data.totalLoaded;
+
+      const payload = {
+        truckId: Number(data.truckId),
+        driverId: Number(data.driverId),
+        fuelType: data.fuelType,
+        totalLoaded: data.totalLoaded,
+        totalRemaining, // ← lo agregamos
+        notes: data.notes || "",
+        ...(isEditing && { id: assignment.id }),
+      };
+
+      const res = await fetch("/api/assignments", {
+        method: isEditing ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Error ${res.status}`);
+      }
+
+      toast({
+        title: isEditing ? "Asignación actualizada" : "Asignación creada",
+        description: isEditing
+          ? "Se actualizó correctamente."
+          : "Se creó correctamente.",
+      });
+
+      if (redirectAfterSubmit) {
+        router.push("/assignment");
+      } else if (onClose) {
+        onClose();
+      }
+    } catch (e) {
+      console.error(e);
+      toast({
+        title: "Error",
+        description: (e as Error).message || "Ocurrió un error.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const formContent = (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-2">
+        <Tabs
+          value={activeTab}
+          onValueChange={(val: string) =>
+            setActiveTab(val as "form" | "preview")
+          }
+        >
+          <TabsList className="grid grid-cols-2">
             <TabsTrigger value="form">Formulario</TabsTrigger>
             <TabsTrigger value="preview">Vista Previa</TabsTrigger>
           </TabsList>
-          <TabsContent value="form" className="space-y-4 pt-4">
+          <TabsContent value="form" className="pt-4 space-y-4">
             <FormField
               control={form.control}
               name="truckId"
@@ -184,34 +212,28 @@ export function AssignmentForm({
                 <FormItem>
                   <FormLabel>Camión</FormLabel>
                   <Select
-                    onValueChange={(value) => {
-                      field.onChange(value)
-                      const truck = trucks.find((t) => t.id.toString() === value)
-                      if (truck) {
-                        setSelectedTruck(truck)
-                        form.setValue("fuelType", truck.typefuel)
+                    onValueChange={(v) => {
+                      field.onChange(v);
+                      const t = trucks.find((x) => x.id.toString() === v);
+                      if (t) {
+                        setSelectedTruck(t);
+                        form.setValue("fuelType", t.typefuel);
                       }
                     }}
-                    defaultValue={field.value}
-                    disabled={isEditing || trucksLoading}
+                    value={field.value}
+                    disabled={trucksLoading}
                   >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Seleccione un camión" />
+                        <SelectValue placeholder="Seleccione camión" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {trucks?.length > 0 ? (
-                        trucks.map((truck) => (
-                          <SelectItem key={truck.id} value={truck.id.toString()}>
-                            {truck.placa} - {truck.typefuel} ({truck.capacitygal} gal)
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <SelectItem value="loading" disabled>
-                          {trucksLoading ? "Cargando camiones..." : "No hay camiones disponibles"}
+                      {trucks.map((t) => (
+                        <SelectItem key={t.id} value={t.id.toString()}>
+                          {t.placa} – {t.typefuel}
                         </SelectItem>
-                      )}
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -227,26 +249,20 @@ export function AssignmentForm({
                   <FormLabel>Conductor</FormLabel>
                   <Select
                     onValueChange={field.onChange}
-                    defaultValue={field.value}
-                    disabled={isEditing || driversLoading}
+                    value={field.value}
+                    disabled={driversLoading}
                   >
                     <FormControl>
                       <SelectTrigger>
-                        <SelectValue placeholder="Seleccione un conductor" />
+                        <SelectValue placeholder="Seleccione conductor" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {drivers?.length > 0 ? (
-                        drivers.map((driver) => (
-                          <SelectItem key={driver.id} value={driver.id.toString()}>
-                            {driver.name} {driver.lastname} - {driver.dni}
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <SelectItem value="loading" disabled>
-                          {driversLoading ? "Cargando conductores..." : "No hay conductores disponibles"}
+                      {drivers.map((d) => (
+                        <SelectItem key={d.id} value={d.id.toString()}>
+                          {d.name} {d.lastname}
                         </SelectItem>
-                      )}
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -254,46 +270,49 @@ export function AssignmentForm({
               )}
             />
 
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <FormField
-                control={form.control}
-                name="fuelType"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tipo de Combustible</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Seleccione un tipo de combustible" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="DIESEL_B5">Diesel B5</SelectItem>
-                        <SelectItem value="GASOLINA_90">Gasolina 90</SelectItem>
-                        <SelectItem value="GASOLINA_95">Gasolina 95</SelectItem>
-                        <SelectItem value="GLP">GLP</SelectItem>
-                        <SelectItem value="ELECTRICA">Eléctrica</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="totalLoaded"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Carga Total (galones)</FormLabel>
+            <FormField
+              control={form.control}
+              name="fuelType"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Tipo de Combustible</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
-                      <Input type="number" step="0.01" placeholder="500.00" {...field} />
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccione tipo" />
+                      </SelectTrigger>
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+                    <SelectContent>
+                      {Object.entries(fuelTypeLabels).map(([val, label]) => (
+                        <SelectItem key={val} value={val}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="totalLoaded"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Carga Total (galones)</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="500.00"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <FormField
               control={form.control}
@@ -302,7 +321,10 @@ export function AssignmentForm({
                 <FormItem>
                   <FormLabel>Notas</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Notas adicionales sobre la asignación" {...field} />
+                    <Textarea
+                      placeholder="Notas adicionales sobre la asignación"
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -310,83 +332,84 @@ export function AssignmentForm({
             />
 
             {selectedTruck && (
-              <div className="rounded-md bg-muted p-3">
-                <p className="text-sm font-medium">Información del camión seleccionado:</p>
-                <p className="text-sm">
-                  Placa: <span className="font-medium">{selectedTruck.placa}</span>
-                </p>
-                <p className="text-sm">
-                  Capacidad: <span className="font-medium">{selectedTruck.capacitygal} galones</span>
-                </p>
+              <div className="p-3 bg-muted rounded">
+                <p className="font-medium">Camión: {selectedTruck.placa}</p>
+                <p>Capacidad: {selectedTruck.capacitygal} galones</p>
               </div>
             )}
           </TabsContent>
-          <TabsContent value="preview">
+
+          <TabsContent value="preview" className="pt-4">
             <DataPreview
-              title="Vista Previa de la Asignación"
-              description="Revise los datos antes de guardar"
+              title="Vista Previa"
+              description="Revisa antes de guardar"
               data={watchedValues}
               formatters={formatters}
-              excludeFields={["notes"].filter(field => !hasValue(field as keyof AssignmentFormValues))}
+              excludeFields={["notes"].filter((k) => !hasValue(k as any))}
             />
           </TabsContent>
         </Tabs>
 
         <div className="flex justify-end gap-2 pt-4">
           {redirectAfterSubmit ? (
-            <Button type="button" variant="outline" asChild>
+            <Button variant="outline" asChild disabled={isSubmitting}>
               <Link href="/assignment">Cancelar</Link>
             </Button>
           ) : (
-            <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
+            <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
               Cancelar
             </Button>
           )}
+
           {activeTab === "form" ? (
             <Button
               type="button"
               onClick={() => setActiveTab("preview")}
-              className="bg-emerald-600 hover:bg-emerald-700"
+              disabled={isSubmitting}
             >
               Vista Previa <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           ) : (
-            <Button type="submit" disabled={isSubmitting} className="bg-emerald-600 hover:bg-emerald-700">
-              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="mr-2 h-4 w-4" />
+              )}
               {isEditing ? "Actualizar" : "Guardar"}
             </Button>
           )}
         </div>
       </form>
     </Form>
-  )
+  );
 
-  // If we're in a modal (onClose is provided), render with Dialog
   if (onClose) {
     return (
-      <Dialog open={true} onOpenChange={onClose}>
-        <DialogContent className="sm:max-w-[600px]">
+      <Dialog open onOpenChange={onClose}>
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{isEditing ? "Editar asignación" : "Nueva Asignación"}</DialogTitle>
+            <DialogTitle>
+              {isEditing ? "Editar Asignación" : "Nueva Asignación"}
+            </DialogTitle>
             <DialogDescription>
               {isEditing
-                ? "Actualiza la información de la asignación seleccionada."
-                : "Completa la información para agregar una nueva asignación."}
+                ? "Modifica los datos y guarda los cambios."
+                : "Completa el formulario para crear una asignación."}
             </DialogDescription>
           </DialogHeader>
           {formContent}
         </DialogContent>
       </Dialog>
-    )
+    );
   }
 
-  // If we're on a page (no onClose), render without Dialog
   return (
     <Card>
       <CardHeader>
-        <h3 className="text-lg font-medium">Información de la Asignación</h3>
+        <h3 className="text-lg font-medium">Asignación</h3>
       </CardHeader>
       <CardContent>{formContent}</CardContent>
     </Card>
-  )
+  );
 }
