@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { useApi } from "@/hooks/use-api"
 import { DataTable } from "@/components/ui/data-table"
 import { Button } from "@/components/ui/button"
@@ -14,11 +15,19 @@ import { toast } from "@/hooks/use-toast"
 import Link from "next/link"
 
 export function CustomersClient() {
+  const router = useRouter() // Hook de navegación correctamente ubicado dentro del componente
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingCustomer, setEditingCustomer] = useState<any | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
 
   const { data: customers, isLoading, error, refetch } = useApi<any[]>("/api/customers")
+
+  // Redirección automática cuando no hay registros
+  useEffect(() => {
+    if (customers && customers.length === 0) {
+      router.push("/customers/new")
+    }
+  }, [customers, router])
 
   const handleCreate = () => {
     setEditingCustomer(null)

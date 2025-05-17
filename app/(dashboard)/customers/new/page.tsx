@@ -23,7 +23,9 @@ export default function NewCustomerPage() {
         </div>
       </div>
       <div className="space-y-4">
-        <CustomerForm redirectAfterSubmit={true} />
+        <div className="rounded-lg border bg-card p-6 shadow-sm">
+          <CustomerForm redirectAfterSubmit={true} />
+        </div>
       </div>
     </div>
   )

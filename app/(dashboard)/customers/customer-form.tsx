@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -77,7 +77,7 @@ export function CustomerForm({ customer, onClose, redirectAfterSubmit = false }:
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => null)
-        throw new Error(errorData || `Error ${response.status}: ${response.statusText}`)
+        throw new Error(errorData?.error || `Error ${response.status}: ${response.statusText}`)
       }
 
       toast({
@@ -87,10 +87,11 @@ export function CustomerForm({ customer, onClose, redirectAfterSubmit = false }:
           : "El cliente ha sido creado correctamente",
       })
 
-      if (redirectAfterSubmit) {
-        router.push("/customers")
-      } else if (onClose) {
-        onClose()
+      // Manejo mejorado de redireccionamiento/cierre
+      if (onClose) {
+        onClose() // Si hay función onClose, es un modal -> cerrarlo
+      } else if (redirectAfterSubmit) {
+        router.push("/customers") // Si estamos en página y queremos redirigir
       }
     } catch (error) {
       console.error("Error submitting form:", error)
@@ -223,35 +224,35 @@ export function CustomerForm({ customer, onClose, redirectAfterSubmit = false }:
         </Tabs>
 
         <div className="flex justify-end gap-2 pt-4">
-          {redirectAfterSubmit ? (
+          {redirectAfterSubmit || onClose ? (
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={onClose || (() => router.push("/customers"))} 
+              disabled={isSubmitting}
+            >
+              Cancelar
+            </Button>
+          ) : (
             <Button type="button" variant="outline" asChild>
               <Link href="/customers">Cancelar</Link>
             </Button>
-          ) : (
-            <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
-              Cancelar
-            </Button>
           )}
-          {activeTab === "form" ? (
-            <Button
-              type="button"
-              onClick={() => setActiveTab("preview")}
-              className="bg-emerald-600 hover:bg-emerald-700"
-            >
-              Vista Previa <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          ) : (
-            <Button type="submit" disabled={isSubmitting} className="bg-emerald-600 hover:bg-emerald-700">
-              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-              {isEditing ? "Actualizar" : "Guardar"}
-            </Button>
-          )}
+          
+          <Button 
+            type="submit" 
+            disabled={isSubmitting} 
+            className="bg-emerald-600 hover:bg-emerald-700"
+          >
+            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            {isEditing ? "Actualizar" : "Guardar"}
+          </Button>
         </div>
       </form>
     </Form>
   )
 
-  // If we're in a modal (onClose is provided), render with Dialog
+  // Si estamos en un modal (onClose está definido), render con Dialog
   if (onClose) {
     return (
       <Dialog open={true} onOpenChange={onClose}>
@@ -270,7 +271,7 @@ export function CustomerForm({ customer, onClose, redirectAfterSubmit = false }:
     )
   }
 
-  // If we're on a page (no onClose), render without Dialog
+  // Si estamos en una página (no hay onClose), render sin Dialog
   return (
     <Card>
       <CardHeader>
