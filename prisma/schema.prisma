@@ -33,6 +33,7 @@ model User {
   lastname   String                  // Apellidos del usuario
   email      String       @unique    // Correo electrónico
   password   String       @default("peru2025++")
+  clerkId    String?      @unique    // ID de Clerk para autenticación
   role       Role         @default(Conductor)
   state      UserState    @default(Activo)
   createdAt  DateTime     @default(now())
@@ -40,6 +41,7 @@ model User {
   Assignment Assignment[]  // Relación con asignaciones
 
   @@index([role, state])
+  @@index([clerkId])
 }
 
 /// Estados posibles para camiones
@@ -89,6 +91,7 @@ model Assignment {
   totalRemaining Decimal    @db.Decimal(10, 2)  // Total restante
   fuelType       String               // Tipo de combustible
   notes          String?              // Notas adicionales
+isCompleted    Boolean    @default(false) // Indica si la asignación está completada
 
   truck      Truck       @relation(fields: [truckId], references: [id])
   driver     User        @relation(fields: [driverId], references: [id])
@@ -99,6 +102,7 @@ model Assignment {
 
   @@index([truckId])
   @@index([driverId])
+  @@index([isCompleted])
 }
 
 /// Modelo de Descarga
