@@ -1,39 +1,24 @@
-import type React from "react"
+// app/layout.tsx
+import type { ReactNode } from "react"
 import { Inter } from "next/font/google"
-import "./globals.css"
+import "@/app/globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
-import { AuthProvider } from "@/contexts/AuthContext" // Import AuthProvider
-import { ToastContainer } from "react-toastify" // For react-toastify
-import { Toaster } from "@/components/ui/toaster" // For shadcn/ui toasts
-import "react-toastify/dist/ReactToastify.css" // Import react-toastify CSS
+import { AuthProvider } from "@/contexts/AuthContext"
+import { ToastContainer } from "react-toastify"
+import { Toaster } from "@/components/ui/toaster"
+import "react-toastify/dist/ReactToastify.css"
 
 const inter = Inter({ subsets: ["latin"] })
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
+      <body className={`${inter.className} font-sans`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <AuthProvider>
-            {" "}
-            {/* Wrap children with AuthProvider */}
             {children}
-            <ToastContainer
-              position="bottom-right"
-              autoClose={5000}
-              hideProgressBar={false}
-              newestOnTop={false}
-              closeOnClick
-              rtl={false}
-              pauseOnFocusLoss
-              draggable
-              pauseOnHover
-            />
-            <Toaster /> {/* Shadcn/ui toaster */}
+            <ToastContainer position="bottom-right" autoClose={5000} />
+            <Toaster />
           </AuthProvider>
         </ThemeProvider>
       </body>
