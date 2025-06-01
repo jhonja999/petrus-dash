@@ -1,0 +1,118 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserState {
+  Activo
+  Inactivo
+  Suspendido
+  Eliminado
+  Asignado
+}
+
+enum UserRole {
+  admin
+  conductor
+}
+
+enum TruckState {
+  Activo
+  Inactivo
+  Mantenimiento
+  Transito
+  Descarga
+  Asignado
+}
+
+enum FuelType {
+  DIESEL_B5
+  GASOLINA_90
+  GASOLINA_95
+  GLP
+  ELECTRICA
+}
+
+model User {
+  id         Int          @id @default(autoincrement())
+  dni        String       @unique
+  name       String
+  lastname   String
+  email      String       @unique
+  password   String       @default("peru2025++")
+  role       UserRole     @default(conductor)
+  state      UserState    @default(Activo)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  deletedAt  DateTime?
+  Assignment Assignment[]
+
+  @@map("users")
+}
+
+model Truck {
+  id            Int          @id @default(autoincrement())
+  placa         String       @unique
+  typefuel      FuelType
+  capacitygal   Decimal
+  lastRemaining Decimal      @default(0.00)
+  state         TruckState   @default(Activo)
+  Assignment    Assignment[]
+
+  @@map("trucks")
+}
+
+model Customer {
+  id          Int         @id @default(autoincrement())
+  companyname String      @unique
+  ruc         String      @unique
+  address     String
+  Discharge   Discharge[]
+
+  @@map("customers")
+}
+
+model Assignment {
+  id             Int       @id @default(autoincrement())
+  truckId        Int
+  driverId       Int
+  totalLoaded    Decimal
+  totalRemaining Decimal
+  fuelType       FuelType
+  isCompleted    Boolean   @default(false)
+  notes          String?
+
+  truck      Truck       @relation(fields: [truckId], references: [id])
+  driver     User        @relation(fields: [driverId], references: [id])
+  discharges Discharge[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("assignments")
+  @@index([driverId])
+  @@index([createdAt])
+}
+
+model Discharge {
+  id              Int      @id @default(autoincrement())
+  assignmentId    Int
+  customerId      Int
+  totalDischarged Decimal
+  status          String   @default("pendiente")
+  marcadorInicial Decimal?
+  marcadorFinal   Decimal?
+  cantidadReal    Decimal?
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id])
+  customer   Customer   @relation(fields: [customerId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("discharges")
+}
