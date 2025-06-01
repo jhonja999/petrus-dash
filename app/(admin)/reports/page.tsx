@@ -16,6 +16,7 @@ import type { DateRange } from "react-day-picker"
 import { formatDate, getDateRange } from "@/lib/date"
 import axios from "axios"
 import type { Assignment, Truck as TruckType, User } from "@/types/globals"
+import { useAuth } from "@/hooks/useAuth"
 
 interface ReportData {
   assignments: Assignment[]
@@ -31,38 +32,24 @@ interface ReportData {
 
 // Safe auth hook that handles SSR
 function useSafeAuth() {
+  const auth = useAuth()
   const [authState, setAuthState] = useState<{
-    isAdmin: boolean;
-    isLoading: boolean;
-    isReady: boolean;
+    isAdmin: boolean
+    isLoading: boolean
+    isReady: boolean
   }>({
-    isAdmin: false,
-    isLoading: true,
-    isReady: false
+    isAdmin: auth.isAdmin,
+    isLoading: auth.isLoading,
+    isReady: false,
   })
 
   useEffect(() => {
-    const loadAuth = async () => {
-      try {
-        const { useAuth } = await import("@/hooks/useAuth")
-        const auth = useAuth()
-        setAuthState({
-          isAdmin: auth.isAdmin,
-          isLoading: auth.isLoading,
-          isReady: true
-        })
-      } catch (error) {
-        console.error("Auth context not available:", error)
-        setAuthState({
-          isAdmin: false,
-          isLoading: false,
-          isReady: true
-        })
-      }
-    }
-
-    loadAuth()
-  }, [])
+    setAuthState({
+      isAdmin: auth.isAdmin,
+      isLoading: auth.isLoading,
+      isReady: true,
+    })
+  }, [auth])
 
   return authState
 }

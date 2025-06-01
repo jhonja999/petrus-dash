@@ -14,6 +14,7 @@ export async function middleware(request: NextRequest) {
   const url = request.nextUrl.clone()
 
   // Rutas que son siempre públicas (sin importar el estado de autenticación)
+  // La ruta "/" es pública para permitir la landing page.
   const publicRoutes = ["/", "/auth/register", "/auth/login", "/unauthorized"]
 
   let payload = null
@@ -33,24 +34,32 @@ export async function middleware(request: NextRequest) {
   if (payload) {
     // Si un usuario autenticado intenta acceder a login/register, redirigirlo a su dashboard
     if (pathname.startsWith("/auth/login") || pathname.startsWith("/auth/register")) {
-      const redirectPath = payload.role === "admin" ? "/admin/dashboard" : `/despacho/${payload.id}`
+      const redirectPath = payload.role === "Admin" ? "/admin/dashboard" : `/despacho/${payload.id}`
       return NextResponse.redirect(new URL(redirectPath, request.url))
     }
 
     // Definir rutas permitidas por rol
     const adminRoutes = ["/admin"]
-    const conductorRoutes = [`/despacho/${payload.id}`]
+    const conductorRoutes = ["/despacho"] // La ruta base /despacho es para conductores
 
     // Proteger rutas de Admin
-    if (adminRoutes.some((route) => pathname.startsWith(route)) && payload.role !== "admin") {
-      const redirectPath = payload.role === "conductor" ? `/despacho/${payload.id}` : "/auth/unauthorized"
+    if (adminRoutes.some((route) => pathname.startsWith(route)) && payload.role !== "Admin") {
+      const redirectPath = payload.role === "Operador" ? `/despacho/${payload.id}` : "/auth/unauthorized"
       return NextResponse.redirect(new URL(redirectPath, request.url))
     }
 
     // Proteger rutas de Conductor
-    if (conductorRoutes.some((route) => pathname.startsWith(route)) && payload.role !== "conductor") {
-      const redirectPath = payload.role === "admin" ? "/admin/dashboard" : "/auth/unauthorized"
-      return NextResponse.redirect(new URL(redirectPath, request.url))
+    // Un conductor solo puede acceder a /despacho/[suId]
+    if (conductorRoutes.some((route) => pathname.startsWith(route))) {
+      if (payload.role === "Operador") {
+        // Si es operador, solo puede acceder a su propia ruta de despacho
+        if (pathname !== `/despacho/${payload.id}` && !pathname.startsWith(`/despacho/${payload.id}/`)) {
+          return NextResponse.redirect(new URL(`/despacho/${payload.id}`, request.url))
+        }
+      } else if (payload.role !== "Admin") {
+        // Si no es operador ni admin, y está en una ruta de despacho, es no autorizado
+        return NextResponse.redirect(new URL("/auth/unauthorized", request.url))
+      }
     }
 
     // Para cualquier otra ruta (incluyendo '/'), si está autenticado y no es una ruta protegida con rol incorrecto, permitir

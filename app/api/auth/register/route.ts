@@ -1,19 +1,20 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { UserSchema } from "@/lib/zod-schemas"
+import { UserSchema } from "@/lib/zod-schemas" // Import UserSchema
 import bcrypt from "bcryptjs"
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
 
-    // Validate the input data
+    // Validate the input data using Zod schema
+    // Ensure the role from the body is correctly parsed by Zod's enum
     const validatedData = UserSchema.parse({
       dni: body.dni,
       name: body.name,
       lastname: body.lastname,
       email: body.email,
-      role: body.role,
+      role: body.role, // This will now be validated against "Operador" | "Admin" | "S_A"
       state: body.state || "Activo",
     })
 
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
     // Create the user
     const user = await prisma.user.create({
       data: {
-        ...validatedData,
+        ...validatedData, // validatedData now has the correct role type
         password: hashedPassword,
       },
       select: {

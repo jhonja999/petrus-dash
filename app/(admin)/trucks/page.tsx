@@ -10,29 +10,16 @@ import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 
 export default function TrucksPage() {
+  const authResult = useAuth()
+  const truckResult = useTruckState()
   const [mounted, setMounted] = useState(false)
   const router = useRouter()
 
-  // Wrap hook calls in try-catch to handle SSR issues
-  let isAdmin = false
-  let isLoading = true
-  let trucks: any[] = []
-  let loading = true
-  let updateTruckState: any = () => {}
-
-  try {
-    const authResult = useAuth()
-    const truckResult = useTruckState()
-    
-    isAdmin = authResult.isAdmin
-    isLoading = authResult.isLoading
-    trucks = truckResult.trucks
-    loading = truckResult.loading
-    updateTruckState = truckResult.updateTruckState
-  } catch (error) {
-    console.error('Error accessing auth context:', error)
-    // If hooks fail (likely during SSR), just show loading
-  }
+  const isAdmin = authResult.isAdmin
+  const isLoading = authResult.isLoading
+  const trucks = truckResult.trucks
+  const loading = truckResult.loading
+  const updateTruckState = truckResult.updateTruckState
 
   useEffect(() => {
     setMounted(true)

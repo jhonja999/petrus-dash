@@ -15,9 +15,11 @@ enum UserState {
   Asignado
 }
 
+// Actualizado para reflejar los roles de la aplicación
 enum UserRole {
-  admin
-  conductor
+  Operador
+  Admin
+  S_A // S-A se convierte en S_A para compatibilidad con Prisma
 }
 
 enum TruckState {
@@ -44,7 +46,7 @@ model User {
   lastname   String
   email      String       @unique
   password   String       @default("peru2025++")
-  role       UserRole     @default(conductor)
+  role       UserRole     @default(Operador) // Default role
   state      UserState    @default(Activo)
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt

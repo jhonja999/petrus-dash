@@ -6,7 +6,8 @@ export interface User {
   name: string
   lastname: string
   email: string
-  role: "admin" | "conductor"
+  // Actualizado para reflejar los roles de Prisma y Zod
+  role: "Operador" | "Admin" | "S_A"
   state: "Activo" | "Inactivo" | "Suspendido" | "Eliminado" | "Asignado"
   createdAt: Date
   updatedAt: Date
@@ -65,5 +66,5 @@ export interface DailyAssignmentSummary {
   completedDischarges: number
   remainingFuel: Decimal
   previousDayRemaining: Decimal
-  totalAvailableFuel: number 
+  totalAvailableFuel: number
 }

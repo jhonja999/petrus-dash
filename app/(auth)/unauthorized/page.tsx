@@ -1,9 +1,18 @@
+"use client" // Add "use client" directive
+
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { AlertTriangle, Home, LogOut } from "lucide-react"
 import Link from "next/link"
+import { useAuth } from "@/hooks/useAuth" // Import useAuth
 
 export default function UnauthorizedPage() {
+  const { logout } = useAuth() // Get the logout function
+
+  const handleLogout = async () => {
+    await logout() // Call the logout function
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-red-50 to-orange-100 p-4">
       <Card className="w-full max-w-md shadow-xl">
@@ -24,11 +33,9 @@ export default function UnauthorizedPage() {
           </div>
 
           <div className="space-y-2">
-            <Button asChild className="w-full" variant="destructive">
-              <a href="/api/auth/logout">
-                <LogOut className="h-4 w-4 mr-2" />
-                Cerrar Sesión
-              </a>
+            <Button onClick={handleLogout} className="w-full" variant="destructive">
+              <LogOut className="h-4 w-4 mr-2" />
+              Cerrar Sesión
             </Button>
             <Button asChild variant="outline" className="w-full">
               <Link href="/">

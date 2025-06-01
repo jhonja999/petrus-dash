@@ -1,12 +1,13 @@
 import type { Decimal } from "@prisma/client/runtime/library"
 
 export interface User {
-  id: string
+  id: number // Cambiado a number para consistencia con Prisma
   dni: string
   name: string
   lastname: string
   email: string
-  role: "Operador" | "Admin" | "S-A"
+  // Actualizado para reflejar los roles de Prisma y Zod
+  role: "Operador" | "Admin" | "S_A"
   state: "Activo" | "Inactivo" | "Suspendido" | "Eliminado" | "Asignado"
   createdAt: Date
   updatedAt: Date

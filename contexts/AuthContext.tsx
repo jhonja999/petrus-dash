@@ -98,7 +98,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       toast.error("Error al cerrar sesión.")
     } finally {
       setUser(null)
-      router.push("/auth/login")
+      router.push("/") // Redirect to homepage after logout
     }
   }, [router])
 

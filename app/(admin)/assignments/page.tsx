@@ -13,15 +13,12 @@ import { useEffect, useState } from "react"
 import axios from "axios"
 
 export default function AssignmentsPage() {
-  // Add mounted state to prevent SSR issues
+  const authData = useAuth()
+  const assignmentsData = useAssignments()
+  const trucksData = useTruckState()
   const [mounted, setMounted] = useState(false)
   const [drivers, setDrivers] = useState([])
   const router = useRouter()
-
-  // Initialize hooks conditionally after mounting
-  const authData = mounted ? useAuth() : { isAdmin: false, isLoading: true }
-  const assignmentsData = mounted ? useAssignments() : { assignments: [], loading: true, setAssignments: () => {} }
-  const trucksData = mounted ? useTruckState() : { trucks: [] }
 
   const { isAdmin, isLoading } = authData
   const { assignments, loading: assignmentsLoading, setAssignments } = assignmentsData
@@ -39,7 +36,7 @@ export default function AssignmentsPage() {
 
   useEffect(() => {
     if (!mounted) return
-    
+
     const fetchDrivers = async () => {
       try {
         const response = await axios.get("/api/users?role=conductor")

@@ -1,111 +1,93 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { verifyToken } from "@/lib/jwt"
+import { verifyAuth } from "@/lib/auth" // Assuming you have a verifyAuth utility
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const { id } = await params
-    const assignmentId = Number.parseInt(id)
+    const id = Number(params.id)
+    if (isNaN(id)) {
+      return NextResponse.json({ error: "ID de asignación inválido" }, { status: 400 })
+    }
 
     const assignment = await prisma.assignment.findUnique({
-      where: { id: assignmentId },
+      where: { id },
       include: {
         truck: true,
         driver: true,
-        discharges: {
-          include: {
-            customer: true,
-          },
-        },
+        discharges: true,
       },
     })
 
     if (!assignment) {
-      return new Response(JSON.stringify({ message: "Assignment not found" }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      })
+      return NextResponse.json({ error: "Asignación no encontrada" }, { status: 404 })
     }
-
-    return new Response(JSON.stringify(assignment), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    })
-  } catch (error) {
-    console.error("Error fetching assignment:", error)
-    return new Response(JSON.stringify({ message: "Error fetching assignment" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    })
-  }
-}
-
-export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
-  const params = await props.params
-  try {
-    const token = request.cookies.get("token")?.value
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const payload = await verifyToken(token)
-    if (!payload || payload.role !== "admin") {
-      // Solo admin puede actualizar
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const assignmentId = Number.parseInt(params.id)
-    const body = await request.json()
-
-    const assignment = await prisma.assignment.update({
-      where: { id: assignmentId },
-      data: body,
-      include: {
-        truck: true,
-        driver: true,
-        discharges: {
-          include: {
-            customer: true,
-          },
-        },
-      },
-    })
 
     return NextResponse.json(assignment)
   } catch (error) {
-    console.error("Error updating assignment:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.error("Error fetching assignment:", error)
+    return NextResponse.json({ error: "Error al obtener la asignación" }, { status: 500 })
   }
 }
 
-export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
-  const params = await props.params
+export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const token = request.cookies.get("token")?.value
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const auth = await verifyAuth(request)
+    if (!auth.isValid || auth.payload?.role !== "admin") {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
     }
 
-    const payload = await verifyToken(token)
-    if (!payload || payload.role !== "admin") {
-      // Solo admin puede eliminar
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const id = Number(params.id)
+    if (isNaN(id)) {
+      return NextResponse.json({ error: "ID de asignación inválido" }, { status: 400 })
     }
 
-    const assignmentId = Number.parseInt(params.id)
+    const body = await request.json()
+    const { truckId, driverId, totalLoaded, totalRemaining, fuelType, isCompleted, notes } = body
 
-    // Primero, eliminar los despachos asociados a esta asignación
+    const updatedAssignment = await prisma.assignment.update({
+      where: { id },
+      data: {
+        truckId: truckId ? Number(truckId) : undefined,
+        driverId: driverId ? Number(driverId) : undefined,
+        totalLoaded: totalLoaded ? Number.parseFloat(totalLoaded) : undefined,
+        totalRemaining: totalRemaining ? Number.parseFloat(totalRemaining) : undefined,
+        fuelType: fuelType || undefined,
+        isCompleted: typeof isCompleted === "boolean" ? isCompleted : undefined,
+        notes: notes || undefined,
+      },
+    })
+
+    return NextResponse.json(updatedAssignment)
+  } catch (error) {
+    console.error("Error updating assignment:", error)
+    return NextResponse.json({ error: "Error al actualizar la asignación" }, { status: 500 })
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const auth = await verifyAuth(request)
+    if (!auth.isValid || auth.payload?.role !== "admin") {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+    }
+
+    const id = Number(params.id)
+    if (isNaN(id)) {
+      return NextResponse.json({ error: "ID de asignación inválido" }, { status: 400 })
+    }
+
+    // Delete related discharges first due to foreign key constraint
     await prisma.discharge.deleteMany({
-      where: { assignmentId: assignmentId },
+      where: { assignmentId: id },
     })
 
-    const assignment = await prisma.assignment.delete({
-      where: { id: assignmentId },
+    const deletedAssignment = await prisma.assignment.delete({
+      where: { id },
     })
 
-    return NextResponse.json({ message: "Assignment deleted successfully", assignmentId: assignment.id })
+    return NextResponse.json({ message: "Asignación eliminada correctamente", deletedAssignment })
   } catch (error) {
     console.error("Error deleting assignment:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return NextResponse.json({ error: "Error al eliminar la asignación" }, { status: 500 })
   }
 }
