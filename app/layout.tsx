@@ -1,14 +1,13 @@
 import type React from "react"
 import { Inter } from "next/font/google"
-import { AuthProvider } from "@/contexts/AuthContext"
 import "./globals.css"
+import { ThemeProvider } from "@/components/theme-provider"
+import { AuthProvider } from "@/contexts/AuthContext" // Import AuthProvider
+import { ToastContainer } from "react-toastify" // For react-toastify
+import { Toaster } from "@/components/ui/toaster" // For shadcn/ui toasts
+import "react-toastify/dist/ReactToastify.css" // Import react-toastify CSS
 
 const inter = Inter({ subsets: ["latin"] })
-
-export const metadata = {
-  title: "Sistema de Gestión de Despachos de Combustible",
-  description: "Sistema completo para la gestión de despachos de combustible con control de flota y conductores",
-}
 
 export default function RootLayout({
   children,
@@ -16,9 +15,27 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="es">
-      <body>
-        <AuthProvider>{children}</AuthProvider>
+    <html lang="en" suppressHydrationWarning>
+      <body className={inter.className}>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <AuthProvider>
+            {" "}
+            {/* Wrap children with AuthProvider */}
+            {children}
+            <ToastContainer
+              position="bottom-right"
+              autoClose={5000}
+              hideProgressBar={false}
+              newestOnTop={false}
+              closeOnClick
+              rtl={false}
+              pauseOnFocusLoss
+              draggable
+              pauseOnHover
+            />
+            <Toaster /> {/* Shadcn/ui toaster */}
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   )

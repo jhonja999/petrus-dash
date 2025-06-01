@@ -3,10 +3,9 @@ import { jwtVerify } from "jose"
 import type { NextRequest } from "next/server"
 
 export async function middleware(request: NextRequest) {
-  // Validate JWT_SECRET is available
   if (!process.env.JWT_SECRET) {
     console.error("JWT_SECRET environment variable is not set")
-    return NextResponse.redirect(new URL("/", request.url))
+    return NextResponse.redirect(new URL("/unauthorized", request.url))
   }
 
   const { pathname } = request.nextUrl
@@ -14,57 +13,57 @@ export async function middleware(request: NextRequest) {
   const secret = new TextEncoder().encode(process.env.JWT_SECRET)
   const url = request.nextUrl.clone()
 
-  // Public routes that don't require authentication
+  // Rutas que son siempre públicas (sin importar el estado de autenticación)
   const publicRoutes = ["/", "/auth/register", "/auth/login", "/unauthorized"]
 
-  if (publicRoutes.includes(pathname)) {
-    // If user has token and visits public route, redirect to dashboard
-    if (token) {
-      try {
-        const { payload } = await jwtVerify(token, secret)
-        const redirectPath = payload.role === "admin" ? "/admin/dashboard" : `/despacho/${payload.id}`
-        return NextResponse.redirect(new URL(redirectPath, request.url))
-      } catch (error) {
-        // Invalid token, clear it and continue
-        const response = NextResponse.next()
-        response.cookies.delete("token")
-        return response
-      }
+  let payload = null
+  if (token) {
+    try {
+      const { payload: verifiedPayload } = await jwtVerify(token, secret)
+      payload = verifiedPayload
+    } catch (error) {
+      // Token inválido o expirado, lo eliminamos y permitimos que la solicitud continúe
+      const response = NextResponse.next()
+      response.cookies.delete("token")
+      return response
     }
-    return NextResponse.next()
   }
 
-  // Protected routes require authentication
-  if (!token) {
-    url.pathname = "/auth/login"
-    return NextResponse.redirect(url)
-  }
-
-  try {
-    const { payload } = await jwtVerify(token, secret)
-    const { role, id } = payload
-
-    // Define allowed routes for each role
-    const adminRoutes = ["/admin"]
-    const conductorRoutes = [`/despacho/${id}`]
-
-    // Check if user can access the route
-    const isAllowed =
-      role === "admin"
-        ? adminRoutes.some((route) => pathname.startsWith(route))
-        : conductorRoutes.some((route) => pathname.startsWith(route))
-
-    if (!isAllowed) {
-      const redirectPath = role === "admin" ? "/admin/dashboard" : `/despacho/${id}`
+  // Lógica de redirección para usuarios autenticados
+  if (payload) {
+    // Si un usuario autenticado intenta acceder a login/register, redirigirlo a su dashboard
+    if (pathname.startsWith("/auth/login") || pathname.startsWith("/auth/register")) {
+      const redirectPath = payload.role === "admin" ? "/admin/dashboard" : `/despacho/${payload.id}`
       return NextResponse.redirect(new URL(redirectPath, request.url))
     }
 
+    // Definir rutas permitidas por rol
+    const adminRoutes = ["/admin"]
+    const conductorRoutes = [`/despacho/${payload.id}`]
+
+    // Proteger rutas de Admin
+    if (adminRoutes.some((route) => pathname.startsWith(route)) && payload.role !== "admin") {
+      const redirectPath = payload.role === "conductor" ? `/despacho/${payload.id}` : "/auth/unauthorized"
+      return NextResponse.redirect(new URL(redirectPath, request.url))
+    }
+
+    // Proteger rutas de Conductor
+    if (conductorRoutes.some((route) => pathname.startsWith(route)) && payload.role !== "conductor") {
+      const redirectPath = payload.role === "admin" ? "/admin/dashboard" : "/auth/unauthorized"
+      return NextResponse.redirect(new URL(redirectPath, request.url))
+    }
+
+    // Para cualquier otra ruta (incluyendo '/'), si está autenticado y no es una ruta protegida con rol incorrecto, permitir
     return NextResponse.next()
-  } catch (error) {
-    // Invalid token, redirect to login
-    const response = NextResponse.redirect(new URL("/auth/login", request.url))
-    response.cookies.delete("token")
-    return response
+  } else {
+    // El usuario NO está autenticado (no hay token válido)
+    // Si intenta acceder a una ruta que NO es pública y NO es una API de autenticación, redirigir a login
+    if (!publicRoutes.includes(pathname) && !pathname.startsWith("/api/auth")) {
+      url.pathname = "/auth/login"
+      return NextResponse.redirect(url)
+    }
+    // Si es una ruta pública o una API de autenticación, permitir acceso
+    return NextResponse.next()
   }
 }
 

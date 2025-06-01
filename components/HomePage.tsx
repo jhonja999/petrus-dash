@@ -9,7 +9,7 @@ import { Truck, Fuel, Shield, ArrowRight, Users, BarChart3, CheckCircle, Zap } f
 import Link from "next/link"
 
 export default function HomePage() {
-  const { user, isLoading } = useAuth()
+  const { user, isLoading, isAuthenticated } = useAuth() // Added isAuthenticated
   const router = useRouter()
   const [mounted, setMounted] = useState(false)
 
@@ -18,15 +18,18 @@ export default function HomePage() {
   }, [])
 
   useEffect(() => {
-    if (mounted && user && !isLoading) {
-      // Redirect based on role
-      if (user.role === "admin") {
-        router.push("/admin/dashboard")
-      } else if (user.role === "conductor") {
-        router.push("/despacho")
+    if (mounted && !isLoading && isAuthenticated) {
+      // Redirect based on role if authenticated
+      if (user?.role === "admin") {
+        router.replace("/admin/dashboard")
+      } else if (user?.role === "conductor") {
+        router.replace(`/despacho/${user.id}`)
+      } else {
+        // Fallback for other roles or if role is not yet determined
+        router.replace("/auth/unauthorized")
       }
     }
-  }, [user, isLoading, router, mounted])
+  }, [user, isLoading, isAuthenticated, router, mounted])
 
   // Show loading state during SSR and initial mount
   if (!mounted || isLoading) {
@@ -40,18 +43,20 @@ export default function HomePage() {
     )
   }
 
-  // If user is authenticated, don't show the landing page (redirect will happen)
-  if (user) {
+  // If user is authenticated and not loading, show a redirecting message
+  // This prevents the landing page from flashing before redirection
+  if (isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600 font-medium">Redirigiendo...</p>
+          <p className="mt-4 text-gray-600 font-medium">Redirigiendo a tu panel...</p>
         </div>
       </div>
     )
   }
 
+  // Render the landing page for unauthenticated users
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
       {/* Header */}

@@ -40,6 +40,7 @@
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",
+    "react-toastify": "^11.0.5",
     "tailwind-merge": "^2.2.0",
     "vaul": "^0.9.0",
     "zod": "^3.22.4"
@@ -49,6 +50,7 @@
     "@types/node": "^20.10.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@types/react-toastify": "^4.0.2",
     "autoprefixer": "^10.4.21",
     "eslint": "^8.55.0",
     "eslint-config-next": "15.1.3",

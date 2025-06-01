@@ -4,24 +4,20 @@ import type React from "react"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Truck, User, Mail, CreditCard, Shield, AlertCircle, CheckCircle } from "lucide-react"
-import Link from "next/link"
-import axios from "axios"
+import { toast } from "react-toastify" // Assuming react-toastify is installed
 
+// 🔧 Definir los tipos
 interface FormData {
   name: string
   lastname: string
   email: string
   dni: string
-  role: "admin" | "conductor"
-  state: "Activo" | "Inactivo" | "Suspendido"
+  role: Role
+  state: State
 }
+
+type Role = "admin" | "conductor" // Changed to match UserRole enum in schema.prisma
+type State = "Activo" | "Inactivo" | "Suspendido"
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -30,290 +26,221 @@ export default function RegisterPage() {
     lastname: "",
     email: "",
     dni: "",
-    role: "conductor",
+    role: "conductor", // Default role
     state: "Activo",
   })
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
 
-  const handleChange = (field: keyof FormData, value: string) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target
     setFormData((prev) => ({
       ...prev,
-      [field]: value,
+      [name]: value,
     }))
-    setError(null)
   }
 
-  const validateForm = (): boolean => {
+  const validateForm = () => {
     const { name, lastname, email, dni } = formData
 
     if (!name.trim() || !lastname.trim() || !email.trim() || !dni.trim()) {
-      setError("Todos los campos son obligatorios")
+      toast.error("Todos los campos son obligatorios")
       return false
     }
 
     if (dni.length !== 8 || !/^\d+$/.test(dni)) {
-      setError("El DNI debe tener exactamente 8 dígitos numéricos")
+      toast.error("El DNI debe tener exactamente 8 dígitos numéricos")
       return false
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(email)) {
-      setError("Por favor ingrese un correo electrónico válido")
+      toast.error("Por favor ingrese un correo electrónico válido")
       return false
     }
 
     return true
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
 
     if (!validateForm()) return
 
     setLoading(true)
-    setError(null)
 
     try {
-      const response = await axios.post("/api/auth/register", {
+      console.log("Enviando datos:", {
         ...formData,
         email: formData.email.toLowerCase().trim(),
-        password: formData.dni, // DNI as initial password
+        password: formData.dni,
       })
 
-      if (response.data.success) {
-        setSuccess(true)
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...formData,
+          email: formData.email.toLowerCase().trim(),
+          password: formData.dni,
+        }),
+      })
+
+      const data = await response.json()
+
+      console.log("Respuesta del servidor:", data)
+
+      if (response.ok) {
+        toast.success("Registro exitoso. Redirigiendo al login...")
         setTimeout(() => {
-          router.push("/auth/login")
+          router.push("/login")
         }, 2000)
+      } else {
+        let errorMessage = "Error al registrar usuario"
+        if (data.error) {
+          errorMessage = data.error
+        }
+        toast.error(errorMessage)
       }
     } catch (error: any) {
       let errorMessage = "Error al registrar usuario"
 
-      if (error.response) {
-        switch (error.response.status) {
-          case 400:
-            errorMessage = error.response.data.error || "Datos incompletos o inválidos"
-            break
-          case 409:
-            errorMessage = "Usuario ya existe (email o DNI duplicado)"
-            break
-          case 500:
-            errorMessage = "Error interno del servidor"
-            break
-          default:
-            errorMessage = error.response.data?.error || "Ocurrió un error desconocido"
-            break
-        }
-      } else if (error.request) {
+      if (error instanceof Error) {
+        errorMessage = error.message
+      } else if (typeof error === "object" && error !== null && "request" in error) {
         errorMessage = "No se pudo conectar con el servidor"
-      } else {
-        errorMessage = "Error al enviar la solicitud"
       }
 
-      setError(errorMessage)
+      toast.error(errorMessage)
     } finally {
       setLoading(false)
     }
   }
 
-  if (success) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-emerald-100 p-4">
-        <Card className="w-full max-w-md shadow-xl">
-          <CardContent className="pt-6 text-center">
-            <div className="mx-auto p-4 bg-green-100 rounded-full w-fit mb-4">
-              <CheckCircle className="h-12 w-12 text-green-600" />
-            </div>
-            <h2 className="text-2xl font-bold text-green-800 mb-2">¡Registro Exitoso!</h2>
-            <p className="text-green-600 mb-4">Tu cuenta ha sido creada correctamente.</p>
-            <p className="text-sm text-gray-600">Redirigiendo al inicio de sesión...</p>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="w-full max-w-2xl">
-        <Card className="shadow-xl border-0">
-          <CardHeader className="text-center space-y-4 pb-8">
-            <div className="mx-auto p-4 bg-blue-100 rounded-full w-fit">
-              <Truck className="h-12 w-12 text-blue-600" />
-            </div>
+    <div className="w-full max-w-2xl mx-auto">
+      <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">Registro</h1>
+          <p className="text-gray-600">Crear nueva cuenta</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <CardTitle className="text-3xl font-bold text-gray-900">Crear Cuenta</CardTitle>
-              <CardDescription className="text-gray-600 mt-2">
-                Únete al Sistema de Gestión de Despachos de Combustible
-              </CardDescription>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Nombres *</label>
+              <input
+                type="text"
+                name="name"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:bg-gray-50"
+                value={formData.name}
+                onChange={handleChange}
+                required
+                disabled={loading}
+                placeholder="Ingrese sus nombres"
+              />
             </div>
-          </CardHeader>
 
-          <CardContent className="space-y-6">
-            {error && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Apellidos *</label>
+              <input
+                type="text"
+                name="lastname"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:bg-gray-50"
+                value={formData.lastname}
+                onChange={handleChange}
+                required
+                disabled={loading}
+                placeholder="Ingrese sus apellidos"
+              />
+            </div>
+          </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Personal Information */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 text-sm font-medium text-gray-700 border-b pb-2">
-                  <User className="h-4 w-4" />
-                  Información Personal
-                </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Correo Electrónico *</label>
+            <input
+              type="email"
+              name="email"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:bg-gray-50"
+              value={formData.email}
+              onChange={handleChange}
+              required
+              disabled={loading}
+              placeholder="usuario@empresa.com"
+            />
+          </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Nombres *</Label>
-                    <Input
-                      id="name"
-                      type="text"
-                      value={formData.name}
-                      onChange={(e) => handleChange("name", e.target.value)}
-                      placeholder="Ingrese sus nombres"
-                      disabled={loading}
-                      className="h-12"
-                      required
-                    />
-                  </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">DNI *</label>
+            <input
+              type="text"
+              name="dni"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:bg-gray-50"
+              value={formData.dni}
+              onChange={handleChange}
+              required
+              disabled={loading}
+              placeholder="12345678"
+              maxLength={8}
+              pattern="[0-9]{8}"
+            />
+            <p className="text-xs text-gray-500 mt-1">El DNI será utilizado como contraseña inicial</p>
+          </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="lastname">Apellidos *</Label>
-                    <Input
-                      id="lastname"
-                      type="text"
-                      value={formData.lastname}
-                      onChange={(e) => handleChange("lastname", e.target.value)}
-                      placeholder="Ingrese sus apellidos"
-                      disabled={loading}
-                      className="h-12"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="email" className="flex items-center gap-2">
-                    <Mail className="h-4 w-4" />
-                    Correo Electrónico *
-                  </Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => handleChange("email", e.target.value)}
-                    placeholder="usuario@empresa.com"
-                    disabled={loading}
-                    className="h-12"
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="dni" className="flex items-center gap-2">
-                    <CreditCard className="h-4 w-4" />
-                    DNI *
-                  </Label>
-                  <Input
-                    id="dni"
-                    type="text"
-                    value={formData.dni}
-                    onChange={(e) => handleChange("dni", e.target.value)}
-                    placeholder="12345678"
-                    disabled={loading}
-                    className="h-12"
-                    maxLength={8}
-                    pattern="[0-9]{8}"
-                    required
-                  />
-                  <p className="text-xs text-gray-500">El DNI será utilizado como contraseña inicial</p>
-                </div>
-              </div>
-
-              {/* System Configuration */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 text-sm font-medium text-gray-700 border-b pb-2">
-                  <Shield className="h-4 w-4" />
-                  Configuración del Sistema
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="role">Rol en el Sistema</Label>
-                    <Select
-                      value={formData.role}
-                      onValueChange={(value: "admin" | "conductor") => handleChange("role", value)}
-                    >
-                      <SelectTrigger className="h-12">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="conductor">
-                          <div className="flex items-center gap-2">
-                            <Truck className="h-4 w-4" />
-                            Conductor
-                          </div>
-                        </SelectItem>
-                        <SelectItem value="admin">
-                          <div className="flex items-center gap-2">
-                            <Shield className="h-4 w-4" />
-                            Administrador
-                          </div>
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="state">Estado de la Cuenta</Label>
-                    <Select
-                      value={formData.state}
-                      onValueChange={(value: "Activo" | "Inactivo" | "Suspendido") => handleChange("state", value)}
-                    >
-                      <SelectTrigger className="h-12">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Activo">Activo</SelectItem>
-                        <SelectItem value="Inactivo">Inactivo</SelectItem>
-                        <SelectItem value="Suspendido">Suspendido</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-
-              <Button
-                type="submit"
-                className="w-full h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-lg font-semibold"
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Rol</label>
+              <select
+                name="role"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:bg-gray-50"
+                value={formData.role}
+                onChange={handleChange}
                 disabled={loading}
               >
-                {loading ? (
-                  <div className="flex items-center gap-2">
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                    Creando cuenta...
-                  </div>
-                ) : (
-                  "Crear Cuenta"
-                )}
-              </Button>
-            </form>
-
-            <div className="text-center pt-4 border-t">
-              <p className="text-gray-600">
-                ¿Ya tienes una cuenta?{" "}
-                <Link href="/auth/login" className="text-blue-600 hover:text-blue-800 font-medium transition-colors">
-                  Inicia sesión aquí
-                </Link>
-              </p>
+                <option value="conductor">Conductor</option>
+                <option value="admin">Administrador</option>
+                {/* <option value="S-A">Desarrollo</option> // Removed as it's not in schema.prisma UserRole enum */}
+              </select>
             </div>
-          </CardContent>
-        </Card>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Estado</label>
+              <select
+                name="state"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:bg-gray-50"
+                value={formData.state}
+                onChange={handleChange}
+                disabled={loading}
+              >
+                <option value="Activo">Activo</option>
+                <option value="Inactivo">Inactivo</option>
+                <option value="Suspendido">Suspendido</option>
+              </select>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-semibold py-3 px-4 rounded-lg transition-all duration-200 transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+            disabled={loading}
+          >
+            {loading ? (
+              <div className="flex items-center justify-center">
+                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
+                Registrando...
+              </div>
+            ) : (
+              "Registrarse"
+            )}
+          </button>
+        </form>
+
+        <div className="mt-6 text-center">
+          <a href="/login" className="text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200">
+            ¿Ya tienes cuenta? Inicia sesión aquí
+          </a>
+        </div>
       </div>
     </div>
   )

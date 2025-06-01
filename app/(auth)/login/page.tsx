@@ -9,37 +9,36 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Truck, Mail, Lock, AlertCircle } from "lucide-react"
 import Link from "next/link"
-
-// Import useAuth dynamically to avoid SSR issues
-import dynamic from 'next/dynamic'
+import { toast } from "react-toastify" // Import toast from react-toastify
 
 // Create a hook that safely handles the auth context
 function useSafeAuth() {
   const [authState, setAuthState] = useState<{
-    login: ((email: string, password: string) => Promise<void>) | null;
-    isLoading: boolean;
-    isReady: boolean;
+    login: ((email: string, password: string) => Promise<void>) | null
+    isLoading: boolean
+    isReady: boolean
   }>({
     login: null,
     isLoading: false,
-    isReady: false
+    isReady: false,
   })
 
+  // Dynamically import and use the auth hook only on client side
   useEffect(() => {
-    // Dynamically import and use the auth hook only on client side
     const loadAuth = async () => {
       try {
+        // Corrected import path for useAuth
         const { useAuth } = await import("@/hooks/useAuth")
         // This will only work if AuthProvider is available
         const auth = useAuth()
         setAuthState({
           login: auth.login,
           isLoading: auth.isLoading,
-          isReady: true
+          isReady: true,
         })
       } catch (error) {
         console.error("Auth context not available:", error)
-        setAuthState(prev => ({ ...prev, isReady: true }))
+        setAuthState((prev) => ({ ...prev, isReady: true }))
       }
     }
 
@@ -50,6 +49,7 @@ function useSafeAuth() {
 }
 
 export default function LoginPage() {
+  const { login, isLoading, isReady } = useSafeAuth()
   const [mounted, setMounted] = useState(false)
   const [formData, setFormData] = useState({
     email: "",
@@ -57,8 +57,6 @@ export default function LoginPage() {
   })
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-
-  const { login, isLoading, isReady } = useSafeAuth()
 
   useEffect(() => {
     setMounted(true)
@@ -84,9 +82,10 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!login) {
       setError("Sistema de autenticación no disponible")
+      toast.error("Sistema de autenticación no disponible")
       return
     }
 
@@ -99,8 +98,11 @@ export default function LoginPage() {
       }
 
       await login(formData.email, formData.password)
+      toast.success("Inicio de sesión exitoso")
     } catch (error: any) {
-      setError(error.message || "Error al iniciar sesión")
+      const errorMessage = error.message || "Error al iniciar sesión"
+      setError(errorMessage)
+      toast.error(errorMessage)
     } finally {
       setLoading(false)
     }
