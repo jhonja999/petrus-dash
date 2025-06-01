@@ -31,10 +31,11 @@ export default function AssignmentDetailsPage() {
   const [marcadorInicial, setMarcadorInicial] = useState("")
   const [marcadorFinal, setMarcadorFinal] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
+  const driverIdNumber = driverId ? Number.parseInt(driverId, 10) : null
 
-  useEffect(() => {
-    if (!isLoading && (!isConductor || user?.id !== Number.parseInt(driverId))) {
-      router.push("/auth/unauthorized")
+    useEffect(() => {
+    if (!isLoading && (!isConductor || !user || !driverIdNumber || Number(user.id) !== driverIdNumber)) {
+      window.location.href = "/unauthorized"
       return
     }
 
