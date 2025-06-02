@@ -3,9 +3,8 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import axios from "axios"
-import { toast } from "sonner" // Using Sonner for better toast experience
+// import { toast } from "sonner" // Descomenta cuando tengas Sonner instalado
 
-// Consistent User interface using Prisma types
 export interface User {
   id: number
   email: string
@@ -13,9 +12,7 @@ export interface User {
   lastname: string
   role: "Admin" | "Operador" | "S_A"
   dni: string
-  state?: "Activo" | "Inactivo" | "Suspendido" | "Eliminado" | "Asignado"
-  createdAt?: Date
-  updatedAt?: Date
+  state?: string
 }
 
 interface AuthContextType {
@@ -37,7 +34,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
-  // Check authentication status on mount
   useEffect(() => {
     checkAuthStatus()
   }, [])
@@ -48,8 +44,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (response.data.user) {
         setUser(response.data.user)
       }
-    } catch (error) {
-      // User is not authenticated - this is normal, no toast needed
+    } catch (error: any) {
+      // ✅ SILENCIOSO: 401 es normal para usuarios no logueados
+      // Solo log errores que NO sean 401 (unauthorized)
+      if (error.response?.status !== 401) {
+        console.error("Auth check error:", error)
+      }
       setUser(null)
     } finally {
       setIsLoading(false)
@@ -58,9 +58,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const login = async (email: string, password: string) => {
     try {
-      // Show loading toast
-      const loadingToast = toast.loading("Iniciando sesión...")
-
       const response = await axios.post("/api/auth/login", {
         email,
         password,
@@ -69,60 +66,45 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (response.data.success) {
         setUser(response.data.user)
         
-        // Dismiss loading toast and show success
-        toast.dismiss(loadingToast)
-        toast.success(`¡Bienvenido, ${response.data.user.name}!`, {
-          description: "Has iniciado sesión correctamente",
-          duration: 3000,
-        })
+        // ✅ Toast de éxito (descomenta cuando tengas Sonner)
+        // toast.success(`¡Bienvenido, ${response.data.user.name}!`, {
+        //   description: "Iniciando sesión..."
+        // })
+        console.log(`✅ Login exitoso: ${response.data.user.name}`)
         
-        // Small delay to show the success message before redirect
-        setTimeout(() => {
-          // Redirect based on role
-          if (response.data.user.role === "Admin" || response.data.user.role === "S_A") {
-            router.push("/admin/dashboard")
-          } else if (response.data.user.role === "Operador") {
-            router.push(`/despacho/${response.data.user.id}`)
-          } else {
-            router.push("/")
-          }
-        }, 1000)
+        // Redirección inmediata (sin delay por ahora)
+        if (response.data.user.role === "Admin" || response.data.user.role === "S_A") {
+          router.push("/admin/dashboard")
+        } else if (response.data.user.role === "Operador") {
+          router.push(`/despacho/${response.data.user.id}`)
+        } else {
+          router.push("/")
+        }
       } else {
-        toast.dismiss(loadingToast)
         throw new Error(response.data.error || "Error al iniciar sesión")
       }
     } catch (error: any) {
-      // Show error toast
+      // ✅ Toast de error (descomenta cuando tengas Sonner)
       const errorMessage = error.response?.data?.error || error.message || "Error al iniciar sesión"
-      toast.error("Error de autenticación", {
-        description: errorMessage,
-        duration: 5000,
-      })
+      // toast.error("Error de autenticación", {
+      //   description: errorMessage
+      // })
+      console.error("❌ Login error:", errorMessage)
       throw new Error(errorMessage)
     }
   }
 
   const logout = async () => {
     try {
-      // Show loading toast
-      const loadingToast = toast.loading("Cerrando sesión...")
-      
       await axios.post("/api/auth/logout")
       
-      // Dismiss loading and show success
-      toast.dismiss(loadingToast)
-      toast.success("Sesión cerrada", {
-        description: "Has cerrado sesión correctamente",
-        duration: 3000,
-      })
+      // ✅ Toast de éxito (descomenta cuando tengas Sonner)
+      // toast.success("Sesión cerrada correctamente")
+      console.log("✅ Logout exitoso")
       
     } catch (error) {
-      console.error("Logout error:", error)
-      // Even if logout fails on server, we still clear client state
-      toast.warning("Sesión cerrada localmente", {
-        description: "Hubo un problema con el servidor, pero tu sesión se cerró localmente",
-        duration: 3000,
-      })
+      // ✅ Silencioso: logout siempre limpia el estado local
+      console.log("⚠️ Logout con advertencia, pero sesión limpiada localmente")
     } finally {
       setUser(null)
       router.push("/")

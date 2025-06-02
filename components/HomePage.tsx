@@ -9,10 +9,6 @@ import { useAuth } from "@/hooks/useAuth"
 
 export default function HomePage() {
   const { user, isAuthenticated, isLoading } = useAuth()
-
-  // 🚫 NO HAY REDIRECCIÓN AUTOMÁTICA AQUÍ - ESO ERA EL PROBLEMA
-  // Los usuarios navegan libremente y usan los botones
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
@@ -26,14 +22,14 @@ export default function HomePage() {
 
   // Función para determinar dashboard URL
   const getDashboardUrl = () => {
-    if (!user) return "/auth/login"
+    if (!user) return "/login"
     
     if (user.role === "Admin" || user.role === "S_A") {
       return "/admin/dashboard"
     } else if (user.role === "Operador") {
       return `/despacho/${user.id}`
     }
-    return "/auth/unauthorized"
+    return "/unauthorized"
   }
 
   return (
@@ -70,13 +66,13 @@ export default function HomePage() {
               ) : (
                 <>
                   <Button asChild variant="outline" className="hidden sm:flex">
-                    <Link href="/auth/register">
+                    <Link href="/register">
                       <UserPlus className="h-4 w-4 mr-2" />
                       Crear Cuenta
                     </Link>
                   </Button>
                   <Button asChild className="bg-blue-600 hover:bg-blue-700">
-                    <Link href="/auth/login">
+                    <Link href="/login">
                       <LogIn className="h-4 w-4 mr-2" />
                       Iniciar Sesión
                     </Link>
@@ -141,13 +137,13 @@ export default function HomePage() {
                     size="lg"
                     className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-lg px-8 py-6 h-auto"
                   >
-                    <Link href="/auth/login" className="flex items-center gap-2">
+                    <Link href="/login" className="flex items-center gap-2">
                       <LogIn className="h-5 w-5" />
                       Acceder al Sistema
                     </Link>
                   </Button>
                   <Button asChild variant="outline" size="lg" className="text-lg px-8 py-6 h-auto border-2">
-                    <Link href="/auth/register" className="flex items-center gap-2">
+                    <Link href="/register" className="flex items-center gap-2">
                       <UserPlus className="h-5 w-5" />
                       Crear Nueva Cuenta
                     </Link>
@@ -273,7 +269,7 @@ export default function HomePage() {
                       size="lg"
                       className="bg-white text-blue-600 hover:bg-gray-100 text-lg px-8 py-6 h-auto font-semibold"
                     >
-                      <Link href="/auth/login">
+                      <Link href="/login">
                         <LogIn className="h-5 w-5 mr-2" />
                         Comenzar Ahora
                       </Link>
@@ -284,7 +280,7 @@ export default function HomePage() {
                       size="lg"
                       className="border-white text-white hover:bg-white/10 text-lg px-8 py-6 h-auto"
                     >
-                      <Link href="/auth/register">
+                      <Link href="/register">
                         <UserPlus className="h-5 w-5 mr-2" />
                         Crear Cuenta Gratis
                       </Link>
