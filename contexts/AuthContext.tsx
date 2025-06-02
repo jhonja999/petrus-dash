@@ -1,62 +1,62 @@
 "use client"
 
-import type React from "react"
-import { createContext, useState, useEffect, useCallback } from "react"
+import React, { createContext, useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { toast } from "react-toastify" // Usar toast de react-toastify
+import { toast } from "react-toastify"
+// No longer importing getAuthUser from lib/auth directly here
+// import type { AuthPayload } from "@/lib/jwt"; // Keep type import if still needed for AuthPayload structure reference
 
-interface User {
+export interface User {
   id: number
   email: string
   name: string
   lastname: string
-  role: "admin" | "conductor"
+  role: "Operador" | "Admin" | "S_A"
   dni: string
 }
 
 interface AuthContextType {
   user: User | null
   isAuthenticated: boolean
-  isAdmin: boolean
-  isConductor: boolean
   isLoading: boolean
-  login: (email: string, password: string) => Promise<void> // Modified to accept email and password
+  login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
-  fetchUser: () => Promise<void>
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
-  const isAuthenticated = !!user
-  const isAdmin = user?.role === "admin"
-  const isConductor = user?.role === "conductor"
-
-  const fetchUser = useCallback(async () => {
-    setIsLoading(true)
+  const checkAuthStatus = useCallback(async () => {
     try {
-      const response = await fetch("/api/auth/me", {
-        credentials: "include",
-      })
-      if (response.ok) {
-        const data = await response.json()
+      // Call the new API route to get authentication status
+      const response = await fetch("/api/auth/status")
+      const data = await response.json()
+
+      if (response.ok && data.isAuthenticated) {
         setUser(data.user)
+        setIsAuthenticated(true)
       } else {
         setUser(null)
+        setIsAuthenticated(false)
       }
     } catch (error) {
-      console.error("Error fetching user:", error)
+      console.error("Error checking auth status via API:", error)
       setUser(null)
+      setIsAuthenticated(false)
     } finally {
       setIsLoading(false)
     }
   }, [])
 
-  // Modified login function to handle API call
+  useEffect(() => {
+    checkAuthStatus()
+  }, [checkAuthStatus])
+
   const login = async (email: string, password: string) => {
     setIsLoading(true)
     try {
@@ -65,64 +65,70 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         headers: {
           "Content-Type": "application/json",
         },
-        credentials: "include",
         body: JSON.stringify({ email, password }),
       })
 
       const data = await response.json()
 
-      if (!response.ok) {
-        throw new Error(data.message || "Error al iniciar sesión")
+      if (response.ok && data.success) {
+        await checkAuthStatus() // Re-check auth status to update user state after login
+        toast.success("Inicio de sesión exitoso")
+        if (data.redirectUrl) {
+          router.replace(data.redirectUrl)
+        } else {
+          router.replace("/")
+        }
+      } else {
+        throw new Error(data.error || "Error al iniciar sesión")
       }
-
-      setUser(data.user)
-      router.push(data.redirectUrl)
-      // toast.success("Inicio de sesión exitoso!"); // Toast handled by LoginPage
     } catch (error: any) {
       console.error("Login error:", error)
-      setUser(null) // Ensure user is null on login failure
-      throw error // Re-throw to be caught by the component
+      toast.error(error.message || "Error desconocido al iniciar sesión")
+      setUser(null)
+      setIsAuthenticated(false)
     } finally {
       setIsLoading(false)
     }
   }
 
-  const logout = useCallback(async () => {
+  const logout = async () => {
+    setIsLoading(true)
     try {
-      await fetch("/api/auth/logout", {
+      const response = await fetch("/api/auth/logout", {
         method: "POST",
-        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
       })
-    } catch (error) {
-      console.error("Error logging out:", error)
-      toast.error("Error al cerrar sesión.")
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        setUser(null)
+        setIsAuthenticated(false)
+        toast.info("Sesión cerrada correctamente")
+        router.replace("/")
+      } else {
+        throw new Error(data.error || "Error al cerrar sesión")
+      }
+    } catch (error: any) {
+      console.error("Logout error:", error)
+      toast.error(error.message || "Error desconocido al cerrar sesión")
     } finally {
-      setUser(null)
-      router.push("/") // Redirect to homepage after logout
+      setIsLoading(false)
     }
-  }, [router])
+  }
 
-  useEffect(() => {
-    // Only run on client side
-    if (typeof window !== "undefined") {
-      fetchUser()
-    }
-  }, [fetchUser])
-
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isAuthenticated,
-        isAdmin,
-        isConductor,
-        isLoading,
-        login,
-        logout,
-        fetchUser,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const contextValue = React.useMemo(
+    () => ({
+      user,
+      isAuthenticated,
+      isLoading,
+      login,
+      logout,
+    }),
+    [user, isAuthenticated, isLoading],
   )
+
+  return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>
 }

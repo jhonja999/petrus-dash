@@ -1,10 +1,12 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
+import { cookies } from "next/headers" // Correct import for cookies
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
     const response = NextResponse.json({ success: true, message: "Sesión cerrada correctamente" }, { status: 200 })
 
-    response.cookies.set("token", "", {
+    ;(await cookies()).set("token", "", {
+      // Correct usage of cookies()
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       expires: new Date(0),

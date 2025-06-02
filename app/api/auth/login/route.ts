@@ -2,6 +2,7 @@ import { SignJWT } from "jose"
 import { type NextRequest, NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
+import { cookies } from "next/headers" // Correct import for cookies
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,7 +12,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { email, password } = body
+    const { email, password } = body as { email?: string; password?: string }
 
     const secret = new TextEncoder().encode(process.env.JWT_SECRET)
 
@@ -49,7 +50,14 @@ export async function POST(request: NextRequest) {
       .setExpirationTime("7d")
       .sign(secret)
 
-    const redirectUrl = user.role === "admin" ? "/admin/dashboard" : `/despacho/${user.id}`
+    let redirectUrl: string
+    if (user.role === "Admin") {
+      redirectUrl = "/admin/dashboard"
+    } else if (user.role === "Operador") {
+      redirectUrl = `/despacho/${user.id}`
+    } else {
+      redirectUrl = "/" // Fallback for unexpected roles
+    }
 
     const response = NextResponse.json({
       success: true,
@@ -64,7 +72,8 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    response.cookies.set("token", token, {
+    ;(await cookies()).set("token", token, {
+      // Correct usage of cookies()
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       maxAge: 60 * 60 * 24 * 7, // 7 días
@@ -79,6 +88,7 @@ export async function POST(request: NextRequest) {
       {
         error: "Error interno del servidor",
         success: false,
+        details: process.env.NODE_ENV === "development" ? error.message : undefined,
       },
       { status: 500 },
     )

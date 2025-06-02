@@ -33,7 +33,7 @@ export default function AssignmentDetailsPage() {
   const [isProcessing, setIsProcessing] = useState(false)
   const driverIdNumber = driverId ? Number.parseInt(driverId, 10) : null
 
-    useEffect(() => {
+  useEffect(() => {
     if (!isLoading && (!isConductor || !user || !driverIdNumber || Number(user.id) !== driverIdNumber)) {
       window.location.href = "/unauthorized"
       return

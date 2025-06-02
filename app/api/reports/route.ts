@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { verifyToken } from "@/lib/jwt"
 
 export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
-  const params = await props.params;
+  const params = await props.params
   try {
     const token = request.cookies.get("token")?.value
     if (!token) {

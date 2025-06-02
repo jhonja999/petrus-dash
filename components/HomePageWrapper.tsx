@@ -17,9 +17,9 @@ export default function HomePageWrapper() {
   useEffect(() => {
     if (mounted && !isLoading && isAuthenticated) {
       // Redirige basado en el rol si está autenticado
-      if (user?.role === "admin") {
+      if (user?.role === "Admin") {
         router.replace("/admin/dashboard")
-      } else if (user?.role === "conductor") {
+      } else if (user?.role === "Operador") {
         router.replace(`/despacho/${user.id}`)
       } else {
         // Fallback para otros roles o si el rol aún no está determinado

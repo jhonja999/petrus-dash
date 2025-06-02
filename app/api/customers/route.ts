@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { CustomerSchema } from "@/lib/zod-schemas"
 import { verifyToken } from "@/lib/jwt"
+import { cookies } from "next/headers" // Correct import for cookies
 
 export async function GET() {
   try {
@@ -18,26 +18,56 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const token = request.cookies.get("token")?.value
+    const token = (await cookies()).get("token")?.value // Correct usage of cookies()
     if (!token) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const payload = await verifyToken(token)
-    if (!payload || payload.role !== "Admin") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    if (!payload || (payload.role !== "Admin" && payload.role !== "S_A")) {
+      // Only Admin or S_A can create customers
+      return NextResponse.json(
+        { error: "Acceso denegado. Solo administradores pueden crear clientes." },
+        { status: 403 },
+      )
     }
 
     const body = await request.json()
-    const validatedData = CustomerSchema.parse(body)
+    const { companyname, ruc, address } = body
 
-    const customer = await prisma.customer.create({
-      data: validatedData,
+    // Manual validation
+    if (!companyname?.trim() || !ruc?.trim() || !address?.trim()) {
+      return NextResponse.json({ error: "Nombre de la empresa, RUC y dirección son requeridos" }, { status: 400 })
+    }
+
+    // Basic RUC validation (e.g., 11 digits for Peru)
+    if (!/^\d{11}$/.test(ruc.trim())) {
+      return NextResponse.json({ error: "El RUC debe tener 11 dígitos" }, { status: 400 })
+    }
+
+    // Check if customer already exists by companyname or ruc
+    const existingCustomer = await prisma.customer.findFirst({
+      where: {
+        OR: [{ companyname: companyname.trim() }, { ruc: ruc.trim() }],
+      },
     })
 
-    return NextResponse.json(customer)
-  } catch (error) {
-    console.error("Error creating customer:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    if (existingCustomer) {
+      const duplicateField = existingCustomer.companyname === companyname.trim() ? "nombre de empresa" : "RUC"
+      return NextResponse.json({ error: `Ya existe un cliente con ese ${duplicateField}` }, { status: 409 })
+    }
+
+    const customer = await prisma.customer.create({
+      data: {
+        companyname: companyname.trim(),
+        ruc: ruc.trim(),
+        address: address.trim(),
+      },
+    })
+
+    return NextResponse.json(customer, { status: 201 })
+  } catch (error: any) {
+    console.error("Error creating customer:", error.message || error)
+    return NextResponse.json({ error: "Internal server error", details: error.message }, { status: 500 })
   }
 }

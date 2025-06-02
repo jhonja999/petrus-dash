@@ -1,5 +1,5 @@
 // app/api/customers/[id]/route.ts
-import { NextRequest } from "next/server"
+import type { NextRequest } from "next/server"
 import { prisma } from "@/lib/prisma"
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -24,12 +24,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     })
   } catch (error) {
     console.error("Error fetching customer:", error)
-    return new Response(
-      JSON.stringify({ message: "Error fetching customer" }),
-      {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      }
-    )
+    return new Response(JSON.stringify({ message: "Error fetching customer" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    })
   }
 }

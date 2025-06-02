@@ -1,38 +1,46 @@
 import type { Decimal } from "@prisma/client/runtime/library"
+import type { UserRole, UserState, FuelType, TruckState } from "@prisma/client"
+
+// Extend the global Window object if needed for client-side properties
+declare global {
+  interface Window {
+    // Add any global window properties here if necessary
+  }
+}
 
 export interface User {
   id: number
-  dni: string
+  email: string
   name: string
   lastname: string
-  email: string
-  // Actualizado para reflejar los roles de Prisma y Zod
-  role: "Operador" | "Admin" | "S_A"
-  state: "Activo" | "Inactivo" | "Suspendido" | "Eliminado" | "Asignado"
+  role: UserRole // Use Prisma's UserRole enum
+  state: UserState // Use Prisma's UserState enum
+  dni: string
   createdAt: Date
   updatedAt: Date
+  deletedAt?: Date | null
 }
 
 export interface Truck {
   id: number
   placa: string
-  typefuel: "DIESEL_B5" | "GASOLINA_90" | "GASOLINA_95" | "GLP" | "ELECTRICA"
-  capacitygal: Decimal
-  lastRemaining: Decimal
-  state: "Activo" | "Inactivo" | "Mantenimiento" | "Transito" | "Descarga" | "Asignado"
+  typefuel: FuelType
+  capacitygal: number
+  lastRemaining: number
+  state: TruckState
 }
 
 export interface Assignment {
   id: number
   truckId: number
   driverId: number
-  totalLoaded: Decimal
-  totalRemaining: Decimal
-  fuelType: "DIESEL_B5" | "GASOLINA_90" | "GASOLINA_95" | "GLP" | "ELECTRICA"
+  totalLoaded: number
+  totalRemaining: number
+  fuelType: FuelType
   isCompleted: boolean
-  notes?: string
-  truck: Truck
-  driver: User
+  notes?: string | null
+  truck: Truck // Include relations if always fetched
+  driver: User // Include relations if always fetched
   discharges: Discharge[]
   createdAt: Date
   updatedAt: Date
@@ -42,13 +50,13 @@ export interface Discharge {
   id: number
   assignmentId: number
   customerId: number
-  totalDischarged: Decimal
+  totalDischarged: number
   status: string
-  marcadorInicial?: Decimal
-  marcadorFinal?: Decimal
-  cantidadReal?: Decimal
-  assignment: Assignment
-  customer: Customer
+  marcadorInicial?: number | null
+  marcadorFinal?: number | null
+  cantidadReal?: number | null
+  assignment: Assignment // Include relations if always fetched
+  customer: Customer // Include relations if always fetched
   createdAt: Date
   updatedAt: Date
 }

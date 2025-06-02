@@ -1,118 +1,43 @@
-import { jwtVerify } from "jose"
-import type { NextRequest } from "next/server"
+import { verifyToken, type AuthPayload } from "@/lib/jwt"
+import { cookies } from "next/headers" // Import cookies
 
-// Actualizado para reflejar los roles de Prisma
-interface AuthPayload {
-  id: number
-  email: string
-  role: "Operador" | "Admin" | "S_A" // Nuevos roles de Prisma
-  dni: string
-  name: string
-  lastname: string
-}
-
-interface AuthResult {
-  isValid: boolean
-  payload: AuthPayload | null
-  error: string | null
-}
-
-export async function verifyAuth(request: NextRequest): Promise<AuthResult> {
-  const token = request.cookies.get("token")?.value
-
-  if (!token) {
-    return { isValid: false, payload: null, error: "No token provided" }
-  }
-
-  if (!process.env.JWT_SECRET) {
-    console.error("JWT_SECRET environment variable is not set")
-    return { isValid: false, payload: null, error: "Server configuration error" }
-  }
-
-  const secret = new TextEncoder().encode(process.env.JWT_SECRET)
-
+// Function to get the authenticated user from the token
+export async function getAuthUser(): Promise<AuthPayload | null> {
   try {
-    // Usar 'unknown' primero para una aserción de tipo más segura
-    const { payload } = await jwtVerify(token, secret)
-    return { isValid: true, payload: payload as unknown as AuthPayload, error: null }
-  } catch (error: any) {
-    console.error("Token verification failed:", error.message)
-    return { isValid: false, payload: null, error: "Invalid or expired token" }
-  }
-}
-
-/**
- * Get the authenticated user from the request
- */
-export async function getAuthUser(req?: NextRequest) {
-  try {
-    if (!req) return null
-
-    const token = req.cookies.get("token")?.value
-    if (!token) return null
-
-    if (!process.env.JWT_SECRET) {
-      console.error("JWT_SECRET environment variable is not set")
+    const token = (await cookies()).get("token")?.value // Use cookies()
+    if (!token) {
       return null
     }
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET)
-
-    const { payload } = await jwtVerify(token, secret)
-    return (payload as unknown as AuthPayload) || null
+    const payload = await verifyToken(token)
+    return payload
   } catch (error) {
-    console.error("Error getting auth user:", error)
+    console.error("Error getting authenticated user:", error)
     return null
   }
 }
 
-/**
- * Type guard to check if a user has a specific role and narrow its type
- */
-export function hasRole<T extends AuthPayload>(user: T | null, role: "Operador" | "Admin" | "S_A"): user is T {
-  return user !== null && user.role === role
-}
-
-/**
- * Check if a user is an admin
- */
+// Function to check if the user is an Admin or S_A
 export function isAdmin(user: AuthPayload | null): boolean {
-  return hasRole(user, "Admin") // Comprueba el rol "Admin"
+  return user?.role === "Admin" || user?.role === "S_A"
 }
 
-/**
- * Check if a user is a conductor (Operador)
- */
+// Function to check if the user is a Conductor (Operador)
 export function isConductor(user: AuthPayload | null): boolean {
-  return hasRole(user, "Operador") // Comprueba el rol "Operador"
+  return user?.role === "Operador"
 }
 
-/**
- * Check if a user can access a specific driver route
- */
-export function canAccessDriverRoute(user: AuthPayload | null, driverId: string): boolean {
-  // Añadir una comprobación explícita para 'user' no sea null
-  if (!user) {
-    return false
-  }
-  // Con hasRole como type guard, TypeScript puede inferir que user no es null
-  return isAdmin(user) || (isConductor(user) && user.id.toString() === driverId)
-}
-
-/**
- * Get user from token
- */
-export async function getUserFromToken(token: string) {
+// Function to log out the user (client-side call to API)
+export async function logoutUser(): Promise<void> {
   try {
-    if (!token) return null
-    if (!process.env.JWT_SECRET) {
-      console.error("JWT_SECRET environment variable is not set")
-      return null
+    const response = await fetch("/api/auth/logout", {
+      method: "POST",
+    })
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.error || "Failed to logout")
     }
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET)
-    const { payload } = await jwtVerify(token, secret)
-    return payload as unknown as AuthPayload
   } catch (error) {
-    console.error("Error getting user from token:", error)
-    return null
+    console.error("Error during logout:", error)
+    throw error
   }
 }

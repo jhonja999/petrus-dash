@@ -2,8 +2,8 @@ import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { verifyToken } from "@/lib/jwt"
 
-export async function PUT(request: NextRequest, props: { params: Promise<{ id: string }> }) {
-  const params = await props.params;
+export async function PUT(request: NextRequest, props: { params: { id: string } }) {
+  const params = props.params
   try {
     const token = request.cookies.get("token")?.value
     if (!token) {

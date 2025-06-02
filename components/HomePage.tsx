@@ -1,62 +1,41 @@
 "use client"
-import { useAuth } from "@/hooks/useAuth"
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
+
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Truck, Fuel, Shield, ArrowRight, Users, BarChart3, CheckCircle, Zap } from "lucide-react"
-import Link from "next/link"
+import { ArrowRight, Truck, Users, Fuel, BarChart3, Shield, CheckCircle, Zap } from "lucide-react"
+import { useAuth } from "@/hooks/useAuth"
+import { useRouter } from "next/navigation"
+import { useEffect } from "react"
 
 export default function HomePage() {
-  const { user, isLoading, isAuthenticated } = useAuth() // Added isAuthenticated
+  const { user, isAuthenticated, isLoading } = useAuth()
   const router = useRouter()
-  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  useEffect(() => {
-    if (mounted && !isLoading && isAuthenticated) {
-      // Redirect based on role if authenticated
-      if (user?.role === "admin") {
+    if (!isLoading && isAuthenticated) {
+      // Redirect authenticated users to their respective dashboards
+      if (user?.role === "Admin" || user?.role === "S_A") {
         router.replace("/admin/dashboard")
-      } else if (user?.role === "conductor") {
+      } else if (user?.role === "Operador") {
         router.replace(`/despacho/${user.id}`)
-      } else {
-        // Fallback for other roles or if role is not yet determined
-        router.replace("/auth/unauthorized")
       }
     }
-  }, [user, isLoading, isAuthenticated, router, mounted])
+  }, [isLoading, isAuthenticated, user, router])
 
-  // Show loading state during SSR and initial mount
-  if (!mounted || isLoading) {
+  if (isLoading) {
+    // Optionally show a loading spinner or skeleton while authentication status is being determined
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600 font-medium">Cargando...</p>
-        </div>
-      </div>
-    )
-  }
-
-  // If user is authenticated and not loading, show a redirecting message
-  // This prevents the landing page from flashing before redirection
-  if (isAuthenticated) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600 font-medium">Redirigiendo a tu panel...</p>
-        </div>
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-600"></div>
+        <p className="ml-4 text-lg text-gray-700">Cargando...</p>
       </div>
     )
   }
 
   // Render the landing page for unauthenticated users
+  // Or if authenticated, but the redirection hasn't happened yet (briefly)
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
       {/* Header */}
@@ -73,12 +52,16 @@ export default function HomePage() {
               </div>
             </div>
             <div className="flex items-center space-x-3">
-              <Button asChild variant="outline" className="hidden sm:flex">
-                <Link href="/auth/register">Crear Cuenta</Link>
-              </Button>
-              <Button asChild className="bg-blue-600 hover:bg-blue-700">
-                <Link href="/auth/login">Iniciar Sesión</Link>
-              </Button>
+              {!isAuthenticated && ( // Only show login/register if not authenticated
+                <>
+                  <Button asChild variant="outline" className="hidden sm:flex">
+                    <Link href="/register">Crear Cuenta</Link>
+                  </Button>
+                  <Button asChild className="bg-blue-600 hover:bg-blue-700">
+                    <Link href="/login">Iniciar Sesión</Link>
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -103,19 +86,38 @@ export default function HomePage() {
               conductores y operaciones diarias.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-              <Button
-                asChild
-                size="lg"
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-lg px-8 py-6 h-auto"
-              >
-                <Link href="/auth/login" className="flex items-center gap-2">
-                  Acceder al Sistema
-                  <ArrowRight className="h-5 w-5" />
-                </Link>
-              </Button>
-              <Button asChild variant="outline" size="lg" className="text-lg px-8 py-6 h-auto border-2">
-                <Link href="/auth/register">Crear Nueva Cuenta</Link>
-              </Button>
+              {!isAuthenticated && ( // Only show login/register if not authenticated
+                <>
+                  <Button
+                    asChild
+                    size="lg"
+                    className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-lg px-8 py-6 h-auto"
+                  >
+                    <Link href="/login" className="flex items-center gap-2">
+                      Acceder al Sistema
+                      <ArrowRight className="h-5 w-5" />
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline" size="lg" className="text-lg px-8 py-6 h-auto border-2">
+                    <Link href="/register">Crear Nueva Cuenta</Link>
+                  </Button>
+                </>
+              )}
+              {isAuthenticated && ( // Show dashboard link if authenticated
+                <Button
+                  asChild
+                  size="lg"
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-lg px-8 py-6 h-auto"
+                >
+                  <Link
+                    href={user?.role === "Admin" || user?.role === "S_A" ? "/admin/dashboard" : `/despacho/${user?.id}`}
+                    className="flex items-center gap-2"
+                  >
+                    Ir a tu Panel
+                    <ArrowRight className="h-5 w-5" />
+                  </Link>
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -210,21 +212,40 @@ export default function HomePage() {
                 Únete a las empresas que ya confían en nuestro sistema para gestionar sus flotas de manera eficiente.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                <Button
-                  asChild
-                  size="lg"
-                  className="bg-white text-blue-600 hover:bg-gray-100 text-lg px-8 py-6 h-auto font-semibold"
-                >
-                  <Link href="/auth/login">Comenzar Ahora</Link>
-                </Button>
-                <Button
-                  asChild
-                  variant="outline"
-                  size="lg"
-                  className="border-white text-white hover:bg-white/10 text-lg px-8 py-6 h-auto"
-                >
-                  <Link href="/auth/register">Crear Cuenta Gratis</Link>
-                </Button>
+                {!isAuthenticated && (
+                  <>
+                    <Button
+                      asChild
+                      size="lg"
+                      className="bg-white text-blue-600 hover:bg-gray-100 text-lg px-8 py-6 h-auto font-semibold"
+                    >
+                      <Link href="/login">Comenzar Ahora</Link>
+                    </Button>
+                    <Button
+                      asChild
+                      variant="outline"
+                      size="lg"
+                      className="border-white text-white hover:bg-white/10 text-lg px-8 py-6 h-auto"
+                    >
+                      <Link href="/register">Crear Cuenta Gratis</Link>
+                    </Button>
+                  </>
+                )}
+                {isAuthenticated && (
+                  <Button
+                    asChild
+                    size="lg"
+                    className="bg-white text-blue-600 hover:bg-gray-100 text-lg px-8 py-6 h-auto font-semibold"
+                  >
+                    <Link
+                      href={
+                        user?.role === "Admin" || user?.role === "S_A" ? "/admin/dashboard" : `/despacho/${user?.id}`
+                      }
+                    >
+                      Ir a tu Panel
+                    </Link>
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>

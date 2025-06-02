@@ -75,7 +75,8 @@ export function AssignmentForm({ trucks, drivers, onSuccess }: AssignmentFormPro
   }
 
   const availableTrucks = trucks.filter((truck) => truck.state === "Activo")
-  const availableDrivers = drivers.filter((driver) => driver.role === "conductor" && driver.state === "Activo")
+  // Corrected role comparison: "Operador" instead of "conductor"
+  const availableDrivers = drivers.filter((driver) => driver.role === "Operador" && driver.state === "Activo")
 
   return (
     <Card>

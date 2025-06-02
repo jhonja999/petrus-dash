@@ -4,9 +4,13 @@ import type React from "react"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { toast } from "react-toastify" // Assuming react-toastify is installed
+import { toast } from "react-toastify"
 
 // 🔧 Definir los tipos
+// Asegúrate de que estos tipos coincidan con los enums de Prisma y los valores enviados a la API
+type Role = "Operador" | "Admin" | "S_A" // Changed from S-A to S_A
+type State = "Activo" | "Inactivo" | "Suspendido" | "Eliminado" // Added Eliminado for completeness
+
 interface FormData {
   name: string
   lastname: string
@@ -16,9 +20,6 @@ interface FormData {
   state: State
 }
 
-type Role = "admin" | "conductor" // Changed to match UserRole enum in schema.prisma
-type State = "Activo" | "Inactivo" | "Suspendido"
-
 export default function RegisterPage() {
   const router = useRouter()
   const [formData, setFormData] = useState<FormData>({
@@ -26,7 +27,7 @@ export default function RegisterPage() {
     lastname: "",
     email: "",
     dni: "",
-    role: "conductor", // Default role
+    role: "Operador",
     state: "Activo",
   })
   const [loading, setLoading] = useState(false)
@@ -72,7 +73,7 @@ export default function RegisterPage() {
       console.log("Enviando datos:", {
         ...formData,
         email: formData.email.toLowerCase().trim(),
-        password: formData.dni,
+        password: formData.dni, // DNI is used as initial password
       })
 
       const response = await fetch("/api/auth/register", {
@@ -97,11 +98,7 @@ export default function RegisterPage() {
           router.push("/login")
         }, 2000)
       } else {
-        let errorMessage = "Error al registrar usuario"
-        if (data.error) {
-          errorMessage = data.error
-        }
-        toast.error(errorMessage)
+        toast.error(data.error || "Error al registrar usuario")
       }
     } catch (error: any) {
       let errorMessage = "Error al registrar usuario"
@@ -198,9 +195,9 @@ export default function RegisterPage() {
                 onChange={handleChange}
                 disabled={loading}
               >
-                <option value="conductor">Conductor</option>
-                <option value="admin">Administrador</option>
-                {/* <option value="S-A">Desarrollo</option> // Removed as it's not in schema.prisma UserRole enum */}
+                <option value="Operador">Operador</option>
+                <option value="Admin">Administrador</option>
+                <option value="S_A">Desarrollo</option> {/* Changed from S-A to S_A */}
               </select>
             </div>
 
@@ -216,6 +213,7 @@ export default function RegisterPage() {
                 <option value="Activo">Activo</option>
                 <option value="Inactivo">Inactivo</option>
                 <option value="Suspendido">Suspendido</option>
+                <option value="Eliminado">Eliminado</option> {/* Added Eliminado */}
               </select>
             </div>
           </div>
