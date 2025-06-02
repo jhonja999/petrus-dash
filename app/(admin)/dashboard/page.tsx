@@ -4,21 +4,14 @@ import { useAuth } from "@/hooks/useAuth"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Truck, Users, MapPin, FileText, Calendar, Fuel, AlertCircle } from "lucide-react"
+import { Truck, Users, MapPin, FileText, Fuel, AlertCircle } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
-import { formatDate } from "@/lib/date"
 import axios from "axios"
+import DashboardLayout from "@/components/shared/DashboardLayout"
 
 // ✅ Interfaz simple para los datos
-interface Truck {
-  id: number
-  placa: string
-  state: string
-  lastRemaining: number
-}
-
 interface Assignment {
   id: number
   isCompleted: boolean
@@ -29,9 +22,9 @@ export default function AdminDashboard() {
   const router = useRouter()
   const [mounted, setMounted] = useState(false)
   const { user, isAdmin, isLoading } = useAuth()
-  
+
   // ✅ Estados locales en lugar de hooks problemáticos
-  const [trucks, setTrucks] = useState<Truck[]>([])
+  const [trucks, setTrucks] = useState<any[]>([])
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [dataLoading, setDataLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -53,11 +46,11 @@ export default function AdminDashboard() {
 
       try {
         setDataLoading(true)
-        
+
         // Fetch trucks y assignments en paralelo
         const [trucksResponse, assignmentsResponse] = await Promise.all([
           axios.get("/api/trucks").catch(() => ({ data: [] })),
-          axios.get("/api/assignments").catch(() => ({ data: [] }))
+          axios.get("/api/assignments").catch(() => ({ data: [] })),
         ])
 
         setTrucks(trucksResponse.data || [])
@@ -106,7 +99,7 @@ export default function AdminDashboard() {
   // ✅ Cálculos seguros con fallbacks
   const activeTrucks = trucks.filter((truck) => truck.state === "Activo").length
   const totalTrucks = trucks.length || 1 // Evitar división por 0
-  
+
   const todayAssignments = assignments.filter((assignment) => {
     try {
       const today = new Date().toDateString()
@@ -120,32 +113,8 @@ export default function AdminDashboard() {
   const trucksWithRemaining = trucks.filter((t) => Number(t.lastRemaining) > 0).length
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-3">
-              <Truck className="h-8 w-8 text-blue-600" />
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Panel Administrativo</h1>
-                <p className="text-sm text-gray-600">{formatDate(new Date())}</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-4">
-              <Badge variant="outline" className="text-green-700 border-green-300">
-                <Calendar className="h-3 w-3 mr-1" />
-                {user?.role === "S_A" ? "Super Admin" : "Admin"}
-              </Badge>
-              <span className="text-sm text-gray-600">Bienvenido, {user?.name}</span>
-              <Button asChild variant="outline">
-                <a href="/api/auth/logout">Cerrar Sesión</a>
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <DashboardLayout>
+      <div className="space-y-6">
         {/* Error State */}
         {error && (
           <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -210,9 +179,7 @@ export default function AdminDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold text-orange-600">{trucksWithRemaining}</div>
-                  <p className="text-xs text-muted-foreground">
-                    {trucksWithRemaining} camiones con remanente
-                  </p>
+                  <p className="text-xs text-muted-foreground">{trucksWithRemaining} camiones con remanente</p>
                   {trucksWithRemaining > 0 && (
                     <Badge className="mt-2 bg-orange-100 text-orange-800">
                       <AlertCircle className="h-3 w-3 mr-1" />
@@ -342,7 +309,7 @@ export default function AdminDashboard() {
             </Card>
           </>
         )}
-      </main>
-    </div>
+      </div>
+    </DashboardLayout>
   )
 }

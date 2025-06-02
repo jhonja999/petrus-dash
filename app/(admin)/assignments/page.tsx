@@ -11,6 +11,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import axios from "axios"
+import DashboardLayout from "@/components/shared/DashboardLayout"
 
 export default function AssignmentsPage() {
   const authData = useAuth()
@@ -56,41 +57,47 @@ export default function AssignmentsPage() {
   // If not mounted yet, render a minimal placeholder
   if (!mounted) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
+      <DashboardLayout>
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        </div>
+      </DashboardLayout>
     )
   }
 
   if (isLoading || assignmentsLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
+      <DashboardLayout>
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        </div>
+      </DashboardLayout>
     )
   }
 
   if (!isAdmin) {
-    return null
+    return (
+      <DashboardLayout>
+        <div className="min-h-screen flex items-center justify-center">
+          <p className="text-sm text-gray-600">Unauthorized Access</p>
+        </div>
+      </DashboardLayout>
+    )
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Gestión de Asignaciones</h1>
-              <p className="text-sm text-gray-600">Asignar camiones y combustible a conductores</p>
-            </div>
-            <Button asChild variant="outline">
-              <Link href="/admin/dashboard">Volver</Link>
-            </Button>
+    <DashboardLayout>
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Gestión de Asignaciones</h1>
+            <p className="text-sm text-gray-600">Asignar camiones y combustible a conductores</p>
           </div>
+          <Button asChild>
+            <Link href="/admin/assignments/new">Nueva Asignación</Link>
+          </Button>
         </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           <div className="lg:col-span-1">
             <AssignmentForm trucks={trucks} drivers={drivers} onSuccess={handleAssignmentSuccess} />
@@ -140,7 +147,7 @@ export default function AssignmentsPage() {
             </div>
           </div>
         </div>
-      </main>
-    </div>
+      </div>
+    </DashboardLayout>
   )
 }

@@ -1,5 +1,5 @@
-import { cookies } from "next/headers"
-import { verifyToken } from "./jwt"
+import { getUserFromToken } from "./jwt"
+import bcrypt from "bcryptjs"
 
 export interface AuthUser {
   id: number
@@ -12,15 +12,8 @@ export interface AuthUser {
 
 export async function getAuthUser(): Promise<AuthUser | null> {
   try {
-    const cookieStore = await cookies()
-    const token = cookieStore.get("token")?.value
-
-    if (!token) {
-      return null
-    }
-
-    const payload = await verifyToken(token)
-    return payload
+    const user = await getUserFromToken()
+    return user
   } catch (error) {
     console.error("Error getting auth user:", error)
     return null
@@ -45,4 +38,13 @@ export function canAccessAdminRoutes(user: any): boolean {
 
 export function canAccessDriverRoutes(user: any): boolean {
   return isConductor(user) || isAdmin(user)
+}
+
+export async function hashPassword(password: string): Promise<string> {
+  const saltRounds = 12
+  return await bcrypt.hash(password, saltRounds)
+}
+
+export async function comparePassword(password: string, hashedPassword: string): Promise<boolean> {
+  return await bcrypt.compare(password, hashedPassword)
 }
