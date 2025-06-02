@@ -130,7 +130,7 @@ export default function LoginPage() {
 
               <div className="text-center space-y-2">
                 <Link 
-                  href="/auth/register" 
+                  href="/register" 
                   className="text-blue-600 hover:text-blue-700 font-medium hover:underline"
                 >
                   Crear nueva cuenta

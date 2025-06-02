@@ -37,7 +37,7 @@ export default function RegisterPage() {
       if (response.data.success) {
         setSuccess("Cuenta creada exitosamente. Redirigiendo al login...")
         setTimeout(() => {
-          router.push("/auth/login")
+          router.push("/login")
         }, 2000)
       }
     } catch (err: any) {
@@ -205,7 +205,7 @@ export default function RegisterPage() {
 
               <div className="text-center space-y-2">
                 <Link 
-                  href="/auth/login" 
+                  href="/login" 
                   className="text-blue-600 hover:text-blue-700 font-medium hover:underline"
                 >
                   Iniciar sesión
