@@ -31,6 +31,7 @@ export default function AssignmentDetailsPage() {
   const [marcadorInicial, setMarcadorInicial] = useState("")
   const [marcadorFinal, setMarcadorFinal] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const driverIdNumber = driverId ? Number.parseInt(driverId, 10) : null
 
   useEffect(() => {
@@ -41,6 +42,7 @@ export default function AssignmentDetailsPage() {
 
     const fetchData = async () => {
       try {
+        setError(null)
         const [assignmentRes, customersRes] = await Promise.all([
           axios.get(`/api/assignments/${assignmentId}`),
           axios.get("/api/customers"),
@@ -50,6 +52,7 @@ export default function AssignmentDetailsPage() {
         setCustomers(customersRes.data)
       } catch (error) {
         console.error("Error fetching data:", error)
+        setError("Error al cargar los datos. Por favor, intenta de nuevo.")
       } finally {
         setLoading(false)
       }
@@ -58,7 +61,7 @@ export default function AssignmentDetailsPage() {
     if (assignmentId && driverId) {
       fetchData()
     }
-  }, [assignmentId, driverId, user, isConductor, isLoading, router])
+  }, [assignmentId, driverId, user, isConductor, isLoading, router, driverIdNumber])
 
   const openModal = (discharge: Discharge) => {
     setSelectedDischarge(discharge)
@@ -144,6 +147,22 @@ export default function AssignmentDetailsPage() {
     )
   }
 
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center max-w-md">
+          <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-gray-800 mb-2">Error</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <Button onClick={() => router.push(`/despacho/${driverId}`)}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Volver a mis asignaciones
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   if (!isConductor || !assignment) {
     return null
   }
@@ -160,7 +179,7 @@ export default function AssignmentDetailsPage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-4">
-              <Button onClick={() => router.push("/despacho")} variant="outline" size="sm">
+              <Button onClick={() => router.push(`/despacho/${driverId}`)} variant="outline" size="sm">
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Volver
               </Button>

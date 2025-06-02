@@ -38,22 +38,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
   const pathname = usePathname()
+  const isAdmin = user?.role === "Admin" || user?.role === "S_A"
+  const isOperator = user?.role === "Operador"
+  const isSuperAdmin = user?.role === "S_A"
+  const isAuthenticated = !!user
 
   useEffect(() => {
+    console.log(`🔄 AuthContext: Checking auth status on mount`)
     checkAuthStatus()
   }, [])
 
+  // Eliminamos la verificación redundante de rutas admin
+  // que estaba causando el conflicto con el middleware y layout
+
   const checkAuthStatus = async () => {
     try {
+      console.log(`🔍 AuthContext: Fetching user data`)
       const response = await axios.get("/api/auth/me")
       if (response.data.user) {
+        console.log(`✅ AuthContext: User authenticated - ${response.data.user.role}`)
         setUser(response.data.user)
       } else {
+        console.log(`❌ AuthContext: No user data received`)
         setUser(null)
       }
     } catch (error: any) {
       if (error.response?.status !== 401) {
-        console.error("Auth check error:", error)
+        console.error("❌ AuthContext: Auth check error:", error)
+      } else {
+        console.log(`🔓 AuthContext: User not authenticated`)
       }
       setUser(null)
     } finally {
@@ -62,11 +75,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }
 
   const refreshUser = async () => {
+    console.log(`🔄 AuthContext: Refreshing user data`)
     await checkAuthStatus()
   }
 
   const login = async (email: string, password: string) => {
     try {
+      console.log(`🔐 AuthContext: Attempting login for ${email}`)
       const response = await axios.post("/api/auth/login", {
         email,
         password,
@@ -74,28 +89,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (response.data.success) {
         setUser(response.data.user)
-
-        console.log(`✅ Login exitoso: ${response.data.user.name}`)
+        console.log(`✅ AuthContext: Login successful for ${response.data.user.name}`)
 
         // Redirect based on role
         const redirectUrl = getRedirectUrl(response.data.user)
+        console.log(`🔄 AuthContext: Redirecting to ${redirectUrl}`)
         router.push(redirectUrl)
       } else {
         throw new Error(response.data.error || "Error al iniciar sesión")
       }
     } catch (error: any) {
       const errorMessage = error.response?.data?.error || error.message || "Error al iniciar sesión"
-      console.error("❌ Login error:", errorMessage)
+      console.error("❌ AuthContext: Login error:", errorMessage)
       throw new Error(errorMessage)
     }
   }
 
   const logout = async () => {
     try {
+      console.log(`🔓 AuthContext: Logging out`)
       await axios.post("/api/auth/logout")
-      console.log("✅ Logout exitoso")
+      console.log("✅ AuthContext: Logout successful")
     } catch (error) {
-      console.log("⚠️ Logout con advertencia, pero sesión limpiada localmente")
+      console.log("⚠️ AuthContext: Logout warning, but clearing session locally")
     } finally {
       setUser(null)
       router.push("/")
@@ -104,17 +120,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const getRedirectUrl = (user: User): string => {
     if (user.role === "Admin" || user.role === "S_A") {
-      return "/dashboard"
+      return "/admin/dashboard"
     } else if (user.role === "Operador") {
       return `/despacho/${user.id}`
     }
     return "/"
   }
-
-  const isAuthenticated = !!user
-  const isAdmin = user?.role === "Admin" || user?.role === "S_A"
-  const isOperator = user?.role === "Operador"
-  const isSuperAdmin = user?.role === "S_A"
 
   const value: AuthContextType = {
     user,
