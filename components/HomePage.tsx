@@ -9,6 +9,32 @@ import { useAuth } from "@/hooks/useAuth"
 
 export default function HomePage() {
   const { user, isAuthenticated, isLoading } = useAuth()
+
+  // Add this function at the top of the component, after the useAuth hook
+  const handleLogout = async () => {
+    try {
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+
+      if (response.ok) {
+        // Force a page reload to clear all state and redirect to home
+        window.location.href = "/"
+      } else {
+        console.error("Error during logout")
+        // Fallback: still redirect to home even if API fails
+        window.location.href = "/"
+      }
+    } catch (error) {
+      console.error("Logout error:", error)
+      // Fallback: redirect to home
+      window.location.href = "/"
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
@@ -23,7 +49,7 @@ export default function HomePage() {
   // Función para determinar dashboard URL
   const getDashboardUrl = () => {
     if (!user) return "/login"
-    
+
     if (user.role === "Admin" || user.role === "S_A") {
       return "/admin/dashboard"
     } else if (user.role === "Operador") {
@@ -59,8 +85,8 @@ export default function HomePage() {
                       Ir al Panel
                     </Link>
                   </Button>
-                  <Button asChild variant="outline">
-                    <a href="/api/auth/logout">Cerrar Sesión</a>
+                  <Button variant="outline" onClick={handleLogout}>
+                    Cerrar Sesión
                   </Button>
                 </div>
               ) : (
@@ -103,7 +129,7 @@ export default function HomePage() {
               Optimiza tu flota con nuestro sistema completo de gestión de despachos. Control total de camiones,
               conductores y operaciones diarias.
             </p>
-            
+
             {/* Call to Action Buttons - ESTOS SON LOS BOTONES FUNCIONALES */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
               {isAuthenticated ? (
@@ -121,11 +147,17 @@ export default function HomePage() {
                   <Card className="bg-white/50 border-blue-200">
                     <CardContent className="p-4">
                       <p className="text-sm text-gray-600 mb-2">Bienvenido de vuelta,</p>
-                      <p className="font-semibold text-gray-900">{user?.name} {user?.lastname}</p>
+                      <p className="font-semibold text-gray-900">
+                        {user?.name} {user?.lastname}
+                      </p>
                       <Badge variant="outline" className="mt-2">
-                        {user?.role === "Admin" ? "Administrador" : 
-                         user?.role === "S_A" ? "Super Admin" : 
-                         user?.role === "Operador" ? "Conductor" : user?.role}
+                        {user?.role === "Admin"
+                          ? "Administrador"
+                          : user?.role === "S_A"
+                            ? "Super Admin"
+                            : user?.role === "Operador"
+                              ? "Conductor"
+                              : user?.role}
                       </Badge>
                     </CardContent>
                   </Card>

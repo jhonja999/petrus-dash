@@ -1,22 +1,57 @@
 import { type NextRequest, NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
+import { verifyToken } from "@/lib/jwt"
+import { cookies } from "next/headers"
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
+    // Check if user is authenticated and has admin privileges
+    const cookieStore = await cookies()
+    const token = cookieStore.get("token")?.value
 
-    const { email, dni, name, lastname, role = "Operador", state = "Activo" } = body
+    if (!token) {
+      return NextResponse.json(
+        {
+          error: "Acceso denegado. Debe estar autenticado para registrar usuarios.",
+          success: false,
+        },
+        { status: 401 },
+      )
+    }
+
+    const adminUser = await verifyToken(token)
+    if (!adminUser || (adminUser.role !== "Admin" && adminUser.role !== "S_A")) {
+      return NextResponse.json(
+        {
+          error: "Acceso denegado. Solo administradores pueden registrar usuarios.",
+          success: false,
+        },
+        { status: 403 },
+      )
+    }
+
+    const body = await request.json()
+    const { email, dni, name, lastname, role = "Operador", state = "Activo", password } = body
 
     // Manual validation of required fields
     if (!email?.trim() || !dni?.trim() || !name?.trim() || !lastname?.trim()) {
-      return NextResponse.json({ error: "Todos los campos son requeridos", success: false }, { status: 400 })
+      return NextResponse.json(
+        {
+          error: "Email, DNI, nombre y apellido son requeridos",
+          success: false,
+        },
+        { status: 400 },
+      )
     }
 
     // Validate DNI format (8 digits)
     if (!/^\d{8}$/.test(dni.trim())) {
       return NextResponse.json(
-        { error: "El DNI debe tener exactamente 8 dígitos numéricos", success: false },
+        {
+          error: "El DNI debe tener exactamente 8 dígitos numéricos",
+          success: false,
+        },
         { status: 400 },
       )
     }
@@ -25,17 +60,34 @@ export async function POST(request: NextRequest) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(email.trim())) {
       return NextResponse.json(
-        { error: "Por favor ingrese un correo electrónico válido", success: false },
+        {
+          error: "Por favor ingrese un correo electrónico válido",
+          success: false,
+        },
         { status: 400 },
       )
     }
 
-    // ✅ CORREGIDO: Validate role against Prisma enum values - INCLUYE S_A
+    // Validate role against Prisma enum values
     const validRoles = ["Operador", "Admin", "S_A"]
     if (!validRoles.includes(role)) {
       return NextResponse.json(
-        { error: `Rol inválido. Los roles permitidos son: ${validRoles.join(", ")}`, success: false },
+        {
+          error: `Rol inválido. Los roles permitidos son: ${validRoles.join(", ")}`,
+          success: false,
+        },
         { status: 400 },
+      )
+    }
+
+    // Only S_A can create other S_A users
+    if (role === "S_A" && adminUser.role !== "S_A") {
+      return NextResponse.json(
+        {
+          error: "Solo Super Administradores pueden crear otros Super Administradores",
+          success: false,
+        },
+        { status: 403 },
       )
     }
 
@@ -43,7 +95,10 @@ export async function POST(request: NextRequest) {
     const validStates = ["Activo", "Inactivo", "Suspendido", "Eliminado", "Asignado"]
     if (!validStates.includes(state)) {
       return NextResponse.json(
-        { error: `Estado inválido. Los estados permitidos son: ${validStates.join(", ")}`, success: false },
+        {
+          error: `Estado inválido. Los estados permitidos son: ${validStates.join(", ")}`,
+          success: false,
+        },
         { status: 400 },
       )
     }
@@ -58,15 +113,19 @@ export async function POST(request: NextRequest) {
     if (existingUser) {
       const duplicateField = existingUser.email === email.toLowerCase().trim() ? "email" : "DNI"
       return NextResponse.json(
-        { error: `Ya existe un usuario con ese ${duplicateField}`, success: false },
+        {
+          error: `Ya existe un usuario con ese ${duplicateField}`,
+          success: false,
+        },
         { status: 409 },
       )
     }
 
-    // Hash DNI as initial password
-    const hashedPassword = await bcrypt.hash(dni.trim(), 12)
+    // Use provided password or default to DNI
+    const passwordToHash = password?.trim() || dni.trim()
+    const hashedPassword = await bcrypt.hash(passwordToHash, 12)
 
-    // ✅ CORREGIDO: Create user with proper role casting including S_A
+    // Create user
     const user = await prisma.user.create({
       data: {
         dni: dni.trim(),
@@ -74,7 +133,7 @@ export async function POST(request: NextRequest) {
         lastname: lastname.trim(),
         name: name.trim(),
         password: hashedPassword,
-        role: role as "Operador" | "Admin" | "S_A", // ✅ INCLUYE S_A
+        role: role as "Operador" | "Admin" | "S_A",
         state: state as "Activo" | "Inactivo" | "Suspendido" | "Eliminado" | "Asignado",
       },
     })
@@ -93,7 +152,7 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (error: any) {
-    console.error("Error al registrar usuario:", error.message || error)
+    console.error("Error al registrar usuario:", error)
     return NextResponse.json(
       {
         error: "Error interno del servidor",

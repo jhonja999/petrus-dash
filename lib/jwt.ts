@@ -1,14 +1,16 @@
 import { SignJWT, jwtVerify, type JWTPayload } from "jose"
 
-// Updated AuthPayload interface to match new Prisma enum roles
+// Updated AuthPayload interface to match Prisma enum roles
 export interface AuthPayload extends JWTPayload {
   id: number
   email: string
-  role: "Operador" | "Admin" | "S_A" // Updated roles
+  role: "Operador" | "Admin" | "S_A"
   dni: string
   name: string
   lastname: string
-  [key: string]: unknown // Add index signature for JWTPayload compatibility
+  state: string
+  iat?: number
+  exp?: number
 }
 
 const secretKey = process.env.JWT_SECRET
@@ -19,13 +21,18 @@ if (!secretKey) {
 
 const secret = new TextEncoder().encode(secretKey)
 
-export async function signToken(payload: AuthPayload): Promise<string> {
-  const token = await new SignJWT(payload) // payload is now compatible with JWTPayload
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("7d") // Token expires in 7 days
-    .sign(secret)
-  return token
+export async function signToken(payload: Omit<AuthPayload, "iat" | "exp">): Promise<string> {
+  try {
+    const token = await new SignJWT(payload)
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .setExpirationTime("7d") // Token expires in 7 days
+      .sign(secret)
+    return token
+  } catch (error) {
+    console.error("Error signing JWT token:", error)
+    throw new Error("Failed to sign token")
+  }
 }
 
 export async function verifyToken(token: string): Promise<AuthPayload | null> {
@@ -34,7 +41,7 @@ export async function verifyToken(token: string): Promise<AuthPayload | null> {
       algorithms: ["HS256"],
     })
 
-    // Basic runtime validation of payload structure and types
+    // Comprehensive validation of payload structure and types
     if (
       typeof payload.id !== "number" ||
       typeof payload.email !== "string" ||
@@ -43,14 +50,14 @@ export async function verifyToken(token: string): Promise<AuthPayload | null> {
       typeof payload.name !== "string" ||
       typeof payload.lastname !== "string"
     ) {
-      console.error("Invalid JWT payload structure or types")
+      console.error("Invalid JWT payload structure or types:", payload)
       return null
     }
 
     // Ensure role is one of the expected values
     const validRoles: AuthPayload["role"][] = ["Operador", "Admin", "S_A"]
     if (!validRoles.includes(payload.role as AuthPayload["role"])) {
-      console.error("Invalid user role in JWT payload")
+      console.error("Invalid user role in JWT payload:", payload.role)
       return null
     }
 
@@ -59,4 +66,25 @@ export async function verifyToken(token: string): Promise<AuthPayload | null> {
     console.error("JWT verification failed:", error)
     return null
   }
+}
+
+// Helper functions for role checking
+export function isAdmin(user: AuthPayload | null): boolean {
+  return user?.role === "Admin" || user?.role === "S_A"
+}
+
+export function isSuperAdmin(user: AuthPayload | null): boolean {
+  return user?.role === "S_A"
+}
+
+export function isOperator(user: AuthPayload | null): boolean {
+  return user?.role === "Operador"
+}
+
+export function hasAdminAccess(user: AuthPayload | null): boolean {
+  return isAdmin(user)
+}
+
+export function hasOperatorAccess(user: AuthPayload | null): boolean {
+  return isOperator(user) || isAdmin(user)
 }

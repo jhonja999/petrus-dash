@@ -2,9 +2,8 @@
 
 import type React from "react"
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import axios from "axios"
-// import { toast } from "sonner" // Descomenta cuando tengas Sonner instalado
 
 export interface User {
   id: number
@@ -13,15 +12,19 @@ export interface User {
   lastname: string
   role: "Admin" | "Operador" | "S_A"
   dni: string
-  state?: string
+  state: string
 }
 
 interface AuthContextType {
   user: User | null
   isAuthenticated: boolean
   isLoading: boolean
+  isAdmin: boolean
+  isOperator: boolean
+  isSuperAdmin: boolean
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
+  refreshUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -34,6 +37,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
+  const pathname = usePathname()
 
   useEffect(() => {
     checkAuthStatus()
@@ -44,10 +48,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const response = await axios.get("/api/auth/me")
       if (response.data.user) {
         setUser(response.data.user)
+      } else {
+        setUser(null)
       }
     } catch (error: any) {
-      // ✅ SILENCIOSO: 401 es normal para usuarios no logueados
-      // Solo log errores que NO sean 401 (unauthorized)
       if (error.response?.status !== 401) {
         console.error("Auth check error:", error)
       }
@@ -55,6 +59,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const refreshUser = async () => {
+    await checkAuthStatus()
   }
 
   const login = async (email: string, password: string) => {
@@ -67,20 +75,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (response.data.success) {
         setUser(response.data.user)
 
-        // ✅ Toast de éxito (descomenta cuando tengas Sonner)
-        // toast.success(`¡Bienvenido, ${response.data.user.name}!`, {
-        //   description: "Iniciando sesión..."
-        // })
         console.log(`✅ Login exitoso: ${response.data.user.name}`)
 
-        // Redirección basada en rol
-        if (response.data.user.role === "Admin" || response.data.user.role === "S_A") {
-          router.push("/dashboard")
-        } else if (response.data.user.role === "Operador") {
-          router.push(`/despacho/${response.data.user.id}`)
-        } else {
-          router.push("/")
-        }
+        // Redirect based on role
+        const redirectUrl = getRedirectUrl(response.data.user)
+        router.push(redirectUrl)
       } else {
         throw new Error(response.data.error || "Error al iniciar sesión")
       }
@@ -94,12 +93,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = async () => {
     try {
       await axios.post("/api/auth/logout")
-
-      // ✅ Toast de éxito (descomenta cuando tengas Sonner)
-      // toast.success("Sesión cerrada correctamente")
       console.log("✅ Logout exitoso")
     } catch (error) {
-      // ✅ Silencioso: logout siempre limpia el estado local
       console.log("⚠️ Logout con advertencia, pero sesión limpiada localmente")
     } finally {
       setUser(null)
@@ -107,14 +102,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }
 
+  const getRedirectUrl = (user: User): string => {
+    if (user.role === "Admin" || user.role === "S_A") {
+      return "/dashboard"
+    } else if (user.role === "Operador") {
+      return `/despacho/${user.id}`
+    }
+    return "/"
+  }
+
   const isAuthenticated = !!user
+  const isAdmin = user?.role === "Admin" || user?.role === "S_A"
+  const isOperator = user?.role === "Operador"
+  const isSuperAdmin = user?.role === "S_A"
 
   const value: AuthContextType = {
     user,
     isAuthenticated,
     isLoading,
+    isAdmin,
+    isOperator,
+    isSuperAdmin,
     login,
     logout,
+    refreshUser,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
@@ -125,15 +136,7 @@ export const useAuth = () => {
   if (context === undefined) {
     throw new Error("useAuth must be used within an AuthProvider")
   }
-
-  const isConductor = context.user?.role === "Operador"
-  const isAdmin = context.user?.role === "Admin" || context.user?.role === "S_A"
-
-  return {
-    ...context,
-    isConductor,
-    isAdmin,
-  }
+  return context
 }
 
 export { AuthContext }
