@@ -310,11 +310,11 @@ export default function HomePage() {
                       asChild
                       variant="outline"
                       size="lg"
-                      className="border-white text-white hover:bg-white/10 text-lg px-8 py-6 h-auto"
+                      className="border-white text-black hover:bg-white/10 text-lg px-8 py-6 h-auto"
                     >
                       <Link href="/register">
                         <UserPlus className="h-5 w-5 mr-2" />
-                        Crear Cuenta Gratis
+                        Crear Cuenta
                       </Link>
                     </Button>
                   </>
