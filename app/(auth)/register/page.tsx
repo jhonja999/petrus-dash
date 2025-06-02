@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -18,7 +20,7 @@ export default function RegisterPage() {
     dni: "",
     name: "",
     lastname: "",
-    role: "Operador"
+    role: "Operador",
   })
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
@@ -33,7 +35,7 @@ export default function RegisterPage() {
 
     try {
       const response = await axios.post("/api/auth/register", formData)
-      
+
       if (response.data.success) {
         setSuccess("Cuenta creada exitosamente. Redirigiendo al login...")
         setTimeout(() => {
@@ -48,7 +50,7 @@ export default function RegisterPage() {
   }
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
+    setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
   return (
@@ -61,12 +63,10 @@ export default function RegisterPage() {
             </div>
             <div>
               <CardTitle className="text-2xl font-bold text-gray-900">Crear Cuenta</CardTitle>
-              <CardDescription className="text-gray-600 mt-2">
-                Registra una nueva cuenta en Petrus
-              </CardDescription>
+              <CardDescription className="text-gray-600 mt-2">Registra una nueva cuenta en Petrus</CardDescription>
             </div>
           </CardHeader>
-          
+
           <CardContent className="space-y-6">
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
@@ -79,9 +79,7 @@ export default function RegisterPage() {
               {success && (
                 <Alert className="border-green-200 bg-green-50">
                   <CheckCircle className="h-4 w-4 text-green-600" />
-                  <AlertDescription className="text-green-700">
-                    {success}
-                  </AlertDescription>
+                  <AlertDescription className="text-green-700">{success}</AlertDescription>
                 </Alert>
               )}
 
@@ -154,8 +152,8 @@ export default function RegisterPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="role">Rol</Label>
-                <Select 
-                  value={formData.role} 
+                <Select
+                  value={formData.role}
                   onValueChange={(value) => handleInputChange("role", value)}
                   disabled={isLoading}
                 >
@@ -204,19 +202,13 @@ export default function RegisterPage() {
               </div>
 
               <div className="text-center space-y-2">
-                <Link 
-                  href="/login" 
-                  className="text-blue-600 hover:text-blue-700 font-medium hover:underline"
-                >
+                <Link href="/login" className="text-blue-600 hover:text-blue-700 font-medium hover:underline">
                   Iniciar sesión
                 </Link>
               </div>
 
               <div className="text-center">
-                <Link 
-                  href="/" 
-                  className="text-sm text-gray-500 hover:text-gray-700 hover:underline"
-                >
+                <Link href="/" className="text-sm text-gray-500 hover:text-gray-700 hover:underline">
                   ← Volver al inicio
                 </Link>
               </div>

@@ -50,10 +50,10 @@ export async function POST(request: NextRequest) {
       .setExpirationTime("7d")
       .sign(secret)
 
-    // ✅ CORREGIDO: Manejar rol S_A
+    // Redirecciones corregidas
     let redirectUrl: string
     if (user.role === "Admin" || user.role === "S_A") {
-      redirectUrl = "/admin/dashboard"
+      redirectUrl = "/dashboard"
     } else if (user.role === "Operador") {
       redirectUrl = `/despacho/${user.id}`
     } else {
@@ -73,7 +73,8 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    ;(await cookies()).set("token", token, {
+    const cookieStore = await cookies()
+    cookieStore.set("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       maxAge: 60 * 60 * 24 * 7, // 7 días

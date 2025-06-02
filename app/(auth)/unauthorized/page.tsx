@@ -1,21 +1,10 @@
 "use client"
-
-import React from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/useAuth"
-import { 
-  Shield, 
-  Home, 
-  LogOut, 
-  AlertTriangle, 
-  User, 
-  ArrowLeft,
-  Lock,
-  RefreshCw
-} from "lucide-react"
+import { Shield, Home, LogOut, AlertTriangle, User, ArrowLeft, Lock, RefreshCw } from "lucide-react"
 
 export default function UnauthorizedPage() {
   const router = useRouter()
@@ -24,10 +13,8 @@ export default function UnauthorizedPage() {
   const handleLogout = async () => {
     try {
       await logout()
-      // El contexto ya maneja la redirección a "/"
     } catch (error) {
       console.error("Error during logout:", error)
-      // Fallback: redirect to logout API directly
       window.location.href = "/api/auth/logout"
     }
   }
@@ -37,9 +24,9 @@ export default function UnauthorizedPage() {
   }
 
   const handleTryAgain = () => {
-    // Determinar a dónde debe ir basado en el rol
+    // Redirecciones corregidas
     if (user?.role === "Admin" || user?.role === "S_A") {
-      router.push("/admin/dashboard")
+      router.push("/dashboard")
     } else if (user?.role === "Operador") {
       router.push(`/despacho/${user.id}`)
     } else {
@@ -76,7 +63,6 @@ export default function UnauthorizedPage() {
           </CardHeader>
 
           <CardContent className="space-y-6">
-            {/* User Info */}
             {user && (
               <Card className="bg-gray-50 border-gray-200">
                 <CardContent className="p-4">
@@ -90,9 +76,13 @@ export default function UnauthorizedPage() {
                       </p>
                       <p className="text-sm text-gray-600">{user.email}</p>
                       <Badge variant="outline" className="mt-1">
-                        {user.role === "Admin" ? "Administrador" : 
-                         user.role === "S_A" ? "Super Admin" : 
-                         user.role === "Operador" ? "Conductor" : user.role}
+                        {user.role === "Admin"
+                          ? "Administrador"
+                          : user.role === "S_A"
+                            ? "Super Admin"
+                            : user.role === "Operador"
+                              ? "Conductor"
+                              : user.role}
                       </Badge>
                     </div>
                   </div>
@@ -105,12 +95,10 @@ export default function UnauthorizedPage() {
               <div className="flex items-start gap-3">
                 <Shield className="h-5 w-5 text-red-600 mt-0.5" />
                 <div>
-                  <h4 className="font-semibold text-red-900 mb-1">
-                    Permisos Insuficientes
-                  </h4>
+                  <h4 className="font-semibold text-red-900 mb-1">Permisos Insuficientes</h4>
                   <p className="text-sm text-red-700">
-                    Tu cuenta no tiene los permisos necesarios para acceder a esta funcionalidad. 
-                    Si crees que esto es un error, contacta con el administrador del sistema.
+                    Tu cuenta no tiene los permisos necesarios para acceder a esta funcionalidad. Si crees que esto es
+                    un error, contacta con el administrador del sistema.
                   </p>
                 </div>
               </div>
@@ -119,43 +107,24 @@ export default function UnauthorizedPage() {
             {/* Action Buttons */}
             <div className="grid grid-cols-1 gap-3">
               {user && (
-                <Button 
-                  onClick={handleTryAgain} 
-                  className="w-full bg-blue-600 hover:bg-blue-700"
-                  size="lg"
-                >
+                <Button onClick={handleTryAgain} className="w-full bg-blue-600 hover:bg-blue-700" size="lg">
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Ir a Mi Panel
                 </Button>
               )}
-              
-              <Button 
-                onClick={handleGoHome} 
-                variant="outline" 
-                className="w-full"
-                size="lg"
-              >
+
+              <Button onClick={handleGoHome} variant="outline" className="w-full" size="lg">
                 <Home className="h-4 w-4 mr-2" />
                 Volver al Inicio
               </Button>
-              
+
               {user ? (
-                <Button 
-                  onClick={handleLogout} 
-                  variant="destructive" 
-                  className="w-full"
-                  size="lg"
-                >
+                <Button onClick={handleLogout} variant="destructive" className="w-full" size="lg">
                   <LogOut className="h-4 w-4 mr-2" />
                   Cerrar Sesión
                 </Button>
               ) : (
-                <Button 
-                  onClick={() => router.push("/auth/login")} 
-                  variant="outline" 
-                  className="w-full"
-                  size="lg"
-                >
+                <Button onClick={() => router.push("/login")} variant="outline" className="w-full" size="lg">
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Iniciar Sesión
                 </Button>
@@ -164,9 +133,7 @@ export default function UnauthorizedPage() {
 
             {/* Help Text */}
             <div className="text-center">
-              <p className="text-sm text-gray-500">
-                ¿Necesitas ayuda? Contacta con el administrador del sistema
-              </p>
+              <p className="text-sm text-gray-500">¿Necesitas ayuda? Contacta con el administrador del sistema</p>
             </div>
           </CardContent>
         </Card>

@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState } from "react"
 import { useAuth } from "@/hooks/useAuth"
 import { Button } from "@/components/ui/button"
@@ -16,7 +18,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  
+
   const { login } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -44,12 +46,10 @@ export default function LoginPage() {
             </div>
             <div>
               <CardTitle className="text-2xl font-bold text-gray-900">Iniciar Sesión</CardTitle>
-              <CardDescription className="text-gray-600 mt-2">
-                Accede a tu cuenta de Petrus
-              </CardDescription>
+              <CardDescription className="text-gray-600 mt-2">Accede a tu cuenta de Petrus</CardDescription>
             </div>
           </CardHeader>
-          
+
           <CardContent className="space-y-6">
             <form onSubmit={handleSubmit} className="space-y-4">
               {error && (
@@ -129,19 +129,13 @@ export default function LoginPage() {
               </div>
 
               <div className="text-center space-y-2">
-                <Link 
-                  href="/register" 
-                  className="text-blue-600 hover:text-blue-700 font-medium hover:underline"
-                >
+                <Link href="/register" className="text-blue-600 hover:text-blue-700 font-medium hover:underline">
                   Crear nueva cuenta
                 </Link>
               </div>
 
               <div className="text-center">
-                <Link 
-                  href="/" 
-                  className="text-sm text-gray-500 hover:text-gray-700 hover:underline"
-                >
+                <Link href="/" className="text-sm text-gray-500 hover:text-gray-700 hover:underline">
                   ← Volver al inicio
                 </Link>
               </div>
@@ -150,8 +144,8 @@ export default function LoginPage() {
             {/* Info adicional */}
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
               <p className="text-xs text-blue-700 text-center">
-                <strong>Nota:</strong> Si es tu primera vez, tu contraseña inicial es tu DNI. 
-                Podrás cambiarla después del primer acceso.
+                <strong>Nota:</strong> Si es tu primera vez, tu contraseña inicial es tu DNI. Podrás cambiarla después
+                del primer acceso.
               </p>
             </div>
           </CardContent>

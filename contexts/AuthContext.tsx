@@ -1,6 +1,7 @@
 "use client"
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from "react"
+import type React from "react"
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import axios from "axios"
 // import { toast } from "sonner" // Descomenta cuando tengas Sonner instalado
@@ -65,16 +66,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (response.data.success) {
         setUser(response.data.user)
-        
+
         // ✅ Toast de éxito (descomenta cuando tengas Sonner)
         // toast.success(`¡Bienvenido, ${response.data.user.name}!`, {
         //   description: "Iniciando sesión..."
         // })
         console.log(`✅ Login exitoso: ${response.data.user.name}`)
-        
-        // Redirección inmediata (sin delay por ahora)
+
+        // Redirección basada en rol
         if (response.data.user.role === "Admin" || response.data.user.role === "S_A") {
-          router.push("/admin/dashboard")
+          router.push("/dashboard")
         } else if (response.data.user.role === "Operador") {
           router.push(`/despacho/${response.data.user.id}`)
         } else {
@@ -84,11 +85,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         throw new Error(response.data.error || "Error al iniciar sesión")
       }
     } catch (error: any) {
-      // ✅ Toast de error (descomenta cuando tengas Sonner)
       const errorMessage = error.response?.data?.error || error.message || "Error al iniciar sesión"
-      // toast.error("Error de autenticación", {
-      //   description: errorMessage
-      // })
       console.error("❌ Login error:", errorMessage)
       throw new Error(errorMessage)
     }
@@ -97,11 +94,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const logout = async () => {
     try {
       await axios.post("/api/auth/logout")
-      
+
       // ✅ Toast de éxito (descomenta cuando tengas Sonner)
       // toast.success("Sesión cerrada correctamente")
       console.log("✅ Logout exitoso")
-      
     } catch (error) {
       // ✅ Silencioso: logout siempre limpia el estado local
       console.log("⚠️ Logout con advertencia, pero sesión limpiada localmente")
@@ -121,11 +117,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     logout,
   }
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  )
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
 export const useAuth = () => {

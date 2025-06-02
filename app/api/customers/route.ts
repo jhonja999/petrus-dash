@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { verifyToken } from "@/lib/jwt"
-import { cookies } from "next/headers" // Correct import for cookies
+import { cookies } from "next/headers"
 
 export async function GET() {
   try {
@@ -18,14 +18,15 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const token = (await cookies()).get("token")?.value // Correct usage of cookies()
+    const cookieStore = await cookies()
+    const token = cookieStore.get("token")?.value
+
     if (!token) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const payload = await verifyToken(token)
     if (!payload || (payload.role !== "Admin" && payload.role !== "S_A")) {
-      // Only Admin or S_A can create customers
       return NextResponse.json(
         { error: "Acceso denegado. Solo administradores pueden crear clientes." },
         { status: 403 },
