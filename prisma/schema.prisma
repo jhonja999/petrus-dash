@@ -18,8 +18,8 @@ enum UserState {
 enum UserRole {
   Operador
   Admin
+  S_A
 }
-
 enum TruckState {
   Activo
   Inactivo

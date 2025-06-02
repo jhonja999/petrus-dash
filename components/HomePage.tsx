@@ -4,38 +4,38 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ArrowRight, Truck, Users, Fuel, BarChart3, Shield, CheckCircle, Zap } from "lucide-react"
+import { ArrowRight, Truck, Users, Fuel, BarChart3, Shield, CheckCircle, Zap, LogIn, UserPlus } from "lucide-react"
 import { useAuth } from "@/hooks/useAuth"
-import { useRouter } from "next/navigation"
-import { useEffect } from "react"
 
 export default function HomePage() {
   const { user, isAuthenticated, isLoading } = useAuth()
-  const router = useRouter()
 
-  useEffect(() => {
-    if (!isLoading && isAuthenticated) {
-      // Redirect authenticated users to their respective dashboards
-      if (user?.role === "Admin" || user?.role === "S_A") {
-        router.replace("/admin/dashboard")
-      } else if (user?.role === "Operador") {
-        router.replace(`/despacho/${user.id}`)
-      }
-    }
-  }, [isLoading, isAuthenticated, user, router])
+  // 🚫 NO HAY REDIRECCIÓN AUTOMÁTICA AQUÍ - ESO ERA EL PROBLEMA
+  // Los usuarios navegan libremente y usan los botones
 
   if (isLoading) {
-    // Optionally show a loading spinner or skeleton while authentication status is being determined
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-600"></div>
-        <p className="ml-4 text-lg text-gray-700">Cargando...</p>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-lg text-gray-700">Cargando...</p>
+        </div>
       </div>
     )
   }
 
-  // Render the landing page for unauthenticated users
-  // Or if authenticated, but the redirection hasn't happened yet (briefly)
+  // Función para determinar dashboard URL
+  const getDashboardUrl = () => {
+    if (!user) return "/auth/login"
+    
+    if (user.role === "Admin" || user.role === "S_A") {
+      return "/admin/dashboard"
+    } else if (user.role === "Operador") {
+      return `/despacho/${user.id}`
+    }
+    return "/auth/unauthorized"
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
       {/* Header */}
@@ -52,13 +52,34 @@ export default function HomePage() {
               </div>
             </div>
             <div className="flex items-center space-x-3">
-              {!isAuthenticated && ( // Only show login/register if not authenticated
+              {isAuthenticated ? (
+                <div className="flex items-center space-x-3">
+                  <Badge className="bg-green-100 text-green-800">
+                    {user?.name} {user?.lastname}
+                  </Badge>
+                  <Button asChild className="bg-blue-600 hover:bg-blue-700">
+                    <Link href={getDashboardUrl()}>
+                      <ArrowRight className="h-4 w-4 mr-2" />
+                      Ir al Panel
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline">
+                    <a href="/api/auth/logout">Cerrar Sesión</a>
+                  </Button>
+                </div>
+              ) : (
                 <>
                   <Button asChild variant="outline" className="hidden sm:flex">
-                    <Link href="/register">Crear Cuenta</Link>
+                    <Link href="/auth/register">
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      Crear Cuenta
+                    </Link>
                   </Button>
                   <Button asChild className="bg-blue-600 hover:bg-blue-700">
-                    <Link href="/login">Iniciar Sesión</Link>
+                    <Link href="/auth/login">
+                      <LogIn className="h-4 w-4 mr-2" />
+                      Iniciar Sesión
+                    </Link>
                   </Button>
                 </>
               )}
@@ -66,6 +87,7 @@ export default function HomePage() {
           </div>
         </div>
       </header>
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Hero Section */}
         <div className="text-center py-16 lg:py-24">
@@ -85,42 +107,57 @@ export default function HomePage() {
               Optimiza tu flota con nuestro sistema completo de gestión de despachos. Control total de camiones,
               conductores y operaciones diarias.
             </p>
+            
+            {/* Call to Action Buttons - ESTOS SON LOS BOTONES FUNCIONALES */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-              {!isAuthenticated && ( // Only show login/register if not authenticated
+              {isAuthenticated ? (
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <Button
+                    asChild
+                    size="lg"
+                    className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-lg px-8 py-6 h-auto"
+                  >
+                    <Link href={getDashboardUrl()} className="flex items-center gap-2">
+                      <ArrowRight className="h-5 w-5" />
+                      Acceder a tu Panel
+                    </Link>
+                  </Button>
+                  <Card className="bg-white/50 border-blue-200">
+                    <CardContent className="p-4">
+                      <p className="text-sm text-gray-600 mb-2">Bienvenido de vuelta,</p>
+                      <p className="font-semibold text-gray-900">{user?.name} {user?.lastname}</p>
+                      <Badge variant="outline" className="mt-2">
+                        {user?.role === "Admin" ? "Administrador" : 
+                         user?.role === "S_A" ? "Super Admin" : 
+                         user?.role === "Operador" ? "Conductor" : user?.role}
+                      </Badge>
+                    </CardContent>
+                  </Card>
+                </div>
+              ) : (
                 <>
                   <Button
                     asChild
                     size="lg"
                     className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-lg px-8 py-6 h-auto"
                   >
-                    <Link href="/login" className="flex items-center gap-2">
+                    <Link href="/auth/login" className="flex items-center gap-2">
+                      <LogIn className="h-5 w-5" />
                       Acceder al Sistema
-                      <ArrowRight className="h-5 w-5" />
                     </Link>
                   </Button>
                   <Button asChild variant="outline" size="lg" className="text-lg px-8 py-6 h-auto border-2">
-                    <Link href="/register">Crear Nueva Cuenta</Link>
+                    <Link href="/auth/register" className="flex items-center gap-2">
+                      <UserPlus className="h-5 w-5" />
+                      Crear Nueva Cuenta
+                    </Link>
                   </Button>
                 </>
-              )}
-              {isAuthenticated && ( // Show dashboard link if authenticated
-                <Button
-                  asChild
-                  size="lg"
-                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-lg px-8 py-6 h-auto"
-                >
-                  <Link
-                    href={user?.role === "Admin" || user?.role === "S_A" ? "/admin/dashboard" : `/despacho/${user?.id}`}
-                    className="flex items-center gap-2"
-                  >
-                    Ir a tu Panel
-                    <ArrowRight className="h-5 w-5" />
-                  </Link>
-                </Button>
               )}
             </div>
           </div>
         </div>
+
         {/* Features Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-16">
           <Card className="group hover:shadow-xl transition-all duration-300 border-0 shadow-lg hover:-translate-y-1">
@@ -137,6 +174,7 @@ export default function HomePage() {
               </CardDescription>
             </CardContent>
           </Card>
+
           <Card className="group hover:shadow-xl transition-all duration-300 border-0 shadow-lg hover:-translate-y-1">
             <CardHeader className="text-center pb-4">
               <div className="mx-auto p-4 bg-green-100 rounded-full w-fit mb-4 group-hover:bg-green-200 transition-colors">
@@ -150,6 +188,7 @@ export default function HomePage() {
               </CardDescription>
             </CardContent>
           </Card>
+
           <Card className="group hover:shadow-xl transition-all duration-300 border-0 shadow-lg hover:-translate-y-1">
             <CardHeader className="text-center pb-4">
               <div className="mx-auto p-4 bg-orange-100 rounded-full w-fit mb-4 group-hover:bg-orange-200 transition-colors">
@@ -163,6 +202,7 @@ export default function HomePage() {
               </CardDescription>
             </CardContent>
           </Card>
+
           <Card className="group hover:shadow-xl transition-all duration-300 border-0 shadow-lg hover:-translate-y-1">
             <CardHeader className="text-center pb-4">
               <div className="mx-auto p-4 bg-purple-100 rounded-full w-fit mb-4 group-hover:bg-purple-200 transition-colors">
@@ -176,6 +216,7 @@ export default function HomePage() {
               </CardDescription>
             </CardContent>
           </Card>
+
           <Card className="group hover:shadow-xl transition-all duration-300 border-0 shadow-lg hover:-translate-y-1">
             <CardHeader className="text-center pb-4">
               <div className="mx-auto p-4 bg-indigo-100 rounded-full w-fit mb-4 group-hover:bg-indigo-200 transition-colors">
@@ -189,6 +230,7 @@ export default function HomePage() {
               </CardDescription>
             </CardContent>
           </Card>
+
           <Card className="group hover:shadow-xl transition-all duration-300 border-0 shadow-lg hover:-translate-y-1">
             <CardHeader className="text-center pb-4">
               <div className="mx-auto p-4 bg-emerald-100 rounded-full w-fit mb-4 group-hover:bg-emerald-200 transition-colors">
@@ -203,6 +245,7 @@ export default function HomePage() {
             </CardContent>
           </Card>
         </div>
+
         {/* CTA Section */}
         <div className="text-center py-16 mb-16">
           <Card className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-0 shadow-2xl">
@@ -212,14 +255,28 @@ export default function HomePage() {
                 Únete a las empresas que ya confían en nuestro sistema para gestionar sus flotas de manera eficiente.
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                {!isAuthenticated && (
+                {isAuthenticated ? (
+                  <Button
+                    asChild
+                    size="lg"
+                    className="bg-white text-blue-600 hover:bg-gray-100 text-lg px-8 py-6 h-auto font-semibold"
+                  >
+                    <Link href={getDashboardUrl()}>
+                      <ArrowRight className="h-5 w-5 mr-2" />
+                      Ir a tu Panel
+                    </Link>
+                  </Button>
+                ) : (
                   <>
                     <Button
                       asChild
                       size="lg"
                       className="bg-white text-blue-600 hover:bg-gray-100 text-lg px-8 py-6 h-auto font-semibold"
                     >
-                      <Link href="/login">Comenzar Ahora</Link>
+                      <Link href="/auth/login">
+                        <LogIn className="h-5 w-5 mr-2" />
+                        Comenzar Ahora
+                      </Link>
                     </Button>
                     <Button
                       asChild
@@ -227,29 +284,18 @@ export default function HomePage() {
                       size="lg"
                       className="border-white text-white hover:bg-white/10 text-lg px-8 py-6 h-auto"
                     >
-                      <Link href="/register">Crear Cuenta Gratis</Link>
+                      <Link href="/auth/register">
+                        <UserPlus className="h-5 w-5 mr-2" />
+                        Crear Cuenta Gratis
+                      </Link>
                     </Button>
                   </>
-                )}
-                {isAuthenticated && (
-                  <Button
-                    asChild
-                    size="lg"
-                    className="bg-white text-blue-600 hover:bg-gray-100 text-lg px-8 py-6 h-auto font-semibold"
-                  >
-                    <Link
-                      href={
-                        user?.role === "Admin" || user?.role === "S_A" ? "/admin/dashboard" : `/despacho/${user?.id}`
-                      }
-                    >
-                      Ir a tu Panel
-                    </Link>
-                  </Button>
                 )}
               </div>
             </CardContent>
           </Card>
         </div>
+
         {/* Tech Stack */}
         <div className="text-center pb-16">
           <h3 className="text-2xl font-bold text-gray-900 mb-8">Tecnología de Vanguardia</h3>
@@ -267,6 +313,7 @@ export default function HomePage() {
           </div>
         </div>
       </main>
+
       {/* Footer */}
       <footer className="bg-white/80 backdrop-blur-sm border-t border-white/20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

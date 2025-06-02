@@ -2,19 +2,8 @@
 
 import { useContext } from "react"
 import { AuthContext } from "@/contexts/AuthContext"
-import type { User } from "@/contexts/AuthContext" // Import User type from AuthContext
 
-interface UseAuthReturn {
-  user: User | null
-  isAuthenticated: boolean
-  isLoading: boolean
-  login: (email: string, password: string) => Promise<void>
-  logout: () => Promise<void>
-  isConductor: boolean
-  isAdmin: boolean
-}
-
-export const useAuth = (): UseAuthReturn => {
+export const useAuth = () => {
   const context = useContext(AuthContext)
 
   if (context === undefined) {

@@ -1,18 +1,21 @@
 "use client"
 
-import React, { createContext, useState, useEffect, useCallback } from "react"
+import React, { createContext, useContext, useEffect, useState, ReactNode } from "react"
 import { useRouter } from "next/navigation"
-import { toast } from "react-toastify"
-// No longer importing getAuthUser from lib/auth directly here
-// import type { AuthPayload } from "@/lib/jwt"; // Keep type import if still needed for AuthPayload structure reference
+import axios from "axios"
+import { toast } from "sonner" // Using Sonner for better toast experience
 
+// Consistent User interface using Prisma types
 export interface User {
   id: number
   email: string
   name: string
   lastname: string
-  role: "Operador" | "Admin" | "S_A"
+  role: "Admin" | "Operador" | "S_A"
   dni: string
+  state?: "Activo" | "Inactivo" | "Suspendido" | "Eliminado" | "Asignado"
+  createdAt?: Date
+  updatedAt?: Date
 }
 
 interface AuthContextType {
@@ -23,112 +26,140 @@ interface AuthContextType {
   logout: () => Promise<void>
 }
 
-export const AuthContext = createContext<AuthContextType | undefined>(undefined)
+const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+interface AuthProviderProps {
+  children: ReactNode
+}
+
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null)
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
-  const checkAuthStatus = useCallback(async () => {
-    try {
-      // Call the new API route to get authentication status
-      const response = await fetch("/api/auth/status")
-      const data = await response.json()
+  // Check authentication status on mount
+  useEffect(() => {
+    checkAuthStatus()
+  }, [])
 
-      if (response.ok && data.isAuthenticated) {
-        setUser(data.user)
-        setIsAuthenticated(true)
-      } else {
-        setUser(null)
-        setIsAuthenticated(false)
+  const checkAuthStatus = async () => {
+    try {
+      const response = await axios.get("/api/auth/me")
+      if (response.data.user) {
+        setUser(response.data.user)
       }
     } catch (error) {
-      console.error("Error checking auth status via API:", error)
+      // User is not authenticated - this is normal, no toast needed
       setUser(null)
-      setIsAuthenticated(false)
     } finally {
       setIsLoading(false)
     }
-  }, [])
-
-  useEffect(() => {
-    checkAuthStatus()
-  }, [checkAuthStatus])
+  }
 
   const login = async (email: string, password: string) => {
-    setIsLoading(true)
     try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ email, password }),
+      // Show loading toast
+      const loadingToast = toast.loading("Iniciando sesión...")
+
+      const response = await axios.post("/api/auth/login", {
+        email,
+        password,
       })
 
-      const data = await response.json()
-
-      if (response.ok && data.success) {
-        await checkAuthStatus() // Re-check auth status to update user state after login
-        toast.success("Inicio de sesión exitoso")
-        if (data.redirectUrl) {
-          router.replace(data.redirectUrl)
-        } else {
-          router.replace("/")
-        }
+      if (response.data.success) {
+        setUser(response.data.user)
+        
+        // Dismiss loading toast and show success
+        toast.dismiss(loadingToast)
+        toast.success(`¡Bienvenido, ${response.data.user.name}!`, {
+          description: "Has iniciado sesión correctamente",
+          duration: 3000,
+        })
+        
+        // Small delay to show the success message before redirect
+        setTimeout(() => {
+          // Redirect based on role
+          if (response.data.user.role === "Admin" || response.data.user.role === "S_A") {
+            router.push("/admin/dashboard")
+          } else if (response.data.user.role === "Operador") {
+            router.push(`/despacho/${response.data.user.id}`)
+          } else {
+            router.push("/")
+          }
+        }, 1000)
       } else {
-        throw new Error(data.error || "Error al iniciar sesión")
+        toast.dismiss(loadingToast)
+        throw new Error(response.data.error || "Error al iniciar sesión")
       }
     } catch (error: any) {
-      console.error("Login error:", error)
-      toast.error(error.message || "Error desconocido al iniciar sesión")
-      setUser(null)
-      setIsAuthenticated(false)
-    } finally {
-      setIsLoading(false)
+      // Show error toast
+      const errorMessage = error.response?.data?.error || error.message || "Error al iniciar sesión"
+      toast.error("Error de autenticación", {
+        description: errorMessage,
+        duration: 5000,
+      })
+      throw new Error(errorMessage)
     }
   }
 
   const logout = async () => {
-    setIsLoading(true)
     try {
-      const response = await fetch("/api/auth/logout", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+      // Show loading toast
+      const loadingToast = toast.loading("Cerrando sesión...")
+      
+      await axios.post("/api/auth/logout")
+      
+      // Dismiss loading and show success
+      toast.dismiss(loadingToast)
+      toast.success("Sesión cerrada", {
+        description: "Has cerrado sesión correctamente",
+        duration: 3000,
       })
-
-      const data = await response.json()
-
-      if (response.ok && data.success) {
-        setUser(null)
-        setIsAuthenticated(false)
-        toast.info("Sesión cerrada correctamente")
-        router.replace("/")
-      } else {
-        throw new Error(data.error || "Error al cerrar sesión")
-      }
-    } catch (error: any) {
+      
+    } catch (error) {
       console.error("Logout error:", error)
-      toast.error(error.message || "Error desconocido al cerrar sesión")
+      // Even if logout fails on server, we still clear client state
+      toast.warning("Sesión cerrada localmente", {
+        description: "Hubo un problema con el servidor, pero tu sesión se cerró localmente",
+        duration: 3000,
+      })
     } finally {
-      setIsLoading(false)
+      setUser(null)
+      router.push("/")
     }
   }
 
-  const contextValue = React.useMemo(
-    () => ({
-      user,
-      isAuthenticated,
-      isLoading,
-      login,
-      logout,
-    }),
-    [user, isAuthenticated, isLoading],
-  )
+  const isAuthenticated = !!user
 
-  return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>
+  const value: AuthContextType = {
+    user,
+    isAuthenticated,
+    isLoading,
+    login,
+    logout,
+  }
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  )
 }
+
+export const useAuth = () => {
+  const context = useContext(AuthContext)
+  if (context === undefined) {
+    throw new Error("useAuth must be used within an AuthProvider")
+  }
+
+  const isConductor = context.user?.role === "Operador"
+  const isAdmin = context.user?.role === "Admin" || context.user?.role === "S_A"
+
+  return {
+    ...context,
+    isConductor,
+    isAdmin,
+  }
+}
+
+export { AuthContext }

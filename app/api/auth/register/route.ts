@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
-import { prisma } from "@/lib/prisma" // Corrected import for prisma singleton
+import { prisma } from "@/lib/prisma"
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,8 +30,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate role against Prisma enum values
-    const validRoles = ["Operador", "Admin", "S_A"] // Must match UserRole enum in schema.prisma
+    // ✅ CORREGIDO: Validate role against Prisma enum values - INCLUYE S_A
+    const validRoles = ["Operador", "Admin", "S_A"]
     if (!validRoles.includes(role)) {
       return NextResponse.json(
         { error: `Rol inválido. Los roles permitidos son: ${validRoles.join(", ")}`, success: false },
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate state against Prisma enum values
-    const validStates = ["Activo", "Inactivo", "Suspendido", "Eliminado", "Asignado"] // Must match UserState enum in schema.prisma
+    const validStates = ["Activo", "Inactivo", "Suspendido", "Eliminado", "Asignado"]
     if (!validStates.includes(state)) {
       return NextResponse.json(
         { error: `Estado inválido. Los estados permitidos son: ${validStates.join(", ")}`, success: false },
@@ -64,9 +64,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Hash DNI as initial password
-    const hashedPassword = await bcrypt.hash(dni.trim(), 12) // Use 12 rounds for bcrypt
+    const hashedPassword = await bcrypt.hash(dni.trim(), 12)
 
-    // Create user in Prisma
+    // ✅ CORREGIDO: Create user with proper role casting including S_A
     const user = await prisma.user.create({
       data: {
         dni: dni.trim(),
@@ -74,8 +74,8 @@ export async function POST(request: NextRequest) {
         lastname: lastname.trim(),
         name: name.trim(),
         password: hashedPassword,
-        role: role as "Operador" | "Admin", // Cast to ensure type safety with Prisma enum
-        state: state as "Activo" | "Inactivo" | "Suspendido" | "Eliminado" | "Asignado", // Cast to ensure type safety
+        role: role as "Operador" | "Admin" | "S_A", // ✅ INCLUYE S_A
+        state: state as "Activo" | "Inactivo" | "Suspendido" | "Eliminado" | "Asignado",
       },
     })
 

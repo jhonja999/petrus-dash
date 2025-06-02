@@ -1,245 +1,193 @@
+// app/(auth)/register/page.tsx
 "use client"
-
-import type React from "react"
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { toast } from "react-toastify"
-
-// 🔧 Definir los tipos
-// Asegúrate de que estos tipos coincidan con los enums de Prisma y los valores enviados a la API
-type Role = "Operador" | "Admin" | "S_A" // Changed from S-A to S_A
-type State = "Activo" | "Inactivo" | "Suspendido" | "Eliminado" // Added Eliminado for completeness
-
-interface FormData {
-  name: string
-  lastname: string
-  email: string
-  dni: string
-  role: Role
-  state: State
-}
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Truck, Mail, Lock, User, CreditCard, AlertCircle, CheckCircle } from "lucide-react"
+import Link from "next/link"
+import axios from "axios"
 
 export default function RegisterPage() {
-  const router = useRouter()
-  const [formData, setFormData] = useState<FormData>({
-    name: "",
-    lastname: "",
+  const [formData, setFormData] = useState({
     email: "",
     dni: "",
-    role: "Operador",
-    state: "Activo",
+    name: "",
+    lastname: "",
+    role: "Operador"
   })
-  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const router = useRouter()
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }))
-  }
-
-  const validateForm = () => {
-    const { name, lastname, email, dni } = formData
-
-    if (!name.trim() || !lastname.trim() || !email.trim() || !dni.trim()) {
-      toast.error("Todos los campos son obligatorios")
-      return false
-    }
-
-    if (dni.length !== 8 || !/^\d+$/.test(dni)) {
-      toast.error("El DNI debe tener exactamente 8 dígitos numéricos")
-      return false
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(email)) {
-      toast.error("Por favor ingrese un correo electrónico válido")
-      return false
-    }
-
-    return true
-  }
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    if (!validateForm()) return
-
-    setLoading(true)
+    setIsLoading(true)
+    setError("")
+    setSuccess("")
 
     try {
-      console.log("Enviando datos:", {
-        ...formData,
-        email: formData.email.toLowerCase().trim(),
-        password: formData.dni, // DNI is used as initial password
-      })
-
-      const response = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...formData,
-          email: formData.email.toLowerCase().trim(),
-          password: formData.dni,
-        }),
-      })
-
-      const data = await response.json()
-
-      console.log("Respuesta del servidor:", data)
-
-      if (response.ok) {
-        toast.success("Registro exitoso. Redirigiendo al login...")
+      const response = await axios.post("/api/auth/register", formData)
+      
+      if (response.data.success) {
+        setSuccess("Cuenta creada exitosamente. Puedes iniciar sesión ahora.")
         setTimeout(() => {
-          router.push("/login")
+          router.push("/auth/login")
         }, 2000)
-      } else {
-        toast.error(data.error || "Error al registrar usuario")
       }
-    } catch (error: any) {
-      let errorMessage = "Error al registrar usuario"
-
-      if (error instanceof Error) {
-        errorMessage = error.message
-      } else if (typeof error === "object" && error !== null && "request" in error) {
-        errorMessage = "No se pudo conectar con el servidor"
-      }
-
-      toast.error(errorMessage)
+    } catch (err: any) {
+      setError(err.response?.data?.error || "Error al crear la cuenta")
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
+  }
+
+  const handleInputChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
   }
 
   return (
-    <div className="w-full max-w-2xl mx-auto">
-      <div className="bg-white rounded-2xl shadow-xl p-8 border border-gray-100">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Registro</h1>
-          <p className="text-gray-600">Crear nueva cuenta</p>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Nombres *</label>
-              <input
-                type="text"
-                name="name"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:bg-gray-50"
-                value={formData.name}
-                onChange={handleChange}
-                required
-                disabled={loading}
-                placeholder="Ingrese sus nombres"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Apellidos *</label>
-              <input
-                type="text"
-                name="lastname"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:bg-gray-50"
-                value={formData.lastname}
-                onChange={handleChange}
-                required
-                disabled={loading}
-                placeholder="Ingrese sus apellidos"
-              />
-            </div>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <div className="mx-auto w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center mb-4">
+            <Truck className="h-6 w-6 text-white" />
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Correo Electrónico *</label>
-            <input
-              type="email"
-              name="email"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:bg-gray-50"
-              value={formData.email}
-              onChange={handleChange}
-              required
-              disabled={loading}
-              placeholder="usuario@empresa.com"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">DNI *</label>
-            <input
-              type="text"
-              name="dni"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:bg-gray-50"
-              value={formData.dni}
-              onChange={handleChange}
-              required
-              disabled={loading}
-              placeholder="12345678"
-              maxLength={8}
-              pattern="[0-9]{8}"
-            />
-            <p className="text-xs text-gray-500 mt-1">El DNI será utilizado como contraseña inicial</p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Rol</label>
-              <select
-                name="role"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:bg-gray-50"
-                value={formData.role}
-                onChange={handleChange}
-                disabled={loading}
-              >
-                <option value="Operador">Operador</option>
-                <option value="Admin">Administrador</option>
-                <option value="S_A">Desarrollo</option> {/* Changed from S-A to S_A */}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Estado</label>
-              <select
-                name="state"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 disabled:bg-gray-50"
-                value={formData.state}
-                onChange={handleChange}
-                disabled={loading}
-              >
-                <option value="Activo">Activo</option>
-                <option value="Inactivo">Inactivo</option>
-                <option value="Suspendido">Suspendido</option>
-                <option value="Eliminado">Eliminado</option> {/* Added Eliminado */}
-              </select>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-semibold py-3 px-4 rounded-lg transition-all duration-200 transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-            disabled={loading}
-          >
-            {loading ? (
-              <div className="flex items-center justify-center">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                Registrando...
-              </div>
-            ) : (
-              "Registrarse"
+          <CardTitle className="text-2xl font-bold">Crear Cuenta</CardTitle>
+          <CardDescription>
+            Registra una nueva cuenta en Petrus
+          </CardDescription>
+        </CardHeader>
+        
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             )}
-          </button>
-        </form>
 
-        <div className="mt-6 text-center">
-          <a href="/login" className="text-blue-600 hover:text-blue-800 font-medium transition-colors duration-200">
-            ¿Ya tienes cuenta? Inicia sesión aquí
-          </a>
-        </div>
-      </div>
+            {success && (
+              <Alert className="border-green-200 bg-green-50">
+                <CheckCircle className="h-4 w-4 text-green-600" />
+                <AlertDescription className="text-green-700">
+                  {success}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="name">Nombre</Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                  <Input
+                    id="name"
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => handleInputChange("name", e.target.value)}
+                    placeholder="Juan"
+                    className="pl-10"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="lastname">Apellido</Label>
+                <Input
+                  id="lastname"
+                  type="text"
+                  value={formData.lastname}
+                  onChange={(e) => handleInputChange("lastname", e.target.value)}
+                  placeholder="Pérez"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="dni">DNI</Label>
+              <div className="relative">
+                <CreditCard className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Input
+                  id="dni"
+                  type="text"
+                  value={formData.dni}
+                  onChange={(e) => handleInputChange("dni", e.target.value)}
+                  placeholder="12345678"
+                  className="pl-10"
+                  maxLength={8}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="email">Correo Electrónico</Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Input
+                  id="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => handleInputChange("email", e.target.value)}
+                  placeholder="tu@email.com"
+                  className="pl-10"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="role">Rol</Label>
+              <Select value={formData.role} onValueChange={(value) => handleInputChange("role", value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Operador">Conductor</SelectItem>
+                  <SelectItem value="Admin">Administrador</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="text-sm text-gray-600 bg-blue-50 p-3 rounded-lg">
+              <p><strong>Nota:</strong> La contraseña inicial será tu DNI. Podrás cambiarla después del primer login.</p>
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full bg-blue-600 hover:bg-blue-700"
+              disabled={isLoading}
+            >
+              {isLoading ? "Creando cuenta..." : "Crear Cuenta"}
+            </Button>
+          </form>
+
+          <div className="mt-6 text-center">
+            <p className="text-sm text-gray-600">
+              ¿Ya tienes una cuenta?{" "}
+              <Link href="/auth/login" className="text-blue-600 hover:underline">
+                Iniciar sesión
+              </Link>
+            </p>
+            <Link 
+              href="/" 
+              className="text-sm text-gray-500 hover:text-gray-700 inline-block mt-2"
+            >
+              Volver al inicio
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

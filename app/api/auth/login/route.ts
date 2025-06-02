@@ -2,7 +2,7 @@ import { SignJWT } from "jose"
 import { type NextRequest, NextResponse } from "next/server"
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
-import { cookies } from "next/headers" // Correct import for cookies
+import { cookies } from "next/headers"
 
 export async function POST(request: NextRequest) {
   try {
@@ -50,13 +50,14 @@ export async function POST(request: NextRequest) {
       .setExpirationTime("7d")
       .sign(secret)
 
+    // ✅ CORREGIDO: Manejar rol S_A
     let redirectUrl: string
-    if (user.role === "Admin") {
+    if (user.role === "Admin" || user.role === "S_A") {
       redirectUrl = "/admin/dashboard"
     } else if (user.role === "Operador") {
       redirectUrl = `/despacho/${user.id}`
     } else {
-      redirectUrl = "/" // Fallback for unexpected roles
+      redirectUrl = "/"
     }
 
     const response = NextResponse.json({
@@ -73,7 +74,6 @@ export async function POST(request: NextRequest) {
     })
 
     ;(await cookies()).set("token", token, {
-      // Correct usage of cookies()
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       maxAge: 60 * 60 * 24 * 7, // 7 días

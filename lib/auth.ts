@@ -1,43 +1,48 @@
-import { verifyToken, type AuthPayload } from "@/lib/jwt"
-import { cookies } from "next/headers" // Import cookies
+import { cookies } from "next/headers"
+import { verifyToken } from "./jwt"
 
-// Function to get the authenticated user from the token
-export async function getAuthUser(): Promise<AuthPayload | null> {
+export interface AuthUser {
+  id: number
+  email: string
+  role: "Admin" | "Operador" | "S_A"
+  dni: string
+  name: string
+  lastname: string
+}
+
+export async function getAuthUser(): Promise<AuthUser | null> {
   try {
-    const token = (await cookies()).get("token")?.value // Use cookies()
+    const cookieStore = await cookies()
+    const token = cookieStore.get("token")?.value
+
     if (!token) {
       return null
     }
+
     const payload = await verifyToken(token)
     return payload
   } catch (error) {
-    console.error("Error getting authenticated user:", error)
+    console.error("Error getting auth user:", error)
     return null
   }
 }
 
-// Function to check if the user is an Admin or S_A
-export function isAdmin(user: AuthPayload | null): boolean {
+export function isAdmin(user: any): boolean {
   return user?.role === "Admin" || user?.role === "S_A"
 }
 
-// Function to check if the user is a Conductor (Operador)
-export function isConductor(user: AuthPayload | null): boolean {
+export function isConductor(user: any): boolean {
   return user?.role === "Operador"
 }
 
-// Function to log out the user (client-side call to API)
-export async function logoutUser(): Promise<void> {
-  try {
-    const response = await fetch("/api/auth/logout", {
-      method: "POST",
-    })
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.error || "Failed to logout")
-    }
-  } catch (error) {
-    console.error("Error during logout:", error)
-    throw error
-  }
+export function isAuthorized(user: any, requiredRoles: string[]): boolean {
+  return user && requiredRoles.includes(user.role)
+}
+
+export function canAccessAdminRoutes(user: any): boolean {
+  return isAdmin(user)
+}
+
+export function canAccessDriverRoutes(user: any): boolean {
+  return isConductor(user) || isAdmin(user)
 }
