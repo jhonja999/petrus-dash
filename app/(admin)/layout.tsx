@@ -1,6 +1,7 @@
 import type React from "react"
 import { redirect } from "next/navigation"
 import { getUserFromToken } from "@/lib/jwt"
+import DashboardLayout from "@/components/shared/DashboardLayout"
 
 export default async function AdminLayout({
   children,
@@ -32,5 +33,10 @@ export default async function AdminLayout({
   }
 
   console.log(`✅ AdminLayout: Access granted`)
-  return <>{children}</>
+  
+  return (
+    <DashboardLayout>
+      {children}
+    </DashboardLayout>
+  )
 }

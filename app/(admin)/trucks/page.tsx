@@ -63,13 +63,13 @@ export default function TrucksPage() {
             </div>
             <div className="flex items-center space-x-4">
               <Button asChild>
-                <Link href="/admin/trucks/new">
+                <Link href="/trucks/new">
                   <Plus className="h-4 w-4 mr-2" />
                   Nuevo Camión
                 </Link>
               </Button>
               <Button asChild variant="outline">
-                <Link href="/admin/dashboard">Volver</Link>
+                <Link href="/dashboard">Volver</Link>
               </Button>
             </div>
           </div>

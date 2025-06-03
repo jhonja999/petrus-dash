@@ -1,4 +1,5 @@
-// types/globals.ts
+import type React from "react"
+// types/globals.d.ts
 import type { Decimal } from "@prisma/client/runtime/library"
 import type { UserRole, UserState, FuelType, TruckState } from "@prisma/client"
 

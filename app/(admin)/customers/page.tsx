@@ -102,7 +102,7 @@ function CustomersPageContent() {
               <p className="text-sm text-gray-600">Administra la base de datos de clientes</p>
             </div>
             <Button asChild variant="outline">
-              <Link href="/admin/dashboard">Volver</Link>
+              <Link href="/dashboard">Volver</Link>
             </Button>
           </div>
         </div>

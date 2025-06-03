@@ -85,7 +85,7 @@ export default function NewAssignmentPage() {
         description: "La asignación se ha creado exitosamente.",
       })
 
-      router.push("/admin/assignments")
+      router.push("/assignments")
     } catch (error) {
       console.error("Error creating assignment:", error)
       toast({
@@ -112,7 +112,7 @@ export default function NewAssignmentPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <Button variant="outline" size="sm" asChild>
-              <Link href="/admin/assignments">
+              <Link href="/assignments">
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Volver
               </Link>
@@ -248,7 +248,7 @@ export default function NewAssignmentPage() {
               {/* Submit Button */}
               <div className="flex justify-end space-x-4">
                 <Button type="button" variant="outline" asChild>
-                  <Link href="/admin/assignments">Cancelar</Link>
+                  <Link href="/assignments">Cancelar</Link>
                 </Button>
                 <Button type="submit" disabled={loading}>
                   {loading ? "Creando..." : "Crear Asignación"}

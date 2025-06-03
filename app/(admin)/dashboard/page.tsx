@@ -9,7 +9,6 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import axios from "axios"
-import DashboardLayout from "@/components/shared/DashboardLayout"
 
 // ✅ Interfaz simple para los datos
 interface Assignment {
@@ -113,7 +112,7 @@ export default function AdminDashboard() {
   const trucksWithRemaining = trucks.filter((t) => Number(t.lastRemaining) > 0).length
 
   return (
-    <DashboardLayout>
+   
       <div className="space-y-6">
         {/* Error State */}
         {error && (
@@ -212,25 +211,25 @@ export default function AdminDashboard() {
                 <CardContent>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <Button asChild variant="outline" className="w-full">
-                      <Link href="/admin/assignments/new">
+                      <Link href="/assignments/new">
                         <MapPin className="h-4 w-4 mr-2" />
                         Nueva Asignación
                       </Link>
                     </Button>
                     <Button asChild variant="outline" className="w-full">
-                      <Link href="/admin/trucks">
+                      <Link href="/trucks">
                         <Truck className="h-4 w-4 mr-2" />
                         Gestionar Camiones
                       </Link>
                     </Button>
                     <Button asChild variant="outline" className="w-full">
-                      <Link href="/admin/users">
+                      <Link href="/users">
                         <Users className="h-4 w-4 mr-2" />
                         Gestionar Usuarios
                       </Link>
                     </Button>
                     <Button asChild variant="outline" className="w-full">
-                      <Link href="/admin/customers">
+                      <Link href="/customers">
                         <Users className="h-4 w-4 mr-2" />
                         Gestionar Clientes
                       </Link>
@@ -287,19 +286,19 @@ export default function AdminDashboard() {
               <CardContent>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   <Button asChild variant="outline" className="w-full">
-                    <Link href="/admin/reports">
+                    <Link href="/reports">
                       <FileText className="h-4 w-4 mr-2" />
                       Reportes Generales
                     </Link>
                   </Button>
                   <Button asChild variant="outline" className="w-full">
-                    <Link href="/admin/assignments">
+                    <Link href="/assignments">
                       <MapPin className="h-4 w-4 mr-2" />
                       Historial Asignaciones
                     </Link>
                   </Button>
                   <Button asChild variant="outline" className="w-full">
-                    <Link href="/admin/analytics">
+                    <Link href="/analytics">
                       <FileText className="h-4 w-4 mr-2" />
                       Análisis Avanzado
                     </Link>
@@ -310,6 +309,5 @@ export default function AdminDashboard() {
           </>
         )}
       </div>
-    </DashboardLayout>
   )
 }

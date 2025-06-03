@@ -48,7 +48,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     checkAuthStatus()
   }, [])
 
-  const checkAuthStatus = async () => {
+   const checkAuthStatus = async () => {
     try {
       console.log(`🔍 AuthContext: Fetching user data`)
       const response = await axios.get("/api/auth/me")

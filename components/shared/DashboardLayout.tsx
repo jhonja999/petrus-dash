@@ -33,13 +33,13 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const pathname = usePathname()
 
-  const navigation = [
+   const navigation = [
     { name: "Dashboard", href: "/dashboard", icon: Home },
-    { name: "Asignaciones", href: "/admin/assignments", icon: MapPin },
-    { name: "Camiones", href: "/admin/trucks", icon: Truck },
-    { name: "Clientes", href: "/admin/customers", icon: Building2 },
-    { name: "Usuarios", href: "/admin/users", icon: Users },
-    { name: "Reportes", href: "/admin/reports", icon: BarChart3 },
+    { name: "Asignaciones", href: "/assignments", icon: MapPin },
+    { name: "Camiones", href: "/trucks", icon: Truck },
+    { name: "Clientes", href: "/customers", icon: Building2 },
+    { name: "Usuarios", href: "/users", icon: Users },
+    { name: "Reportes", href: "/reports", icon: BarChart3 },
   ]
 
   const handleLogout = async () => {

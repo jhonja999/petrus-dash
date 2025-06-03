@@ -49,10 +49,8 @@ export async function middleware(request: NextRequest) {
     }
 
     // Admin routes - all routes under (admin) group: dashboard, assignments, customers, reports, trucks
-    const adminRoutes = ["/dashboard", "/assignments", "/customers", "/reports", "/trucks"]
-    const isAdminRoute = adminRoutes.some(route => 
-      pathname === route || pathname.startsWith(`${route}/`)
-    )
+    const adminRoutes = ["/dashboard", "/assignments", "/customers", "/reports", "/trucks", "/users"]
+    const isAdminRoute = adminRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`))
 
     if (isAdminRoute) {
       console.log(`🔐 Middleware: Checking admin route access for role: ${user.role} on ${pathname}`)
@@ -69,7 +67,9 @@ export async function middleware(request: NextRequest) {
       const pathParts = pathname.split("/")
       const driverIdFromPath = pathParts.length > 2 ? pathParts[2] : null
 
-      console.log(`🚛 Middleware: Checking despacho access - User: ${user.id}, Role: ${user.role}, Path ID: ${driverIdFromPath}`)
+      console.log(
+        `🚛 Middleware: Checking despacho access - User: ${user.id}, Role: ${user.role}, Path ID: ${driverIdFromPath}`,
+      )
 
       // Admins and S_A can access any despacho route
       if (user.role === "Admin" || user.role === "S_A") {

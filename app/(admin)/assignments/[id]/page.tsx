@@ -166,7 +166,7 @@ export default function AssignmentDetailPage() {
           <h2 className="text-xl font-semibold text-gray-900">Asignación no encontrada</h2>
           <p className="text-gray-600 mt-2">La asignación solicitada no existe.</p>
           <Button asChild className="mt-4">
-            <Link href="/admin/assignments">Volver a Asignaciones</Link>
+            <Link href="/assignments">Volver a Asignaciones</Link>
           </Button>
         </div>
       </DashboardLayout>
@@ -180,7 +180,7 @@ export default function AssignmentDetailPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <Button variant="outline" size="sm" asChild>
-              <Link href="/admin/assignments">
+              <Link href="/assignments">
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Volver
               </Link>

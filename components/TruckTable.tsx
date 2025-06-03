@@ -84,7 +84,7 @@ export function TruckTable({ trucks, onUpdateState, isAdmin = false }: TruckTabl
                         </SelectContent>
                       </Select>
                       <Button asChild size="sm" variant="outline">
-                        <Link href={`/admin/trucks/${truck.id}/edit`}>
+                        <Link href={`/trucks/${truck.id}/edit`}>
                           <Edit className="h-4 w-4" />
                         </Link>
                       </Button>

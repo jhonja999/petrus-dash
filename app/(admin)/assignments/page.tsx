@@ -57,36 +57,33 @@ export default function AssignmentsPage() {
   // If not mounted yet, render a minimal placeholder
   if (!mounted) {
     return (
-      <DashboardLayout>
         <div className="min-h-screen flex items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
         </div>
-      </DashboardLayout>
+     
     )
   }
 
   if (isLoading || assignmentsLoading) {
     return (
-      <DashboardLayout>
+     
         <div className="min-h-screen flex items-center justify-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
         </div>
-      </DashboardLayout>
+     
     )
   }
 
   if (!isAdmin) {
     return (
-      <DashboardLayout>
         <div className="min-h-screen flex items-center justify-center">
           <p className="text-sm text-gray-600">Unauthorized Access</p>
         </div>
-      </DashboardLayout>
     )
   }
 
   return (
-    <DashboardLayout>
+    
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <div>
@@ -94,7 +91,7 @@ export default function AssignmentsPage() {
             <p className="text-sm text-gray-600">Asignar camiones y combustible a conductores</p>
           </div>
           <Button asChild>
-            <Link href="/admin/assignments/new">Nueva Asignación</Link>
+            <Link href="/assignments/new">Nueva Asignación</Link>
           </Button>
         </div>
 
@@ -148,6 +145,5 @@ export default function AssignmentsPage() {
           </div>
         </div>
       </div>
-    </DashboardLayout>
   )
 }
