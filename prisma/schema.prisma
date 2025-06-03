@@ -20,6 +20,7 @@ enum UserRole {
   Admin
   S_A
 }
+
 enum TruckState {
   Activo
   Inactivo
@@ -35,6 +36,13 @@ enum FuelType {
   GASOLINA_95
   GLP
   ELECTRICA
+}
+
+enum DischargeStatus {
+  pendiente
+  en_proceso
+  finalizado
+  cancelado
 }
 
 model User {
@@ -84,6 +92,7 @@ model Assignment {
   totalRemaining Decimal
   fuelType       FuelType
   isCompleted    Boolean   @default(false)
+  completedAt    DateTime? // Nueva columna para fecha de finalización
   notes          String?
 
   truck      Truck       @relation(fields: [truckId], references: [id])
@@ -95,18 +104,23 @@ model Assignment {
 
   @@map("assignments")
   @@index([driverId])
+  @@index([truckId])
   @@index([createdAt])
+  @@index([fuelType])
+  @@index([isCompleted])
 }
 
 model Discharge {
-  id              Int      @id @default(autoincrement())
+  id              Int             @id @default(autoincrement())
   assignmentId    Int
   customerId      Int
   totalDischarged Decimal
-  status          String   @default("pendiente")
+  status          DischargeStatus @default(pendiente) // Cambio a enum
   marcadorInicial Decimal?
   marcadorFinal   Decimal?
   cantidadReal    Decimal?
+  startTime       DateTime?       // Nueva columna para hora de inicio
+  endTime         DateTime?       // Nueva columna para hora de finalización
 
   assignment Assignment @relation(fields: [assignmentId], references: [id])
   customer   Customer   @relation(fields: [customerId], references: [id])
@@ -115,4 +129,8 @@ model Discharge {
   updatedAt DateTime @updatedAt
 
   @@map("discharges")
+  @@index([assignmentId])
+  @@index([customerId])
+  @@index([status])
+  @@index([createdAt])
 }
