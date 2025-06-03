@@ -27,8 +27,8 @@ export interface Truck {
   capacitygal: Decimal
   lastRemaining: Decimal
   state: TruckState // "Activo" | "Inactivo" | "Mantenimiento" | "Transito" | "Descarga" | "Asignado"
-  createdAt?: Date
-  updatedAt?: Date
+  createdAt?: Date // Added for consistency
+  updatedAt?: Date // Added for consistency
 }
 
 export interface Customer {
@@ -36,8 +36,8 @@ export interface Customer {
   companyname: string
   ruc: string
   address: string
-  createdAt?: Date // Added createdAt
-  updatedAt?: Date // Added updatedAt
+  createdAt?: Date // Added for consistency
+  updatedAt?: Date // Added for consistency
 }
 
 export interface Assignment {

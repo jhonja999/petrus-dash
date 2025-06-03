@@ -140,7 +140,7 @@ function CustomersPageContent() {
                       id="companyname"
                       value={formData.companyname}
                       onChange={(e) => setFormData((prev) => ({ ...prev, companyname: e.target.value }))}
-                      placeholder="Acme Corporation"
+                      placeholder="EMPRESA S.A.C"
                       required
                     />
                   </div>
@@ -163,7 +163,7 @@ function CustomersPageContent() {
                       id="address"
                       value={formData.address}
                       onChange={(e) => setFormData((prev) => ({ ...prev, address: e.target.value }))}
-                      placeholder="Av. Principal 123, Lima"
+                      placeholder="Av. Principal 123, Cajamarca"
                       required
                     />
                   </div>

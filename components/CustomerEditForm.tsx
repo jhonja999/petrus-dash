@@ -171,7 +171,7 @@ export function CustomerEditForm({ customer }: CustomerEditFormProps) {
             id="companyname"
             value={formData.companyname}
             onChange={handleChange}
-            placeholder="Acme Corporation"
+            placeholder="Empresa S.A.C."
             required
           />
           {errors.companyname && <p className="text-red-500 text-sm">{errors.companyname}</p>}
