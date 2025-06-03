@@ -34,7 +34,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname()
 
   const navigation = [
-    { name: "Dashboard", href: "/admin/dashboard", icon: Home },
+    { name: "Dashboard", href: "/dashboard", icon: Home },
     { name: "Asignaciones", href: "/admin/assignments", icon: MapPin },
     { name: "Camiones", href: "/admin/trucks", icon: Truck },
     { name: "Clientes", href: "/admin/customers", icon: Building2 },
@@ -72,7 +72,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           {sidebarOpen && (
             <div className="flex items-center space-x-2">
               <Truck className="h-8 w-8 text-blue-600" />
-              <span className="text-xl font-bold text-gray-900">PetrusDash</span>
+              <span className="text-xl font-bold text-gray-900">Petrus</span>
             </div>
           )}
           <Button variant="ghost" size="sm" onClick={() => setSidebarOpen(!sidebarOpen)} className="hidden lg:flex">

@@ -21,7 +21,7 @@ export default function AssignmentDetailsPage() {
   const router = useRouter()
   const driverId = params.driverId as string
   const assignmentId = params.assignmentId as string
-  const { user, isConductor, isLoading } = useAuth()
+  const { user, isOperator, isLoading } = useAuth()
 
   const [assignment, setAssignment] = useState<Assignment | null>(null)
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -35,7 +35,7 @@ export default function AssignmentDetailsPage() {
   const driverIdNumber = driverId ? Number.parseInt(driverId, 10) : null
 
   useEffect(() => {
-    if (!isLoading && (!isConductor || !user || !driverIdNumber || Number(user.id) !== driverIdNumber)) {
+    if (!isLoading && (!isOperator || !user || !driverIdNumber || Number(user.id) !== driverIdNumber)) {
       window.location.href = "/unauthorized"
       return
     }
@@ -43,25 +43,28 @@ export default function AssignmentDetailsPage() {
     const fetchData = async () => {
       try {
         setError(null)
+        console.log(`🔍 Fetching assignment ${assignmentId} and customers`)
+
         const [assignmentRes, customersRes] = await Promise.all([
           axios.get(`/api/assignments/${assignmentId}`),
           axios.get("/api/customers"),
         ])
 
+        console.log(`✅ Data fetched successfully`)
         setAssignment(assignmentRes.data)
         setCustomers(customersRes.data)
       } catch (error) {
-        console.error("Error fetching data:", error)
+        console.error("❌ Error fetching data:", error)
         setError("Error al cargar los datos. Por favor, intenta de nuevo.")
       } finally {
         setLoading(false)
       }
     }
 
-    if (assignmentId && driverId) {
+    if (assignmentId && driverId && !isLoading) {
       fetchData()
     }
-  }, [assignmentId, driverId, user, isConductor, isLoading, router, driverIdNumber])
+  }, [assignmentId, driverId, user, isOperator, isLoading, driverIdNumber])
 
   const openModal = (discharge: Discharge) => {
     setSelectedDischarge(discharge)
@@ -163,7 +166,7 @@ export default function AssignmentDetailsPage() {
     )
   }
 
-  if (!isConductor || !assignment) {
+  if (!isOperator || !assignment) {
     return null
   }
 

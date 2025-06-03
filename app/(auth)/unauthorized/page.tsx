@@ -1,11 +1,17 @@
-"use client"
+"use client";
 
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { useRouter } from "next/navigation"
-import { useAuth } from "@/contexts/AuthContext"
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Shield,
   Home,
@@ -18,39 +24,41 @@ import {
   Mail,
   Phone,
   HelpCircle,
-} from "lucide-react"
+} from "lucide-react";
 
 export default function UnauthorizedPage() {
-  const router = useRouter()
-  const { user, logout, isLoading, isAdmin, isOperator } = useAuth()
+  const router = useRouter();
+  const { user, logout, isLoading, isAdmin, isOperator } = useAuth();
 
   const handleLogout = async () => {
     try {
-      await logout()
+      await logout();
     } catch (error) {
-      console.error("Error during logout:", error)
-      window.location.href = "/api/auth/logout"
+      console.error("Error during logout:", error);
+      window.location.href = "/api/auth/logout";
     }
-  }
+  };
 
   const handleGoHome = () => {
-    router.push("/")
-  }
+    router.push("/");
+  };
 
+  // 1. CORRECCIÓN EN UnauthorizedPage - función handleGoToPanel
   const handleGoToPanel = () => {
-    if (isAdmin) {
-      router.push("/dashboard")
+    if (isAdmin || user?.role === "S_A") {
+      router.push("/dashboard");
     } else if (isOperator) {
-      router.push(`/despacho/${user?.id}`)
+      router.push(`/despacho/${user?.id}`);
     } else {
-      router.push("/")
+      router.push("/");
     }
-  }
+  };
 
   const handleContactAdmin = () => {
     // You can customize this to open email client or redirect to contact page
-    window.location.href = "mailto:admin@petrusdash.com?subject=Solicitud de Acceso - Sistema PetrusDash"
-  }
+    window.location.href =
+      "mailto:admin@petrusdash.com?subject=Solicitud de Acceso - Sistema PetrusDash";
+  };
 
   if (isLoading) {
     return (
@@ -60,7 +68,7 @@ export default function UnauthorizedPage() {
           <p className="mt-4 text-gray-600">Verificando permisos...</p>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -100,12 +108,17 @@ export default function UnauthorizedPage() {
                           {user.role === "Admin"
                             ? "Administrador"
                             : user.role === "S_A"
-                              ? "Super Administrador"
-                              : user.role === "Operador"
-                                ? "Operador"
-                                : user.role}
+                            ? "Super Administrador"
+                            : user.role === "Operador"
+                            ? "Operador"
+                            : user.role}
                         </Badge>
-                        <Badge variant={user.state === "Activo" ? "default" : "destructive"} className="text-xs">
+                        <Badge
+                          variant={
+                            user.state === "Activo" ? "default" : "destructive"
+                          }
+                          className="text-xs"
+                        >
                           {user.state}
                         </Badge>
                       </div>
@@ -122,7 +135,8 @@ export default function UnauthorizedPage() {
                 <div className="space-y-2">
                   <p className="font-semibold">Permisos Insuficientes</p>
                   <p className="text-sm">
-                    Tu cuenta no tiene los permisos necesarios para acceder a esta funcionalidad. Esto puede deberse a:
+                    Tu cuenta no tiene los permisos necesarios para acceder a
+                    esta funcionalidad. Esto puede deberse a:
                   </p>
                   <ul className="text-sm list-disc list-inside space-y-1 ml-2">
                     <li>Restricciones de rol de usuario</li>
@@ -136,7 +150,11 @@ export default function UnauthorizedPage() {
             {/* Action Buttons */}
             <div className="grid grid-cols-1 gap-3">
               {user && (
-                <Button onClick={handleGoToPanel} className="w-full bg-blue-600 hover:bg-blue-700 text-white" size="lg">
+                <Button
+                  onClick={handleGoToPanel}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                  size="lg"
+                >
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Ir a Mi Panel Principal
                 </Button>
@@ -163,12 +181,22 @@ export default function UnauthorizedPage() {
               </Button>
 
               {user ? (
-                <Button onClick={handleLogout} variant="destructive" className="w-full" size="lg">
+                <Button
+                  onClick={handleLogout}
+                  variant="destructive"
+                  className="w-full"
+                  size="lg"
+                >
                   <LogOut className="h-4 w-4 mr-2" />
                   Cerrar Sesión
                 </Button>
               ) : (
-                <Button onClick={() => router.push("/login")} variant="outline" className="w-full" size="lg">
+                <Button
+                  onClick={() => router.push("/login")}
+                  variant="outline"
+                  className="w-full"
+                  size="lg"
+                >
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Iniciar Sesión
                 </Button>
@@ -181,17 +209,21 @@ export default function UnauthorizedPage() {
                 <div className="flex items-start gap-3">
                   <HelpCircle className="h-5 w-5 text-blue-600 mt-0.5" />
                   <div className="flex-1">
-                    <h4 className="font-semibold text-blue-900 mb-2">¿Necesitas ayuda?</h4>
+                    <h4 className="font-semibold text-blue-900 mb-2">
+                      ¿Necesitas ayuda?
+                    </h4>
                     <div className="space-y-2 text-sm text-blue-800">
                       <div className="flex items-center gap-2">
                         <Mail className="h-4 w-4" />
-                        <span>admin@petrusdash.com</span>
+                        <span>admin@petrus.com</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <Phone className="h-4 w-4" />
                         <span>+51 (01) 234-5678</span>
                       </div>
-                      <p className="text-xs mt-2">Horario de atención: Lunes a Viernes, 8:00 AM - 6:00 PM</p>
+                      <p className="text-xs mt-2">
+                        Horario de atención: Lunes a Viernes, 8:00 AM - 6:00 PM
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -201,13 +233,14 @@ export default function UnauthorizedPage() {
             {/* Additional Help */}
             <div className="text-center">
               <p className="text-sm text-gray-500">
-                Si crees que esto es un error, por favor contacta con el administrador del sistema proporcionando tu
-                información de usuario y la página a la que intentabas acceder.
+                Si crees que esto es un error, por favor contacta con el
+                administrador del sistema proporcionando tu información de
+                usuario y la página a la que intentabas acceder.
               </p>
             </div>
           </CardContent>
         </Card>
       </div>
     </div>
-  )
+  );
 }

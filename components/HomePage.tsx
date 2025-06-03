@@ -48,15 +48,15 @@ export default function HomePage() {
 
   // Función para determinar dashboard URL
   const getDashboardUrl = () => {
-    if (!user) return "/login"
+  if (!user) return "/login"
 
-    if (user.role === "Admin" || user.role === "S_A") {
-      return "/admin/dashboard"
-    } else if (user.role === "Operador") {
-      return `/despacho/${user.id}`
-    }
-    return "/unauthorized"
+  if (user.role === "Admin" || user.role === "S_A") {
+    return "/dashboard"  // ✅ Coincide con UnauthorizedPage
+  } else if (user.role === "Operador") {
+    return `/despacho/${user.id}`
   }
+  return "/unauthorized"
+}
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">

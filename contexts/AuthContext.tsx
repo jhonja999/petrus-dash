@@ -48,9 +48,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     checkAuthStatus()
   }, [])
 
-  // Eliminamos la verificación redundante de rutas admin
-  // que estaba causando el conflicto con el middleware y layout
-
   const checkAuthStatus = async () => {
     try {
       console.log(`🔍 AuthContext: Fetching user data`)
@@ -63,12 +60,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUser(null)
       }
     } catch (error: any) {
-      if (error.response?.status !== 401) {
-        console.error("❌ AuthContext: Auth check error:", error)
+      // Manejar errores 401 silenciosamente (usuario no autenticado)
+      if (error.response?.status === 401) {
+        console.log(`🔓 AuthContext: User not authenticated (401)`)
+        setUser(null)
       } else {
-        console.log(`🔓 AuthContext: User not authenticated`)
+        // Solo mostrar errores que no sean 401
+        console.error("❌ AuthContext: Unexpected auth check error:", error.response?.status || error.message)
+        setUser(null)
       }
-      setUser(null)
     } finally {
       setIsLoading(false)
     }
@@ -120,7 +120,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const getRedirectUrl = (user: User): string => {
     if (user.role === "Admin" || user.role === "S_A") {
-      return "/admin/dashboard"
+      return "/dashboard"
     } else if (user.role === "Operador") {
       return `/despacho/${user.id}`
     }
