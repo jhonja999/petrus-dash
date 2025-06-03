@@ -8,12 +8,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, Building2 } from "lucide-react"
+import { Plus, Building2, Edit, Eye } from "lucide-react" // Added Edit and Eye icons
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import axios from "axios"
 import dynamic from "next/dynamic"
-import type { Customer } from "@/types"
+import type { Customer } from "@/types/globals"
+import { toast } from "@/components/ui/use-toast" // Import toast
 
 function CustomersPageContent() {
   const [mounted, setMounted] = useState(false)
@@ -45,6 +46,11 @@ function CustomersPageContent() {
         setCustomers(response.data)
       } catch (error) {
         console.error("Error fetching customers:", error)
+        toast({
+          title: "Error",
+          description: "No se pudieron cargar los clientes.",
+          variant: "destructive",
+        })
       } finally {
         setLoading(false)
       }
@@ -63,10 +69,17 @@ function CustomersPageContent() {
       const response = await axios.post("/api/customers", formData)
       setCustomers((prev) => [...prev, response.data])
       setFormData({ companyname: "", ruc: "", address: "" })
-      alert("Cliente creado exitosamente")
+      toast({
+        title: "Éxito",
+        description: "Cliente creado exitosamente.",
+      })
     } catch (error) {
       console.error("Error creating customer:", error)
-      alert("Error al crear cliente")
+      toast({
+        title: "Error",
+        description: "Error al crear cliente.",
+        variant: "destructive",
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -191,11 +204,11 @@ function CustomersPageContent() {
                           <TableCell className="max-w-xs truncate">{customer.address}</TableCell>
                           <TableCell>
                             <div className="flex space-x-2">
-                              <Button size="sm" variant="outline">
-                                Editar
-                              </Button>
-                              <Button size="sm" variant="outline">
-                                Ver
+                              <Button size="sm" variant="outline" asChild>
+                                <Link href={`/customers/${customer.id}/edit`}>
+                                  <Edit className="h-4 w-4 mr-1" />
+                                  Editar
+                                </Link>
                               </Button>
                             </div>
                           </TableCell>

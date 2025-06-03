@@ -36,6 +36,8 @@ export interface Customer {
   companyname: string
   ruc: string
   address: string
+  createdAt?: Date // Added createdAt
+  updatedAt?: Date // Added updatedAt
 }
 
 export interface Assignment {
