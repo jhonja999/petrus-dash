@@ -7,7 +7,7 @@ import { AlertCircle } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/hooks/useAuth"
 import UserEditForm from "@/components/UserEditForm"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner" // Cambiado de shadcn/ui toast a sonner
 import type { User as UserType } from "@/types/globals" // Alias User to UserType to avoid conflict with LucideReact User icon
 
 interface PageProps {
@@ -30,6 +30,7 @@ export default function EditUserPage({ params }: PageProps) {
     setMounted(true)
   }, [])
 
+  
   useEffect(() => {
     if (mounted && !isLoading) {
       if (!isAuthenticated || !isAdmin) {
@@ -49,19 +50,15 @@ export default function EditUserPage({ params }: PageProps) {
         setUser(response.data.data)
       } else {
         setError(response.data.message || "Error al cargar el usuario.")
-        toast({
-          title: "Error",
-          description: response.data.message || "No se pudo cargar la información del usuario.",
-          variant: "destructive",
+        toast.error("Error", {
+          description: response.data.message || "No se pudo cargar la información del usuario."
         })
       }
     } catch (err: any) {
       console.error("Error fetching user:", err)
       setError(err.response?.data?.message || "Error de red al cargar el usuario.")
-      toast({
-        title: "Error de conexión",
-        description: err.response?.data?.message || "No se pudo conectar con el servidor para cargar el usuario.",
-        variant: "destructive",
+      toast.error("Error de conexión", {
+        description: err.response?.data?.message || "No se pudo conectar con el servidor para cargar el usuario."
       })
     } finally {
       setLoadingUser(false)

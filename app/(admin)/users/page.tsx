@@ -14,7 +14,7 @@ import { AlertCircle, UserPlus, Users } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import axios from "axios"
-import { toast } from "@/components/ui/use-toast" // Import toast
+import { toast } from "sonner" // Cambiado de shadcn/ui toast a sonner
 
 interface UserData {
   id: number
@@ -93,20 +93,32 @@ export default function UsersPage() {
     try {
       // Validación básica
       if (!formData.name || !formData.lastname || !formData.email || !formData.dni || !formData.password) {
-        toast({
-          title: "Error de validación",
-          description: "Todos los campos son obligatorios.",
-          variant: "destructive",
+        toast.error("Error de validación", {
+          description: "Todos los campos son obligatorios."
+        })
+        return
+      }
+
+      // Validar formato de DNI
+      if (!/^\d{8}$/.test(formData.dni)) {
+        toast.error("DNI inválido", {
+          description: "El DNI debe tener exactamente 8 dígitos numéricos."
+        })
+        return
+      }
+
+      // Validar formato de email
+      if (!/\S+@\S+\.\S+/.test(formData.email)) {
+        toast.error("Email inválido", {
+          description: "Por favor ingresa un formato de email válido."
         })
         return
       }
 
       // Validar que solo S_A puede crear otros S_A
       if (formData.role === "S_A" && !isSuperAdmin) {
-        toast({
-          title: "Permiso denegado",
-          description: "Solo Super Administradores pueden crear otros Super Administradores.",
-          variant: "destructive",
+        toast.error("Permiso denegado", {
+          description: "Solo Super Administradores pueden crear otros Super Administradores."
         })
         return
       }
@@ -127,16 +139,15 @@ export default function UsersPage() {
         state: "Activo",
       })
 
-      toast({
-        title: "Usuario creado",
-        description: "El usuario ha sido creado exitosamente.",
+      // Toast de éxito con Sonner
+      toast.success("¡Usuario creado exitosamente!", {
+        description: `${formData.name} ${formData.lastname} ha sido registrado en el sistema.`,
+        duration: 4000,
       })
     } catch (err: any) {
       console.error("Error creating user:", err)
-      toast({
-        title: "Error al crear usuario",
-        description: err.response?.data?.error || err.message || "Hubo un problema al crear el usuario.",
-        variant: "destructive",
+      toast.error("Error al crear usuario", {
+        description: err.response?.data?.error || err.message || "Hubo un problema al crear el usuario."
       })
     } finally {
       setIsSubmitting(false)

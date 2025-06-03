@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { Toaster } from "sonner" // Agregar import de Toaster
 import {
   Menu,
   X,
@@ -163,6 +164,16 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           <div className="p-4 lg:p-8 pt-16 lg:pt-8">{children}</div>
         </main>
       </div>
+
+      {/* Toaster de Sonner*/}
+      <Toaster 
+        position="top-right"
+        richColors
+        closeButton
+        duration={4000}
+        expand={true}
+        visibleToasts={5}
+      />
     </div>
   )
 }

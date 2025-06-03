@@ -2,6 +2,7 @@ import type React from "react"
 import { redirect } from "next/navigation"
 import { getUserFromToken } from "@/lib/jwt"
 import DashboardLayout from "@/components/shared/DashboardLayout"
+import { Toaster } from "@/components/ui/sonner"
 
 export default async function AdminLayout({
   children,
@@ -34,9 +35,9 @@ export default async function AdminLayout({
 
   console.log(`✅ AdminLayout: Access granted`)
   
-  return (
-    <DashboardLayout>
-      {children}
-    </DashboardLayout>
+   return (
+    <>
+      <DashboardLayout>{children}</DashboardLayout>
+    </>
   )
 }

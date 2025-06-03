@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { AlertCircle, Save, Undo2, User } from "lucide-react"
-import { toast } from "@/components/ui/use-toast"
+import { toast } from "sonner" // Changed from shadcn/ui toast to sonner
 import { useAuth } from "@/hooks/useAuth"
 import type { UserRole, UserState } from "@/types/globals"
 
@@ -131,10 +131,8 @@ export default function UserEditForm({ initialUser }: UserEditFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!validate()) {
-      toast({
-        title: "Error de validación",
-        description: "Por favor, corrige los errores en el formulario.",
-        variant: "destructive",
+      toast.error("Error de validación", {
+        description: "Por favor, corrige los errores en el formulario."
       })
       return
     }
@@ -150,28 +148,29 @@ export default function UserEditForm({ initialUser }: UserEditFormProps) {
       const response = await axios.put(`/api/users/${initialUser.id}`, dataToSend)
 
       if (response.data.success) {
-        toast({
-          title: "Usuario actualizado",
-          description: "El usuario ha sido actualizado exitosamente.",
+        // Success toast with Sonner
+        toast.success("¡Usuario actualizado exitosamente!", {
+          description: `Los datos de ${formData.name} ${formData.lastname} han sido actualizados correctamente.`,
+          duration: 4000,
         })
+        
         // Update originalData to reflect the new saved state
         setOriginalData(formData)
         setHasChanges(false)
-        // Optionally, refresh the user list or redirect
-        router.push("/users")
+        
+        // Optionally, refresh the user list or redirect after a short delay
+        setTimeout(() => {
+          router.push("/users")
+        }, 1500)
       } else {
-        toast({
-          title: "Error al actualizar",
-          description: response.data.message || "Hubo un problema al actualizar el usuario.",
-          variant: "destructive",
+        toast.error("Error al actualizar usuario", {
+          description: response.data.message || "Hubo un problema al actualizar el usuario."
         })
       }
     } catch (err: any) {
       console.error("Error updating user:", err)
-      toast({
-        title: "Error de red",
-        description: err.response?.data?.message || "No se pudo conectar con el servidor.",
-        variant: "destructive",
+      toast.error("Error de conexión", {
+        description: err.response?.data?.message || "No se pudo conectar con el servidor."
       })
     } finally {
       setIsSubmitting(false)
