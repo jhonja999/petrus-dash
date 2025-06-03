@@ -3,6 +3,9 @@ import type React from "react"
 import type { Decimal } from "@prisma/client/runtime/library"
 import type { UserRole, UserState, FuelType, TruckState } from "@prisma/client"
 
+// Re-export Prisma types for easier access
+export type { UserRole, UserState, FuelType, TruckState } from "@prisma/client"
+
 // Main User interface - consistent with Prisma and AuthContext
 export interface User {
   id: number
@@ -24,6 +27,8 @@ export interface Truck {
   capacitygal: Decimal
   lastRemaining: Decimal
   state: TruckState // "Activo" | "Inactivo" | "Mantenimiento" | "Transito" | "Descarga" | "Asignado"
+  createdAt?: Date
+  updatedAt?: Date
 }
 
 export interface Customer {
