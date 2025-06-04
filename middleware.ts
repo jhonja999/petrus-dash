@@ -40,12 +40,24 @@ export async function middleware(request: NextRequest) {
   try {
     // Verify token
     const user = await verifyToken(token)
-    console.log(`👤 Middleware: User verified - Role: ${user.role}, State: ${user.state}`)
+    console.log(`👤 Middleware: User verified - Role: ${user.role}, State: ${user.state}, ID: ${user.id}`)
 
     // Check user state
     if (user.state === "Inactivo" || user.state === "Suspendido" || user.state === "Eliminado") {
       console.log(`⚠️ Middleware: User state invalid: ${user.state}`)
       return NextResponse.redirect(new URL("/unauthorized", request.url))
+    }
+
+    // **FIXED: Add role-based default redirects for root access**
+    // If user tries to access root "/" and is authenticated, redirect to their appropriate dashboard
+    if (pathname === "/") {
+      if (user.role === "Admin" || user.role === "S_A") {
+        console.log(`🔄 Middleware: Redirecting ${user.role} from root to dashboard`)
+        return NextResponse.redirect(new URL("/dashboard", request.url))
+      } else if (user.role === "Operador") {
+        console.log(`🔄 Middleware: Redirecting Operador from root to despacho`)
+        return NextResponse.redirect(new URL(`/despacho/${user.id}`, request.url))
+      }
     }
 
     // Admin routes - all routes under (admin) group: dashboard, assignments, customers, reports, trucks
@@ -62,41 +74,82 @@ export async function middleware(request: NextRequest) {
       return NextResponse.next()
     }
 
-    // Despacho routes - for drivers
+    // **FIXED: Updated despacho route handling for new structure**
     if (pathname.startsWith("/despacho")) {
-      const pathParts = pathname.split("/")
-      const driverIdFromPath = pathParts.length > 2 ? pathParts[2] : null
+      const pathParts = pathname.split("/").filter(Boolean)
 
       console.log(
-        `🚛 Middleware: Checking despacho access - User: ${user.id}, Role: ${user.role}, Path ID: ${driverIdFromPath}`,
+        `🚛 Middleware: Checking despacho access - Path parts:`,
+        pathParts,
+        `User: ${user.id}, Role: ${user.role}`,
       )
 
-      // Admins and S_A can access any despacho route
-      if (user.role === "Admin" || user.role === "S_A") {
-        console.log(`✅ Middleware: Admin/SA accessing despacho route`)
+      // If base /despacho path - accessible by all authenticated users
+      if (pathParts.length === 1) {
+        console.log("🔄 Middleware: On base /despacho path - allowing access")
         return NextResponse.next()
       }
 
-      // Operators can only access their own routes
-      if (user.role === "Operador") {
-        if (driverIdFromPath && driverIdFromPath !== "undefined" && Number.parseInt(driverIdFromPath) !== user.id) {
-          console.log(`❌ Middleware: Operator ${user.id} trying to access driver ${driverIdFromPath}`)
+      // If /despacho/admin - only for admins
+      if (pathParts.length === 2 && pathParts[1] === "admin") {
+        if (user.role === "Admin" || user.role === "S_A") {
+          console.log(`✅ Middleware: Admin accessing /despacho/admin`)
+          return NextResponse.next()
+        } else {
+          console.log(`❌ Middleware: Non-admin trying to access /despacho/admin`)
           return NextResponse.redirect(new URL("/unauthorized", request.url))
         }
-        console.log(`✅ Middleware: Operator accessing own despacho route`)
-        return NextResponse.next()
       }
 
-      // If role is not recognized for despacho routes
-      console.log(`❌ Middleware: Unrecognized role ${user.role} for despacho routes`)
+      // If /despacho/[driverId] - check permissions
+      if (pathParts.length === 2) {
+        const driverIdFromPath = pathParts[1]
+
+        // Admins and S_A can access any driver's panel
+        if (user.role === "Admin" || user.role === "S_A") {
+          console.log(`✅ Middleware: Admin/SA accessing driver ${driverIdFromPath} panel`)
+          return NextResponse.next()
+        }
+
+        // Operators can only access their own panel
+        if (user.role === "Operador") {
+          if (driverIdFromPath === String(user.id)) {
+            console.log(`✅ Middleware: Operador ${user.id} accessing own panel`)
+            return NextResponse.next()
+          } else {
+            console.log(`❌ Middleware: Operador ${user.id} trying to access driver ${driverIdFromPath}`)
+            return NextResponse.redirect(new URL("/unauthorized", request.url))
+          }
+        }
+      }
+
+      // If we reach here, deny access
+      console.log(`❌ Middleware: Unrecognized despacho route pattern: ${pathname}`)
+      return NextResponse.redirect(new URL("/unauthorized", request.url))
+    }
+
+    // **FIXED: For any other protected route, check permissions**
+    // If we reach here, it's a protected route that doesn't match admin or despacho patterns
+    console.log(`🔍 Middleware: Checking general route access for ${pathname}`)
+
+    // Allow access to other routes based on user role
+    if (user.role === "Admin" || user.role === "S_A") {
+      console.log(`✅ Middleware: Admin/SA general access granted to ${pathname}`)
+      return NextResponse.next()
+    } else if (user.role === "Operador") {
+      // Operators should only access their despacho routes
+      console.log(`❌ Middleware: Operador trying to access unauthorized route ${pathname}`)
       return NextResponse.redirect(new URL("/unauthorized", request.url))
     }
 
     console.log(`✅ Middleware: General access granted to ${pathname}`)
     return NextResponse.next()
   } catch (error) {
-    console.log(`❌ Middleware: Token verification failed:`, error)
-    return NextResponse.redirect(new URL("/login", request.url))
+    console.error(`❌ Middleware: Token verification failed:`, error)
+    // Clear the invalid token
+    const response = NextResponse.redirect(new URL("/login", request.url))
+    response.cookies.delete("token")
+    return response
   }
 }
 

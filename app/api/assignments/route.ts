@@ -1,10 +1,11 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { verifyToken, isAdmin } from "@/lib/jwt"
 import { cookies } from "next/headers"
 
-export async function GET(request: NextRequest) {
+export async function GET(request: Request) {
   try {
+    // Verify authentication
     const cookieStore = await cookies()
     const token = cookieStore.get("token")?.value
 
@@ -17,43 +18,157 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 })
     }
 
-    // Admin and S_A can see all assignments, Operators can see only their own
-    let whereClause = {}
-    if (!isAdmin(user)) {
-      whereClause = { driverId: user.id }
+    const { searchParams } = new URL(request.url)
+    const driverId = searchParams.get("driverId")
+    const dateFilter = searchParams.get("date")
+    const page = Number.parseInt(searchParams.get("page") || "1")
+    const limit = Number.parseInt(searchParams.get("limit") || "10")
+
+    console.log(
+      `🔍 Assignments API: Query params - driverId: ${driverId}, date: ${dateFilter}, page: ${page}, limit: ${limit}`,
+    )
+
+    // Build where clause
+    const where: any = {}
+
+    // Filter by driver ID if provided
+    if (driverId) {
+      const driverIdNum = Number.parseInt(driverId)
+      if (isNaN(driverIdNum)) {
+        return NextResponse.json({ error: "Invalid driver ID format" }, { status: 400 })
+      }
+      where.driverId = driverIdNum
+      console.log(`🎯 Assignments API: Filtering by driverId: ${driverIdNum}`)
     }
 
-    const assignments = await prisma.assignment.findMany({
-      where: whereClause,
-      orderBy: { createdAt: "desc" },
-      include: {
-        truck: true,
-        driver: {
-          select: {
-            id: true,
-            name: true,
-            lastname: true,
-            dni: true,
-            email: true,
+    // Filter by date if provided
+    if (dateFilter) {
+      const startDate = new Date(dateFilter)
+      const endDate = new Date(dateFilter)
+      endDate.setDate(endDate.getDate() + 1)
+
+      where.createdAt = {
+        gte: startDate,
+        lt: endDate,
+      }
+      console.log(`📅 Assignments API: Filtering by date range: ${startDate.toISOString()} to ${endDate.toISOString()}`)
+    }
+
+    // Check permissions for driver-specific requests
+    if (driverId && !isAdmin(user)) {
+      if (user.id !== Number.parseInt(driverId)) {
+        return NextResponse.json({ error: "Access denied. You can only view your own assignments." }, { status: 403 })
+      }
+    }
+
+    console.log(`🔍 Assignments API: Final where clause:`, where)
+
+    // If filtering by specific driver, return simple array
+    if (driverId) {
+      const assignments = await prisma.assignment.findMany({
+        where,
+        include: {
+          truck: {
+            select: {
+              id: true,
+              placa: true,
+              // Removed 'model' field as it doesn't exist in the schema
+            },
+          },
+          driver: {
+            select: {
+              id: true,
+              name: true,
+              lastname: true,
+              dni: true,
+            },
+          },
+          discharges: {
+            include: {
+              customer: {
+                select: {
+                  id: true,
+                  companyname: true,
+                  ruc: true,
+                },
+              },
+            },
           },
         },
-        discharges: {
-          include: {
-            customer: true,
+        orderBy: { createdAt: "desc" },
+      })
+
+      console.log(`✅ Assignments API: Found ${assignments.length} assignments for driver ${driverId}`)
+      return NextResponse.json(assignments)
+    }
+
+    // For admin requests without specific driver, return paginated results
+    const skip = (page - 1) * limit
+
+    const [assignments, total] = await Promise.all([
+      prisma.assignment.findMany({
+        where,
+        include: {
+          truck: {
+            select: {
+              id: true,
+              placa: true,
+              // Removed 'model' field as it doesn't exist in the schema
+            },
+          },
+          driver: {
+            select: {
+              id: true,
+              name: true,
+              lastname: true,
+              dni: true,
+            },
+          },
+          discharges: {
+            include: {
+              customer: {
+                select: {
+                  id: true,
+                  companyname: true,
+                  ruc: true,
+                },
+              },
+            },
           },
         },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.assignment.count({ where }),
+    ])
+
+    console.log(`✅ Assignments API: Found ${assignments.length} assignments (total: ${total})`)
+
+    return NextResponse.json({
+      assignments,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
       },
     })
-
-    return NextResponse.json(assignments)
   } catch (error) {
-    console.error("Error fetching assignments:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.error("❌ Assignments API: Error fetching assignments:", error)
+    return NextResponse.json(
+      {
+        error: "Internal server error",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    )
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
+    // Verify authentication
     const cookieStore = await cookies()
     const token = cookieStore.get("token")?.value
 
@@ -63,105 +178,89 @@ export async function POST(request: NextRequest) {
 
     const user = await verifyToken(token)
     if (!user || !isAdmin(user)) {
-      return NextResponse.json(
-        {
-          error: "Acceso denegado. Solo administradores pueden crear asignaciones.",
-        },
-        { status: 403 },
-      )
+      return NextResponse.json({ error: "Access denied. Admin privileges required." }, { status: 403 })
     }
 
     const body = await request.json()
-    const { truckId, driverId, totalLoaded, fuelType, notes } = body
+    const { driverId, truckId, totalLoaded, fuelType, notes } = body
 
     // Validation
-    if (
-      !truckId ||
-      !driverId ||
-      !totalLoaded ||
-      !fuelType ||
-      isNaN(Number(truckId)) ||
-      isNaN(Number(driverId)) ||
-      isNaN(Number(totalLoaded)) ||
-      Number(totalLoaded) <= 0
-    ) {
+    if (!driverId || !truckId || !totalLoaded || !fuelType) {
       return NextResponse.json(
         {
-          error: "Faltan campos requeridos o son inválidos (truckId, driverId, totalLoaded, fuelType)",
+          error: "Missing required fields (driverId, truckId, totalLoaded, fuelType)",
         },
         { status: 400 },
       )
     }
 
-    // Check if truck and driver exist and are available
-    const truck = await prisma.truck.findUnique({ where: { id: Number(truckId) } })
-    const driver = await prisma.user.findUnique({ where: { id: Number(driverId) } })
-
-    if (!truck) {
-      return NextResponse.json({ error: "Camión no encontrado" }, { status: 404 })
-    }
-    if (truck.state !== "Activo") {
-      return NextResponse.json(
-        {
-          error: `El camión ${truck.placa} no está disponible. Estado actual: ${truck.state}`,
-        },
-        { status: 400 },
-      )
-    }
-    if (!driver) {
-      return NextResponse.json({ error: "Conductor no encontrado" }, { status: 404 })
-    }
-    if (driver.state !== "Activo") {
-      return NextResponse.json(
-        {
-          error: `El conductor ${driver.name} ${driver.lastname} no está disponible. Estado actual: ${driver.state}`,
-        },
-        { status: 400 },
-      )
+    if (isNaN(totalLoaded) || totalLoaded <= 0) {
+      return NextResponse.json({ error: "Total loaded must be a positive number" }, { status: 400 })
     }
 
+    // Verify driver exists and is active
+    const driver = await prisma.user.findUnique({
+      where: { id: Number.parseInt(driverId) },
+    })
+
+    if (!driver || driver.role !== "Operador" || driver.state !== "Activo") {
+      return NextResponse.json({ error: "Driver not found or not active" }, { status: 404 })
+    }
+
+    // Verify truck exists and is available
+    const truck = await prisma.truck.findUnique({
+      where: { id: Number.parseInt(truckId) },
+    })
+
+    if (!truck || truck.state !== "Activo") {
+      return NextResponse.json({ error: "Truck not found or not available" }, { status: 404 })
+    }
+
+    // Create assignment
     const newAssignment = await prisma.assignment.create({
       data: {
-        truckId: Number(truckId),
-        driverId: Number(driverId),
+        driverId: Number.parseInt(driverId),
+        truckId: Number.parseInt(truckId),
         totalLoaded: Number.parseFloat(totalLoaded),
         totalRemaining: Number.parseFloat(totalLoaded),
         fuelType,
         notes: notes || null,
       },
       include: {
-        truck: true,
+        truck: {
+          select: {
+            id: true,
+            placa: true,
+            // Removed 'model' field as it doesn't exist in the schema
+          },
+        },
         driver: {
           select: {
             id: true,
             name: true,
             lastname: true,
             dni: true,
-            email: true,
           },
         },
+        discharges: true,
       },
     })
 
-    // Update truck and driver state to 'Asignado'
-    await Promise.all([
-      prisma.truck.update({
-        where: { id: Number(truckId) },
-        data: { state: "Asignado" },
-      }),
-      prisma.user.update({
-        where: { id: Number(driverId) },
-        data: { state: "Asignado" },
-      }),
-    ])
+    // Update truck status to "Asignado"
+    await prisma.truck.update({
+      where: { id: Number.parseInt(truckId) },
+      data: { state: "Asignado" },
+    })
+
+    console.log(`✅ Assignments API: Created assignment ${newAssignment.id} for driver ${driverId}`)
 
     return NextResponse.json(newAssignment, { status: 201 })
-  } catch (error: any) {
-    console.error("Error creating assignment:", error)
+  } catch (error) {
+    console.error("❌ Assignments API: Error creating assignment:", error)
     return NextResponse.json(
       {
-        error: "Error al crear asignación",
-        details: error.message,
+        error: "Internal server error",
+        details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
     )

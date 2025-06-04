@@ -1,10 +1,10 @@
 import type React from "react"
 // types/globals.d.ts
 import type { Decimal } from "@prisma/client/runtime/library"
-import type { UserRole, UserState, FuelType, TruckState } from "@prisma/client"
+import type { UserRole, UserState, FuelType, TruckState, DischargeStatus } from "@prisma/client"
 
 // Re-export Prisma types for easier access
-export type { UserRole, UserState, FuelType, TruckState } from "@prisma/client"
+export type { UserRole, UserState, FuelType, TruckState, DischargeStatus } from "@prisma/client"
 
 // Main User interface - consistent with Prisma and AuthContext
 export interface User {
@@ -48,6 +48,7 @@ export interface Assignment {
   totalRemaining: Decimal
   fuelType: FuelType
   isCompleted: boolean
+  completedAt?: Date | null // Nueva columna para fecha de finalización
   notes?: string | null
   truck: Truck
   driver: User
@@ -61,10 +62,12 @@ export interface Discharge {
   assignmentId: number
   customerId: number
   totalDischarged: Decimal
-  status: string
+  status: DischargeStatus // Cambiado a enum: "pendiente" | "en_proceso" | "finalizado" | "cancelado"
   marcadorInicial?: Decimal | null
   marcadorFinal?: Decimal | null
   cantidadReal?: Decimal | null
+  startTime?: Date | null // Nueva columna para hora de inicio
+  endTime?: Date | null // Nueva columna para hora de finalización
   assignment: Assignment
   customer: Customer
   createdAt: Date

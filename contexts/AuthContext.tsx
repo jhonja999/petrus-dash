@@ -33,6 +33,9 @@ interface AuthProviderProps {
   children: ReactNode
 }
 
+// Global counter for AuthProvider instances
+let authProviderInstanceCount = 0
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -44,28 +47,65 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const isAuthenticated = !!user
 
   useEffect(() => {
-    console.log(`🔄 AuthContext: Checking auth status on mount`)
+    authProviderInstanceCount++
+    console.log(`🏗️ AuthProvider instance ${authProviderInstanceCount} created.`)
+    if (authProviderInstanceCount > 1) {
+      console.warn(
+        "⚠️ Multiple AuthProvider instances detected! This can lead to unexpected behavior and API call loops.",
+      )
+    }
+
+    console.log(`🔄 AuthContext: Checking auth status on mount for path: ${pathname}`)
     checkAuthStatus()
+
+    return () => {
+      authProviderInstanceCount--
+      console.log(`🗑️ AuthProvider instance destroyed. Remaining: ${authProviderInstanceCount}`)
+    }
   }, [])
 
-   const checkAuthStatus = async () => {
+  // **FIXED: Add effect to handle post-authentication routing**
+  useEffect(() => {
+    if (!isLoading && user) {
+      // Only redirect if user is on unauthorized page but should have access
+      if (pathname === "/unauthorized") {
+        const redirectUrl = getRedirectUrl(user)
+        console.log(`🔄 AuthContext: User on unauthorized page, redirecting to ${redirectUrl}`)
+        window.location.href = redirectUrl
+      }
+    }
+  }, [user, isLoading, pathname])
+
+  const checkAuthStatus = async () => {
     try {
       console.log(`🔍 AuthContext: Fetching user data`)
       const response = await axios.get("/api/auth/me")
       if (response.data.user) {
         console.log(`✅ AuthContext: User authenticated - ${response.data.user.role}`)
         setUser(response.data.user)
+
+        // **FIXED: Check if user state is valid**
+        if (
+          response.data.user.state === "Inactivo" ||
+          response.data.user.state === "Suspendido" ||
+          response.data.user.state === "Eliminado"
+        ) {
+          console.log(`⚠️ AuthContext: User state invalid: ${response.data.user.state}`)
+          setUser(null)
+          window.location.href = "/unauthorized"
+          return
+        }
       } else {
         console.log(`❌ AuthContext: No user data received`)
         setUser(null)
       }
     } catch (error: any) {
-      // Manejar errores 401 silenciosamente (usuario no autenticado)
+      // Handle 401 errors silently (unauthenticated user)
       if (error.response?.status === 401) {
         console.log(`🔓 AuthContext: User not authenticated (401)`)
         setUser(null)
       } else {
-        // Solo mostrar errores que no sean 401
+        // Only log errors that are not 401
         console.error("❌ AuthContext: Unexpected auth check error:", error.response?.status || error.message)
         setUser(null)
       }
@@ -91,10 +131,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setUser(response.data.user)
         console.log(`✅ AuthContext: Login successful for ${response.data.user.name}`)
 
-        // Redirect based on role
+        // **FIXED: Check user state before redirecting**
+        if (
+          response.data.user.state === "Inactivo" ||
+          response.data.user.state === "Suspendido" ||
+          response.data.user.state === "Eliminado"
+        ) {
+          throw new Error("Tu cuenta está inactiva o suspendida. Contacta al administrador.")
+        }
+
+        // Redirect based on role only during explicit login
         const redirectUrl = getRedirectUrl(response.data.user)
         console.log(`🔄 AuthContext: Redirecting to ${redirectUrl}`)
-        router.push(redirectUrl)
+        window.location.href = redirectUrl // Use window.location instead of router
       } else {
         throw new Error(response.data.error || "Error al iniciar sesión")
       }
@@ -114,15 +163,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.log("⚠️ AuthContext: Logout warning, but clearing session locally")
     } finally {
       setUser(null)
-      router.push("/")
+      window.location.href = "/" // Use window.location instead of router
     }
   }
 
+  // Helper function to determine redirect URL based on user role
   const getRedirectUrl = (user: User): string => {
     if (user.role === "Admin" || user.role === "S_A") {
       return "/dashboard"
     } else if (user.role === "Operador") {
-      return `/despacho/${user.id}`
+      return `/despacho/${user.id}` // Direct to driver panel
     }
     return "/"
   }

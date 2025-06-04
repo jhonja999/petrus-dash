@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react"
 import { useAuth } from "@/hooks/useAuth"
-import { useRouter } from "next/navigation"
+import { useRouter, useParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -13,27 +13,59 @@ import axios from "axios"
 import type { Assignment, DailyAssignmentSummary } from "@/types/globals"
 
 export default function DriverDashboardContent() {
-  const { user, isConductor, isLoading } = useAuth()
+  const { user, isConductor, isOperator, isLoading, isAuthenticated } = useAuth()
   const router = useRouter()
+  const params = useParams()
+  const driverId = params.driverId as string
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [loading, setLoading] = useState(true)
   const [summary, setSummary] = useState<DailyAssignmentSummary | null>(null)
+  const [accessError, setAccessError] = useState<string | null>(null)
 
+  // **CORREGIDO: Verificación de acceso más robusta**
   useEffect(() => {
-    if (!isLoading && !isConductor) {
-      router.push("/auth/unauthorized")
+    if (!isLoading && isAuthenticated) {
+      console.log(`🔍 DriverDashboardContent: Checking access for user ${user?.id}, role: ${user?.role}`)
+      console.log(`🔍 DriverDashboardContent: isConductor: ${isConductor}, isOperator: ${isOperator}`)
+      
+      // Verificar que el usuario esté autenticado
+      if (!user) {
+        console.log(`❌ DriverDashboardContent: No user found`)
+        setAccessError("Usuario no autenticado")
+        return
+      }
+
+      // Verificar que el usuario sea operador (usar isOperator en lugar de isConductor)
+      const userIsOperator = user.role === "Operador" || isOperator || isConductor
+      if (!userIsOperator) {
+        console.log(`❌ DriverDashboardContent: User ${user.id} is not an operator (role: ${user.role})`)
+        setAccessError("No eres un operador autorizado")
+        return
+      }
+
+      // Verificar que el usuario solo acceda a su propio dashboard
+      if (driverId && user.id.toString() !== driverId) {
+        console.log(`❌ DriverDashboardContent: User ${user.id} trying to access driver ${driverId}`)
+        setAccessError("Solo puedes acceder a tu propio panel")
+        return
+      }
+
+      console.log(`✅ DriverDashboardContent: Access granted for user ${user.id}`)
+      setAccessError(null)
     }
-  }, [isConductor, isLoading, router])
+  }, [user, isConductor, isOperator, isLoading, isAuthenticated, driverId])
 
   useEffect(() => {
     const fetchTodayAssignments = async () => {
-      if (!user?.id) return
+      if (!user?.id || accessError) return
 
       try {
+        console.log(`🔄 DriverDashboardContent: Fetching assignments for user ${user.id}`)
         const today = new Date().toISOString().split("T")[0]
         const response = await axios.get(`/api/assignments?driverId=${user.id}&date=${today}`)
         const todayAssignments = response.data
 
+        console.log(`✅ DriverDashboardContent: Received ${todayAssignments.length} assignments`)
         setAssignments(todayAssignments)
 
         // Calculate summary
@@ -55,30 +87,62 @@ export default function DriverDashboardContent() {
           })
         }
       } catch (error) {
-        console.error("Error fetching assignments:", error)
+        console.error("❌ DriverDashboardContent: Error fetching assignments:", error)
       } finally {
         setLoading(false)
       }
     }
 
-    if (user?.id) {
+    // Solo hacer fetch si no hay errores de acceso
+    if (user?.id && !accessError && !isLoading) {
       fetchTodayAssignments()
+    } else if (accessError) {
+      setLoading(false)
     }
-  }, [user?.id])
+  }, [user?.id, accessError, isLoading])
 
-  if (isLoading || loading) {
+  // Mostrar loading mientras se verifica
+  if (isLoading || (loading && !accessError)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Cargando asignaciones...</p>
+          <p className="mt-2 text-gray-600">Cargando panel del conductor...</p>
         </div>
       </div>
     )
   }
 
-  if (!isConductor) {
-    return null
+  // **CORREGIDO: Mostrar error sin redirigir automáticamente**
+  if (accessError || !isAuthenticated || !user) {
+    console.log(`❌ DriverDashboardContent: Access denied - ${accessError || "Not authenticated"}`)
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center max-w-md">
+          <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
+            <AlertCircle className="h-8 w-8 text-red-600" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">Acceso Denegado</h2>
+          <p className="text-gray-600 mb-4">
+            {accessError || "No tienes permisos para acceder a esta página."}
+          </p>
+          <div className="space-y-2">
+            <Button onClick={() => window.location.href = "/"} className="w-full">
+              Volver al Inicio
+            </Button>
+            {user && (
+              <Button 
+                onClick={() => window.location.href = `/despacho/${user.id}`} 
+                variant="outline" 
+                className="w-full"
+              >
+                Ir a Mi Panel
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   const hasAssignments = assignments.length > 0
