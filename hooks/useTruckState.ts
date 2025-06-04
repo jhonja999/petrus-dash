@@ -15,7 +15,7 @@ export function useTruckState() {
         const response = await axios.get("/api/trucks")
         setTrucks(response.data)
       } catch (err) {
-        setError("Error fetching trucks")
+        setError("Error al obtener camiones")
         console.error(err)
       } finally {
         setLoading(false)
@@ -30,7 +30,7 @@ export function useTruckState() {
       await axios.put(`/api/trucks/${truckId}`, { state: newState })
       setTrucks((prev) => prev.map((truck) => (truck.id === truckId ? { ...truck, state: newState as any } : truck)))
     } catch (err) {
-      setError("Error updating truck state")
+      setError("Error al actualizar estado del camión")
       console.error(err)
     }
   }
@@ -41,7 +41,7 @@ export function useTruckState() {
       const response = await axios.get("/api/trucks")
       setTrucks(response.data)
     } catch (err) {
-      setError("Error refreshing trucks")
+      setError("Error al actualizar camiones")
       console.error(err)
     } finally {
       setLoading(false)

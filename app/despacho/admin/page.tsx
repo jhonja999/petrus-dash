@@ -1,113 +1,146 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowLeft, Users, Calendar, Search, Filter } from "lucide-react"
-import Link from "next/link"
-import axios from "axios"
-import type { Discharge, Assignment, User } from "@/types/globals.d"
-import { useAuth } from "@/contexts/AuthContext"
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ArrowLeft, Users, Calendar, Search, Filter } from "lucide-react";
+import Link from "next/link";
+import axios from "axios";
+import type { Discharge, Assignment, User } from "@/types/globals.d";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function DespachoAdminPage() {
-  const router = useRouter()
-  const { user, isLoading, isAuthenticated, isAdmin } = useAuth()
+  const router = useRouter();
+  const { user, isLoading, isAuthenticated, isAdmin } = useAuth();
 
-  // Admin auth check
+  // Verificación de autenticación de admin
   useEffect(() => {
     if (!isLoading) {
       if (!isAuthenticated) {
-        console.log("🔒 DespachoAdminPage: User not authenticated")
-        router.push("/login")
-        return
+        console.log("🔒 DespachoAdminPage: Usuario no autenticado");
+        router.push("/login");
+        return;
       }
 
       if (!isAdmin) {
-        console.log("🔒 DespachoAdminPage: User not admin, redirecting to unauthorized")
-        router.push("/unauthorized")
-        return
+        console.log(
+          "🔒 DespachoAdminPage: Usuario no es admin, redirigiendo a no autorizado"
+        );
+        router.push("/unauthorized");
+        return;
       }
     }
-  }, [isLoading, isAuthenticated, isAdmin, router])
+  }, [isLoading, isAuthenticated, isAdmin, router]);
 
   // Estados
-  const [allDischarges, setAllDischarges] = useState<Discharge[]>([])
-  const [allAssignments, setAllAssignments] = useState<Assignment[]>([])
-  const [drivers, setDrivers] = useState<User[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [allDischarges, setAllDischarges] = useState<Discharge[]>([]);
+  const [allAssignments, setAllAssignments] = useState<Assignment[]>([]);
+  const [drivers, setDrivers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Filtros
-  const [selectedDriver, setSelectedDriver] = useState<string>("all")
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split("T")[0])
-  const [searchTerm, setSearchTerm] = useState("")
+  const [selectedDriver, setSelectedDriver] = useState<string>("all");
+  const [selectedDate, setSelectedDate] = useState<string>(
+    new Date().toISOString().split("T")[0]
+  );
+  const [searchTerm, setSearchTerm] = useState("");
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        setError(null)
-        console.log(`🔄 Admin: Fetching all despacho data`)
+        setError(null);
+        console.log(`🔄 Admin: Obteniendo todos los datos de despacho`);
 
-        const [dischargesResponse, assignmentsResponse, driversResponse] = await Promise.all([
-          axios.get("/api/discharges"),
-          axios.get("/api/assignments"),
-          axios.get("/api/users?role=Operador"),
-        ])
+        const [dischargesResponse, assignmentsResponse, driversResponse] =
+          await Promise.all([
+            axios.get("/api/discharges"),
+            axios.get("/api/assignments"),
+            axios.get("/api/users?role=Operador"),
+          ]);
 
-        console.log(`✅ Admin: Received data`)
-        setAllDischarges(dischargesResponse.data)
-        setAllAssignments(assignmentsResponse.data.assignments || assignmentsResponse.data)
-        setDrivers(driversResponse.data)
+        console.log(`✅ Admin: Datos recibidos`);
+        setAllDischarges(dischargesResponse.data);
+        setAllAssignments(
+          assignmentsResponse.data.assignments || assignmentsResponse.data
+        );
+        setDrivers(driversResponse.data);
       } catch (error) {
-        console.error("❌ Admin: Error fetching data:", error)
-        setError("Error al cargar los datos")
+        console.error("❌ Admin: Error al obtener datos:", error);
+        setError("Error al cargar los datos");
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }
+    };
 
-    fetchData()
-  }, [])
+    fetchData();
+  }, []);
 
   // Filtrar datos
   const filteredDischarges = allDischarges.filter((discharge) => {
-    const matchesDriver = selectedDriver === "all" || discharge.assignment?.driverId.toString() === selectedDriver
+    const matchesDriver =
+      selectedDriver === "all" ||
+      discharge.assignment?.driverId.toString() === selectedDriver;
     const matchesDate =
-      !selectedDate || new Date(discharge.createdAt).toDateString() === new Date(selectedDate).toDateString()
+      !selectedDate ||
+      new Date(discharge.createdAt).toDateString() ===
+        new Date(selectedDate).toDateString();
     const matchesSearch =
       !searchTerm ||
-      discharge.customer?.companyname?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      discharge.customer?.ruc?.includes(searchTerm)
+      discharge.customer?.companyname
+        ?.toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      discharge.customer?.ruc?.includes(searchTerm);
 
-    return matchesDriver && matchesDate && matchesSearch
-  })
+    return matchesDriver && matchesDate && matchesSearch;
+  });
 
   const filteredAssignments = allAssignments.filter((assignment) => {
-    const matchesDriver = selectedDriver === "all" || assignment.driverId.toString() === selectedDriver
+    const matchesDriver =
+      selectedDriver === "all" ||
+      assignment.driverId.toString() === selectedDriver;
     const matchesDate =
-      !selectedDate || new Date(assignment.createdAt).toDateString() === new Date(selectedDate).toDateString()
+      !selectedDate ||
+      new Date(assignment.createdAt).toDateString() ===
+        new Date(selectedDate).toDateString();
     const matchesSearch =
       !searchTerm ||
-      assignment.truck?.placa?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      assignment.fuelType?.toLowerCase().includes(searchTerm.toLowerCase())
+      assignment.truck?.placa
+        ?.toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
+      assignment.fuelType?.toLowerCase().includes(searchTerm.toLowerCase());
 
-    return matchesDriver && matchesDate && matchesSearch
-  })
+    return matchesDriver && matchesDate && matchesSearch;
+  });
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Cargando datos administrativos...</p>
+          <p className="mt-2 text-gray-600">
+            Cargando datos administrativos...
+          </p>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -125,8 +158,12 @@ export default function DespachoAdminPage() {
               </Button>
               <Users className="h-8 w-8 text-blue-600" />
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Panel Administrativo</h1>
-                <p className="text-sm text-gray-600">Vista general de todos los despachos</p>
+                <h1 className="text-xl font-bold text-gray-900">
+                  Panel Administrativo
+                </h1>
+                <p className="text-sm text-gray-600">
+                  Vista general de todos los despachos
+                </p>
               </div>
             </div>
             <Badge className="bg-blue-100 text-blue-800">
@@ -150,7 +187,10 @@ export default function DespachoAdminPage() {
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Conductor</label>
-                <Select value={selectedDriver} onValueChange={setSelectedDriver}>
+                <Select
+                  value={selectedDriver}
+                  onValueChange={setSelectedDriver}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Seleccionar conductor" />
                   </SelectTrigger>
@@ -167,7 +207,11 @@ export default function DespachoAdminPage() {
 
               <div className="space-y-2">
                 <label className="text-sm font-medium">Fecha</label>
-                <Input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
+                <Input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                />
               </div>
 
               <div className="space-y-2">
@@ -188,9 +232,9 @@ export default function DespachoAdminPage() {
                 <Button
                   variant="outline"
                   onClick={() => {
-                    setSelectedDriver("all")
-                    setSelectedDate(new Date().toISOString().split("T")[0])
-                    setSearchTerm("")
+                    setSelectedDriver("all");
+                    setSelectedDate(new Date().toISOString().split("T")[0]);
+                    setSearchTerm("");
                   }}
                   className="w-full"
                 >
@@ -204,18 +248,26 @@ export default function DespachoAdminPage() {
         {/* Tabs */}
         <Tabs defaultValue="despachos" className="space-y-6">
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="despachos">Despachos ({filteredDischarges.length})</TabsTrigger>
-            <TabsTrigger value="asignaciones">Asignaciones ({filteredAssignments.length})</TabsTrigger>
+            <TabsTrigger value="despachos">
+              Despachos ({filteredDischarges.length})
+            </TabsTrigger>
+            <TabsTrigger value="asignaciones">
+              Asignaciones ({filteredAssignments.length})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="despachos">
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {filteredDischarges.map((discharge) => (
-                <Card key={discharge.id} className="hover:shadow-lg transition-shadow">
+                <Card
+                  key={discharge.id}
+                  className="hover:shadow-lg transition-shadow"
+                >
                   <CardHeader className="pb-3">
                     <div className="flex justify-between items-start">
                       <CardTitle className="text-base">
-                        {discharge.customer?.companyname || "Cliente Desconocido"}
+                        {discharge.customer?.companyname ||
+                          "Cliente Desconocido"}
                       </CardTitle>
                       <Badge
                         className={
@@ -224,29 +276,36 @@ export default function DespachoAdminPage() {
                             : "bg-yellow-100 text-yellow-700"
                         }
                       >
-                        {discharge.status === "finalizado" ? "Completado" : "Pendiente"}
+                        {discharge.status === "finalizado"
+                          ? "Completado"
+                          : "Pendiente"}
                       </Badge>
                     </div>
                     <CardDescription>
-                      Conductor: {discharge.assignment?.driver?.name} {discharge.assignment?.driver?.lastname}
+                      Conductor: {discharge.assignment?.driver?.name}{" "}
+                      {discharge.assignment?.driver?.lastname}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2 text-sm">
                       <p>
-                        <strong>Cantidad:</strong> {discharge.totalDischarged.toString()} gal
+                        <strong>Cantidad:</strong>{" "}
+                        {discharge.totalDischarged.toString()} gal
                       </p>
                       <p>
                         <strong>RUC:</strong> {discharge.customer?.ruc || "N/A"}
                       </p>
                       <p>
-                        <strong>Fecha:</strong> {new Date(discharge.createdAt).toLocaleDateString()}
+                        <strong>Fecha:</strong>{" "}
+                        {new Date(discharge.createdAt).toLocaleDateString()}
                       </p>
-                      {discharge.status === "finalizado" && discharge.cantidadReal && (
-                        <p>
-                          <strong>Cantidad Real:</strong> {discharge.cantidadReal.toString()} gal
-                        </p>
-                      )}
+                      {discharge.status === "finalizado" &&
+                        discharge.cantidadReal && (
+                          <p>
+                            <strong>Cantidad Real:</strong>{" "}
+                            {discharge.cantidadReal.toString()} gal
+                          </p>
+                        )}
                     </div>
                   </CardContent>
                 </Card>
@@ -257,45 +316,62 @@ export default function DespachoAdminPage() {
           <TabsContent value="asignaciones">
             <div className="space-y-4">
               {filteredAssignments.map((assignment) => (
-                <Card key={assignment.id} className="hover:shadow-lg transition-shadow">
+                <Card
+                  key={assignment.id}
+                  className="hover:shadow-lg transition-shadow"
+                >
                   <CardHeader>
                     <div className="flex justify-between items-start">
                       <CardTitle>
                         Asignación #{assignment.id} - {assignment.truck?.placa}
                       </CardTitle>
                       <Badge
-                        className={assignment.isCompleted ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"}
+                        className={
+                          assignment.isCompleted
+                            ? "bg-green-100 text-green-700"
+                            : "bg-blue-100 text-blue-700"
+                        }
                       >
                         {assignment.isCompleted ? "Completada" : "En Progreso"}
                       </Badge>
                     </div>
                     <CardDescription>
-                      Conductor: {assignment.driver?.name} {assignment.driver?.lastname} • {assignment.fuelType}
+                      Conductor: {assignment.driver?.name}{" "}
+                      {assignment.driver?.lastname} • {assignment.fuelType}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-3 gap-4 mb-4">
                       <div className="text-center p-2 bg-blue-50 rounded">
                         <p className="text-xs text-blue-600">Cargado</p>
-                        <p className="font-bold text-blue-700">{assignment.totalLoaded.toString()}</p>
+                        <p className="font-bold text-blue-700">
+                          {assignment.totalLoaded.toString()}
+                        </p>
                       </div>
                       <div className="text-center p-2 bg-green-50 rounded">
                         <p className="text-xs text-green-600">Descargado</p>
                         <p className="font-bold text-green-700">
-                          {(Number(assignment.totalLoaded) - Number(assignment.totalRemaining)).toFixed(0)}
+                          {(
+                            Number(assignment.totalLoaded) -
+                            Number(assignment.totalRemaining)
+                          ).toFixed(0)}
                         </p>
                       </div>
                       <div className="text-center p-2 bg-orange-50 rounded">
                         <p className="text-xs text-orange-600">Remanente</p>
-                        <p className="font-bold text-orange-700">{assignment.totalRemaining.toString()}</p>
+                        <p className="font-bold text-orange-700">
+                          {assignment.totalRemaining.toString()}
+                        </p>
                       </div>
                     </div>
                     <div className="text-sm text-gray-600">
                       <p>
-                        <strong>Fecha:</strong> {new Date(assignment.createdAt).toLocaleDateString()}
+                        <strong>Fecha:</strong>{" "}
+                        {new Date(assignment.createdAt).toLocaleDateString()}
                       </p>
                       <p>
-                        <strong>Descargas:</strong> {assignment.discharges?.length || 0}
+                        <strong>Descargas:</strong>{" "}
+                        {assignment.discharges?.length || 0}
                       </p>
                       {assignment.notes && (
                         <p>
@@ -311,5 +387,5 @@ export default function DespachoAdminPage() {
         </Tabs>
       </div>
     </div>
-  )
+  );
 }

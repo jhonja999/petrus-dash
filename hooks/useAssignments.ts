@@ -5,12 +5,12 @@ import axios from "axios";
 import type { Assignment } from "@/types/globals";
 
 export function useAssignments(driverId?: number, dateFilter?: string) {
-  // ✅ Keep the exact same useState hooks as the original
+  // ✅ Mantener los mismos hooks useState que el original
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // ✅ Keep the same useEffect structure as the original
+  // ✅ Mantener la misma estructura useEffect que el original
   useEffect(() => {
     const fetchAssignments = async () => {
       try {
@@ -22,32 +22,32 @@ export function useAssignments(driverId?: number, dateFilter?: string) {
         if (dateFilter) params.append("date", dateFilter);
 
         const url = `/api/assignments?${params.toString()}`;
-        console.log("🔍 useAssignments: Fetching from:", url);
+        console.log("🔍 useAssignments: Obteniendo desde:", url);
 
         const response = await axios.get(url);
 
-        // ✅ FIX: Handle the new API response format
+        // ✅ FIX: Manejar el nuevo formato de respuesta de la API
         const data = response.data;
 
         if (data && data.assignments && Array.isArray(data.assignments)) {
-          // New format: {assignments: [...], pagination: {...}}
+          // Nuevo formato: {assignments: [...], pagination: {...}}
           setAssignments(data.assignments);
           console.log(
-            `✅ useAssignments: Loaded ${data.assignments.length} assignments from paginated response`
+            `✅ useAssignments: Cargadas ${data.assignments.length} asignaciones desde respuesta paginada`
           );
         } else if (Array.isArray(data)) {
-          // Fallback: direct array (in case the API still returns the old format sometimes)
+          // Respaldo: array directo (en caso de que la API aún retorne el formato antiguo a veces)
           setAssignments(data);
           console.log(
-            `✅ useAssignments: Loaded ${data.length} assignments from direct array`
+            `✅ useAssignments: Cargadas ${data.length} asignaciones desde array directo`
           );
         } else {
-          console.warn("⚠️ useAssignments: Unexpected response format:", data);
+          console.warn("⚠️ useAssignments: Formato de respuesta inesperado:", data);
           setAssignments([]);
         }
       } catch (err) {
-        console.error("❌ useAssignments: Error fetching assignments:", err);
-        setError("Error fetching assignments");
+        console.error("❌ useAssignments: Error al obtener asignaciones:", err);
+        setError("Error al obtener asignaciones");
         setAssignments([]);
       } finally {
         setLoading(false);
@@ -57,7 +57,7 @@ export function useAssignments(driverId?: number, dateFilter?: string) {
     fetchAssignments();
   }, [driverId, dateFilter]);
 
-  // ✅ Keep the same refreshAssignments function structure as the original
+  // ✅ Mantener la misma estructura de función refreshAssignments que el original
   const refreshAssignments = async () => {
     setLoading(true);
     try {
@@ -70,37 +70,37 @@ export function useAssignments(driverId?: number, dateFilter?: string) {
       const url = `/api/assignments?${params.toString()}`;
       const response = await axios.get(url);
 
-      // ✅ FIX: Handle the new API response format
+      // ✅ FIX: Manejar el nuevo formato de respuesta de la API
       const data = response.data;
 
       if (data && data.assignments && Array.isArray(data.assignments)) {
-        // New format: {assignments: [...], pagination: {...}}
+        // Nuevo formato: {assignments: [...], pagination: {...}}
         setAssignments(data.assignments);
         console.log(
-          `✅ useAssignments: Refreshed ${data.assignments.length} assignments from paginated response`
+          `✅ useAssignments: Actualizadas ${data.assignments.length} asignaciones desde respuesta paginada`
         );
       } else if (Array.isArray(data)) {
-        // Fallback: direct array (in case the API still returns the old format sometimes)
+        // Respaldo: array directo (en caso de que la API aún retorne el formato antiguo a veces)
         setAssignments(data);
         console.log(
-          `✅ useAssignments: Refreshed ${data.length} assignments from direct array`
+          `✅ useAssignments: Actualizadas ${data.length} asignaciones desde array directo`
         );
       } else {
         console.warn(
-          "⚠️ useAssignments: Unexpected response format on refresh:",
+          "⚠️ useAssignments: Formato de respuesta inesperado al actualizar:",
           data
         );
         setAssignments([]);
       }
     } catch (err) {
-      console.error("❌ useAssignments: Error refreshing assignments:", err);
-      setError("Error refreshing assignments");
+      console.error("❌ useAssignments: Error al actualizar asignaciones:", err);
+      setError("Error al actualizar asignaciones");
       setAssignments([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // ✅ Return the exact same interface as the original hook
+  // ✅ Retornar exactamente la misma interfaz que el hook original
   return { assignments, loading, error, setAssignments, refreshAssignments };
 }

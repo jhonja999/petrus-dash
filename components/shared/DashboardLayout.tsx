@@ -6,7 +6,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { Toaster } from "sonner" // Agregar import de Toaster
+import { Toaster } from "sonner"
 import {
   Menu,
   X,
@@ -35,7 +35,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname()
 
    const navigation = [
-    { name: "Dashboard", href: "/dashboard", icon: Home },
+    { name: "Panel", href: "/dashboard", icon: Home },
     { name: "Asignaciones", href: "/assignments", icon: MapPin },
     { name: "Camiones", href: "/trucks", icon: Truck },
     { name: "Clientes", href: "/customers", icon: Building2 },
@@ -47,20 +47,20 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     try {
       await logout()
     } catch (error) {
-      console.error("Error during logout:", error)
+      console.error("Error durante el cierre de sesión:", error)
     }
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Mobile menu button */}
+      {/* Botón de menú móvil */}
       <div className="lg:hidden fixed top-4 left-4 z-50">
         <Button variant="outline" size="sm" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
           {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
         </Button>
       </div>
 
-      {/* Sidebar */}
+      {/* Barra lateral */}
       <div
         className={cn(
           "fixed inset-y-0 left-0 z-40 bg-white border-r border-gray-200 transition-all duration-300 ease-in-out",
@@ -68,7 +68,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           mobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
         )}
       >
-        {/* Sidebar header */}
+        {/* Encabezado de la barra lateral */}
         <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
           {sidebarOpen && (
             <div className="flex items-center space-x-2">
@@ -81,7 +81,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </Button>
         </div>
 
-        {/* User info */}
+        {/* Información del usuario */}
         {user && (
           <div className="p-4 border-b border-gray-200">
             {sidebarOpen ? (
@@ -95,7 +95,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                   </p>
                   <div className="flex gap-1 mt-1">
                     <Badge variant="outline" className="text-xs">
-                      {user.role === "S_A" ? "Super Admin" : user.role}
+                      {user.role === "S_A" ? "Super Administrador" : user.role}
                     </Badge>
                     <Badge variant={user.state === "Activo" ? "default" : "secondary"} className="text-xs">
                       {user.state}
@@ -113,7 +113,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </div>
         )}
 
-        {/* Navigation */}
+        {/* Navegación */}
         <nav className="mt-4 px-2">
           {navigation.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
@@ -134,7 +134,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           })}
         </nav>
 
-        {/* Logout button */}
+        {/* Botón de cerrar sesión */}
         <div className="absolute bottom-4 left-2 right-2">
           <Button
             variant="ghost"
@@ -150,7 +150,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         </div>
       </div>
 
-      {/* Mobile overlay */}
+      {/* Overlay móvil */}
       {mobileMenuOpen && (
         <div
           className="fixed inset-0 z-30 bg-gray-600 bg-opacity-50 lg:hidden"
@@ -158,14 +158,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         />
       )}
 
-      {/* Main content */}
+      {/* Contenido principal */}
       <div className={cn("transition-all duration-300 ease-in-out", sidebarOpen ? "lg:ml-64" : "lg:ml-16")}>
         <main className="min-h-screen">
           <div className="p-4 lg:p-8 pt-16 lg:pt-8">{children}</div>
         </main>
       </div>
 
-      {/* Toaster de Sonner*/}
+      {/* Toaster de Sonner */}
       <Toaster 
         position="top-right"
         richColors

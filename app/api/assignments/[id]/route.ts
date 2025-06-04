@@ -5,17 +5,17 @@ import { cookies } from "next/headers"
 
 export async function GET(request: Request) {
   try {
-    // Verify authentication
+    // Verificar autenticación
     const cookieStore = await cookies()
     const token = cookieStore.get("token")?.value
 
     if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
     }
 
     const user = await verifyToken(token)
     if (!user) {
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 })
+      return NextResponse.json({ error: "Token inválido" }, { status: 401 })
     }
 
     const { searchParams } = new URL(request.url)
@@ -25,23 +25,23 @@ export async function GET(request: Request) {
     const limit = Number.parseInt(searchParams.get("limit") || "10")
 
     console.log(
-      `🔍 Assignments API: Query params - driverId: ${driverId}, date: ${dateFilter}, page: ${page}, limit: ${limit}`,
+      `🔍 API Asignaciones: Parámetros de consulta - driverId: ${driverId}, fecha: ${dateFilter}, página: ${page}, límite: ${limit}`,
     )
 
-    // Build where clause
+    // Construir cláusula where
     const where: any = {}
 
-    // Filter by driver ID if provided
+    // Filtrar por ID del conductor si se proporciona
     if (driverId) {
       const driverIdNum = Number.parseInt(driverId)
       if (isNaN(driverIdNum)) {
-        return NextResponse.json({ error: "Invalid driver ID format" }, { status: 400 })
+        return NextResponse.json({ error: "Formato de ID de conductor inválido" }, { status: 400 })
       }
       where.driverId = driverIdNum
-      console.log(`🎯 Assignments API: Filtering by driverId: ${driverIdNum}`)
+      console.log(`🎯 API Asignaciones: Filtrando por driverId: ${driverIdNum}`)
     }
 
-    // Filter by date if provided
+    // Filtrar por fecha si se proporciona
     if (dateFilter) {
       const startDate = new Date(dateFilter)
       const endDate = new Date(dateFilter)
@@ -51,19 +51,19 @@ export async function GET(request: Request) {
         gte: startDate,
         lt: endDate,
       }
-      console.log(`📅 Assignments API: Filtering by date range: ${startDate.toISOString()} to ${endDate.toISOString()}`)
+      console.log(`📅 API Asignaciones: Filtrando por rango de fechas: ${startDate.toISOString()} a ${endDate.toISOString()}`)
     }
 
-    // Check permissions for driver-specific requests
+    // Verificar permisos para solicitudes específicas de conductor
     if (driverId && !isAdmin(user)) {
       if (user.id !== Number.parseInt(driverId)) {
-        return NextResponse.json({ error: "Access denied. You can only view your own assignments." }, { status: 403 })
+        return NextResponse.json({ error: "Acceso denegado. Solo puedes ver tus propias asignaciones." }, { status: 403 })
       }
     }
 
-    console.log(`🔍 Assignments API: Final where clause:`, where)
+    console.log(`🔍 API Asignaciones: Cláusula where final:`, where)
 
-    // ✅ ALWAYS return consistent format regardless of query
+    // ✅ SIEMPRE devolver formato consistente independientemente de la consulta
     const skip = (page - 1) * limit
 
     const [assignments, total] = await Promise.all([
@@ -97,15 +97,15 @@ export async function GET(request: Request) {
           },
         },
         orderBy: { createdAt: "desc" },
-        // ✅ Apply pagination only if not filtering by specific driver
+        // ✅ Aplicar paginación solo si no se filtra por conductor específico
         ...(driverId ? {} : { skip, take: limit }),
       }),
       prisma.assignment.count({ where }),
     ])
 
-    console.log(`✅ Assignments API: Found ${assignments.length} assignments (total: ${total})`)
+    console.log(`✅ API Asignaciones: Se encontraron ${assignments.length} asignaciones (total: ${total})`)
 
-    // ✅ ALWAYS return the same format
+    // ✅ SIEMPRE devolver el mismo formato
     return NextResponse.json({
       assignments,
       pagination: {
@@ -116,11 +116,11 @@ export async function GET(request: Request) {
       },
     })
   } catch (error) {
-    console.error("❌ Assignments API: Error fetching assignments:", error)
+    console.error("❌ API Asignaciones: Error al obtener asignaciones:", error)
     return NextResponse.json(
       {
-        error: "Internal server error",
-        details: error instanceof Error ? error.message : "Unknown error",
+        error: "Error interno del servidor",
+        details: error instanceof Error ? error.message : "Error desconocido",
       },
       { status: 500 },
     )
@@ -129,55 +129,55 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    // Verify authentication
+    // Verificar autenticación
     const cookieStore = await cookies()
     const token = cookieStore.get("token")?.value
 
     if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
     }
 
     const user = await verifyToken(token)
     if (!user || !isAdmin(user)) {
-      return NextResponse.json({ error: "Access denied. Admin privileges required." }, { status: 403 })
+      return NextResponse.json({ error: "Acceso denegado. Se requieren privilegios de administrador." }, { status: 403 })
     }
 
     const body = await request.json()
     const { driverId, truckId, totalLoaded, fuelType, notes } = body
 
-    // Validation
+    // Validación
     if (!driverId || !truckId || !totalLoaded || !fuelType) {
       return NextResponse.json(
         {
-          error: "Missing required fields (driverId, truckId, totalLoaded, fuelType)",
+          error: "Faltan campos requeridos (driverId, truckId, totalLoaded, fuelType)",
         },
         { status: 400 },
       )
     }
 
     if (isNaN(totalLoaded) || totalLoaded <= 0) {
-      return NextResponse.json({ error: "Total loaded must be a positive number" }, { status: 400 })
+      return NextResponse.json({ error: "La carga total debe ser un número positivo" }, { status: 400 })
     }
 
-    // Verify driver exists and is active
+    // Verificar que el conductor existe y está activo
     const driver = await prisma.user.findUnique({
       where: { id: Number.parseInt(driverId) },
     })
 
     if (!driver || driver.role !== "Operador" || driver.state !== "Activo") {
-      return NextResponse.json({ error: "Driver not found or not active" }, { status: 404 })
+      return NextResponse.json({ error: "Conductor no encontrado o no activo" }, { status: 404 })
     }
 
-    // Verify truck exists and is available
+    // Verificar que el camión existe y está disponible
     const truck = await prisma.truck.findUnique({
       where: { id: Number.parseInt(truckId) },
     })
 
     if (!truck || truck.state !== "Activo") {
-      return NextResponse.json({ error: "Truck not found or not available" }, { status: 404 })
+      return NextResponse.json({ error: "Camión no encontrado o no disponible" }, { status: 404 })
     }
 
-    // Create assignment
+    // Crear asignación
     const newAssignment = await prisma.assignment.create({
       data: {
         driverId: Number.parseInt(driverId),
@@ -206,21 +206,21 @@ export async function POST(request: Request) {
       },
     })
 
-    // Update truck status to "Asignado"
+    // Actualizar estado del camión a "Asignado"
     await prisma.truck.update({
       where: { id: Number.parseInt(truckId) },
       data: { state: "Asignado" },
     })
 
-    console.log(`✅ Assignments API: Created assignment ${newAssignment.id} for driver ${driverId}`)
+    console.log(`✅ API Asignaciones: Asignación ${newAssignment.id} creada para el conductor ${driverId}`)
 
     return NextResponse.json(newAssignment, { status: 201 })
   } catch (error) {
-    console.error("❌ Assignments API: Error creating assignment:", error)
+    console.error("❌ API Asignaciones: Error al crear asignación:", error)
     return NextResponse.json(
       {
-        error: "Internal server error",
-        details: error instanceof Error ? error.message : "Unknown error",
+        error: "Error interno del servidor",
+        details: error instanceof Error ? error.message : "Error desconocido",
       },
       { status: 500 },
     )

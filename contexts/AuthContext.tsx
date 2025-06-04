@@ -33,7 +33,7 @@ interface AuthProviderProps {
   children: ReactNode
 }
 
-// Global counter for AuthProvider instances
+// Contador global para instancias de AuthProvider
 let authProviderInstanceCount = 0
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
@@ -48,29 +48,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   useEffect(() => {
     authProviderInstanceCount++
-    console.log(`🏗️ AuthProvider instance ${authProviderInstanceCount} created.`)
+    console.log(`🏗️ Instancia de AuthProvider ${authProviderInstanceCount} creada.`)
     if (authProviderInstanceCount > 1) {
       console.warn(
-        "⚠️ Multiple AuthProvider instances detected! This can lead to unexpected behavior and API call loops.",
+        "⚠️ ¡Múltiples instancias de AuthProvider detectadas! Esto puede causar comportamiento inesperado y bucles de llamadas a la API.",
       )
     }
 
-    console.log(`🔄 AuthContext: Checking auth status on mount for path: ${pathname}`)
+    console.log(`🔄 AuthContext: Verificando estado de autenticación al montar para la ruta: ${pathname}`)
     checkAuthStatus()
 
     return () => {
       authProviderInstanceCount--
-      console.log(`🗑️ AuthProvider instance destroyed. Remaining: ${authProviderInstanceCount}`)
+      console.log(`🗑️ Instancia de AuthProvider destruida. Restantes: ${authProviderInstanceCount}`)
     }
   }, [])
 
-  // **FIXED: Add effect to handle post-authentication routing**
+  // **CORREGIDO: Agregar efecto para manejar la navegación post-autenticación**
   useEffect(() => {
     if (!isLoading && user) {
-      // Only redirect if user is on unauthorized page but should have access
+      // Solo redirigir si el usuario está en la página no autorizada pero debería tener acceso
       if (pathname === "/unauthorized") {
         const redirectUrl = getRedirectUrl(user)
-        console.log(`🔄 AuthContext: User on unauthorized page, redirecting to ${redirectUrl}`)
+        console.log(`🔄 AuthContext: Usuario en página no autorizada, redirigiendo a ${redirectUrl}`)
         window.location.href = redirectUrl
       }
     }
@@ -78,35 +78,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const checkAuthStatus = async () => {
     try {
-      console.log(`🔍 AuthContext: Fetching user data`)
+      console.log(`🔍 AuthContext: Obteniendo datos del usuario`)
       const response = await axios.get("/api/auth/me")
       if (response.data.user) {
-        console.log(`✅ AuthContext: User authenticated - ${response.data.user.role}`)
+        console.log(`✅ AuthContext: Usuario autenticado - ${response.data.user.role}`)
         setUser(response.data.user)
 
-        // **FIXED: Check if user state is valid**
+        // **CORREGIDO: Verificar si el estado del usuario es válido**
         if (
           response.data.user.state === "Inactivo" ||
           response.data.user.state === "Suspendido" ||
           response.data.user.state === "Eliminado"
         ) {
-          console.log(`⚠️ AuthContext: User state invalid: ${response.data.user.state}`)
+          console.log(`⚠️ AuthContext: Estado de usuario inválido: ${response.data.user.state}`)
           setUser(null)
           window.location.href = "/unauthorized"
           return
         }
       } else {
-        console.log(`❌ AuthContext: No user data received`)
+        console.log(`❌ AuthContext: No se recibieron datos del usuario`)
         setUser(null)
       }
     } catch (error: any) {
-      // Handle 401 errors silently (unauthenticated user)
+      // Manejar errores 401 silenciosamente (usuario no autenticado)
       if (error.response?.status === 401) {
-        console.log(`🔓 AuthContext: User not authenticated (401)`)
+        console.log(`🔓 AuthContext: Usuario no autenticado (401)`)
         setUser(null)
       } else {
-        // Only log errors that are not 401
-        console.error("❌ AuthContext: Unexpected auth check error:", error.response?.status || error.message)
+        // Solo registrar errores que no sean 401
+        console.error("❌ AuthContext: Error inesperado en verificación de autenticación:", error.response?.status || error.message)
         setUser(null)
       }
     } finally {
@@ -115,13 +115,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }
 
   const refreshUser = async () => {
-    console.log(`🔄 AuthContext: Refreshing user data`)
+    console.log(`🔄 AuthContext: Actualizando datos del usuario`)
     await checkAuthStatus()
   }
 
   const login = async (email: string, password: string) => {
     try {
-      console.log(`🔐 AuthContext: Attempting login for ${email}`)
+      console.log(`🔐 AuthContext: Intentando iniciar sesión para ${email}`)
       const response = await axios.post("/api/auth/login", {
         email,
         password,
@@ -129,9 +129,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (response.data.success) {
         setUser(response.data.user)
-        console.log(`✅ AuthContext: Login successful for ${response.data.user.name}`)
+        console.log(`✅ AuthContext: Inicio de sesión exitoso para ${response.data.user.name}`)
 
-        // **FIXED: Check user state before redirecting**
+        // **CORREGIDO: Verificar estado del usuario antes de redirigir**
         if (
           response.data.user.state === "Inactivo" ||
           response.data.user.state === "Suspendido" ||
@@ -140,39 +140,39 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           throw new Error("Tu cuenta está inactiva o suspendida. Contacta al administrador.")
         }
 
-        // Redirect based on role only during explicit login
+        // Redirigir basándose en el rol solo durante el inicio de sesión explícito
         const redirectUrl = getRedirectUrl(response.data.user)
-        console.log(`🔄 AuthContext: Redirecting to ${redirectUrl}`)
-        window.location.href = redirectUrl // Use window.location instead of router
+        console.log(`🔄 AuthContext: Redirigiendo a ${redirectUrl}`)
+        window.location.href = redirectUrl // Usar window.location en lugar de router
       } else {
         throw new Error(response.data.error || "Error al iniciar sesión")
       }
     } catch (error: any) {
       const errorMessage = error.response?.data?.error || error.message || "Error al iniciar sesión"
-      console.error("❌ AuthContext: Login error:", errorMessage)
+      console.error("❌ AuthContext: Error de inicio de sesión:", errorMessage)
       throw new Error(errorMessage)
     }
   }
 
   const logout = async () => {
     try {
-      console.log(`🔓 AuthContext: Logging out`)
+      console.log(`🔓 AuthContext: Cerrando sesión`)
       await axios.post("/api/auth/logout")
-      console.log("✅ AuthContext: Logout successful")
+      console.log("✅ AuthContext: Cierre de sesión exitoso")
     } catch (error) {
-      console.log("⚠️ AuthContext: Logout warning, but clearing session locally")
+      console.log("⚠️ AuthContext: Advertencia al cerrar sesión, pero limpiando sesión localmente")
     } finally {
       setUser(null)
-      window.location.href = "/" // Use window.location instead of router
+      window.location.href = "/" // Usar window.location en lugar de router
     }
   }
 
-  // Helper function to determine redirect URL based on user role
+  // Función auxiliar para determinar la URL de redirección basada en el rol del usuario
   const getRedirectUrl = (user: User): string => {
     if (user.role === "Admin" || user.role === "S_A") {
       return "/dashboard"
     } else if (user.role === "Operador") {
-      return `/despacho/${user.id}` // Direct to driver panel
+      return `/despacho/${user.id}` // Directo al panel del conductor
     }
     return "/"
   }
@@ -195,7 +195,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 export const useAuth = () => {
   const context = useContext(AuthContext)
   if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider")
+    throw new Error("useAuth debe ser usado dentro de un AuthProvider")
   }
   return context
 }

@@ -25,7 +25,7 @@ export default function AssignmentsPage() {
   const { assignments: rawAssignments, loading: assignmentsLoading, setAssignments } = assignmentsData
   const { trucks } = trucksData
 
-  // ✅ FIX: Ensure assignments is always an array
+  // ✅ FIX: Asegurar que assignments siempre sea un array
   const assignments = Array.isArray(rawAssignments) ? rawAssignments : []
 
   useEffect(() => {
@@ -46,18 +46,18 @@ export default function AssignmentsPage() {
         const response = await axios.get("/api/users?role=conductor")
         setDrivers(response.data)
       } catch (error) {
-        console.error("Error fetching drivers:", error)
+        console.error("Error al obtener conductores:", error)
       }
     }
     fetchDrivers()
   }, [mounted])
 
   const handleAssignmentSuccess = () => {
-    // Refresh assignments
+    // Refrescar asignaciones
     window.location.reload()
   }
 
-  // If not mounted yet, render a minimal placeholder
+  // Si aún no se ha montado, renderizar un placeholder mínimo
   if (!mounted) {
     return (
         <div className="min-h-screen flex items-center justify-center">
@@ -80,7 +80,7 @@ export default function AssignmentsPage() {
   if (!isAdmin) {
     return (
         <div className="min-h-screen flex items-center justify-center">
-          <p className="text-sm text-gray-600">Unauthorized Access</p>
+          <p className="text-sm text-gray-600">Acceso No Autorizado</p>
         </div>
     )
   }

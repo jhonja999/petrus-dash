@@ -1,4 +1,4 @@
-// ✅ Add this export to prevent static generation
+// agrega este export para prevenir la generación estática
 export const dynamic = 'force-dynamic'
 
 import type React from "react"
@@ -12,31 +12,31 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode
 }) {
-  console.log(`🏗️ AdminLayout: Checking authentication`)
+  console.log(`🏗️ AdminLayout: Verificando autenticación`)
 
   const user = await getUserFromToken()
 
   // Check if user is authenticated
   if (!user) {
-    console.log(`❌ AdminLayout: No user found, redirecting to login`)
+    console.log(`❌ AdminLayout: No se encontró usuario, redirigiendo al login`)
     redirect("/login")
   }
 
-  console.log(`👤 AdminLayout: User found - Role: ${user.role}, State: ${user.state}`)
+  console.log(`👤 AdminLayout: Usuario encontrado - Rol: ${user.role}, Estado: ${user.state}`)
 
   // Check user state
   if (user.state !== "Activo" && user.state !== "Asignado") {
-    console.log(`⚠️ AdminLayout: Invalid user state: ${user.state}`)
+    console.log(`⚠️ AdminLayout: Estado de usuario inválido: ${user.state}`)
     redirect("/unauthorized")
   }
 
   // Check if user has admin access (Admin or S_A)
   if (user.role !== "Admin" && user.role !== "S_A") {
-    console.log(`❌ AdminLayout: Insufficient role: ${user.role}`)
+    console.log(`❌ AdminLayout: Rol insuficiente: ${user.role}`)
     redirect("/unauthorized")
   }
 
-  console.log(`✅ AdminLayout: Access granted`)
+  console.log(`✅ AdminLayout: Acceso concedido`)
     
   return (
     <>
