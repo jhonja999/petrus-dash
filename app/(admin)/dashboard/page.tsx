@@ -49,11 +49,20 @@ export default function AdminDashboard() {
         // Fetch trucks y assignments en paralelo
         const [trucksResponse, assignmentsResponse] = await Promise.all([
           axios.get("/api/trucks").catch(() => ({ data: [] })),
-          axios.get("/api/assignments").catch(() => ({ data: [] })),
+          axios.get("/api/assignments").catch(() => ({ data: { assignments: [] } })),
         ])
 
         setTrucks(trucksResponse.data || [])
-        setAssignments(assignmentsResponse.data || [])
+        
+        // ✅ FIX: Now always expect consistent format {assignments: [...], pagination: {...}}
+        const assignmentsData = assignmentsResponse.data
+        if (assignmentsData && assignmentsData.assignments) {
+          setAssignments(assignmentsData.assignments)
+        } else {
+          console.warn('⚠️ AdminDashboard: Unexpected assignments response format:', assignmentsData)
+          setAssignments([])
+        }
+        
         setError(null)
       } catch (err) {
         console.error("Error fetching data:", err)
@@ -95,7 +104,7 @@ export default function AdminDashboard() {
     )
   }
 
-  // ✅ Cálculos seguros con fallbacks
+  // ✅ Cálculos seguros con fallbacks - Now assignments is guaranteed to be an array
   const activeTrucks = trucks.filter((truck) => truck.state === "Activo").length
   const totalTrucks = trucks.length || 1 // Evitar división por 0
 

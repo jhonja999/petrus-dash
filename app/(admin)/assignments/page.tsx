@@ -22,8 +22,11 @@ export default function AssignmentsPage() {
   const router = useRouter()
 
   const { isAdmin, isLoading } = authData
-  const { assignments, loading: assignmentsLoading, setAssignments } = assignmentsData
+  const { assignments: rawAssignments, loading: assignmentsLoading, setAssignments } = assignmentsData
   const { trucks } = trucksData
+
+  // ✅ FIX: Ensure assignments is always an array
+  const assignments = Array.isArray(rawAssignments) ? rawAssignments : []
 
   useEffect(() => {
     setMounted(true)
@@ -103,43 +106,54 @@ export default function AssignmentsPage() {
           <div className="lg:col-span-2">
             <div className="bg-white rounded-lg shadow">
               <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">Asignaciones Recientes ({assignments.length})</h2>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Asignaciones Recientes ({assignments.length})
+                </h2>
               </div>
               <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Camión</TableHead>
-                      <TableHead>Conductor</TableHead>
-                      <TableHead>Combustible</TableHead>
-                      <TableHead>Carga Total</TableHead>
-                      <TableHead>Remanente</TableHead>
-                      <TableHead>Fecha</TableHead>
-                      <TableHead>Estado</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {assignments.slice(0, 10).map((assignment) => (
-                      <TableRow key={assignment.id}>
-                        <TableCell className="font-medium">{assignment.truck?.placa || "N/A"}</TableCell>
-                        <TableCell>
-                          {assignment.driver ? `${assignment.driver.name} ${assignment.driver.lastname}` : "N/A"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{assignment.fuelType}</Badge>
-                        </TableCell>
-                        <TableCell>{assignment.totalLoaded.toString()}</TableCell>
-                        <TableCell className="font-semibold text-blue-600">
-                          {assignment.totalRemaining.toString()}
-                        </TableCell>
-                        <TableCell>{new Date(assignment.createdAt).toLocaleDateString()}</TableCell>
-                        <TableCell>
-                          <Badge className="bg-green-100 text-green-800">Activa</Badge>
-                        </TableCell>
+                {assignments.length > 0 ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Camión</TableHead>
+                        <TableHead>Conductor</TableHead>
+                        <TableHead>Combustible</TableHead>
+                        <TableHead>Carga Total</TableHead>
+                        <TableHead>Remanente</TableHead>
+                        <TableHead>Fecha</TableHead>
+                        <TableHead>Estado</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {assignments.slice(0, 10).map((assignment) => (
+                        <TableRow key={assignment.id}>
+                          <TableCell className="font-medium">{assignment.truck?.placa || "N/A"}</TableCell>
+                          <TableCell>
+                            {assignment.driver ? `${assignment.driver.name} ${assignment.driver.lastname}` : "N/A"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{assignment.fuelType}</Badge>
+                          </TableCell>
+                          <TableCell>{assignment.totalLoaded.toString()}</TableCell>
+                          <TableCell className="font-semibold text-blue-600">
+                            {assignment.totalRemaining.toString()}
+                          </TableCell>
+                          <TableCell>{new Date(assignment.createdAt).toLocaleDateString()}</TableCell>
+                          <TableCell>
+                            <Badge className="bg-green-100 text-green-800">Activa</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <div className="p-8 text-center">
+                    <p className="text-gray-500 mb-4">No hay asignaciones registradas</p>
+                    <Button asChild variant="outline">
+                      <Link href="/assignments/new">Crear Primera Asignación</Link>
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
