@@ -93,9 +93,9 @@ export default function AssignmentsPage() {
             <h1 className="text-2xl font-bold text-gray-900">Gestión de Asignaciones</h1>
             <p className="text-sm text-gray-600">Asignar camiones y combustible a conductores</p>
           </div>
-          <Button asChild>
+          {/* <Button asChild>
             <Link href="/assignments/new">Nueva Asignación</Link>
-          </Button>
+          </Button> */}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
