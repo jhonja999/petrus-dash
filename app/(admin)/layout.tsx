@@ -1,3 +1,6 @@
+// ✅ Add this export to prevent static generation
+export const dynamic = 'force-dynamic'
+
 import type React from "react"
 import { redirect } from "next/navigation"
 import { getUserFromToken } from "@/lib/jwt"
@@ -34,8 +37,8 @@ export default async function AdminLayout({
   }
 
   console.log(`✅ AdminLayout: Access granted`)
-  
-   return (
+    
+  return (
     <>
       <DashboardLayout>{children}</DashboardLayout>
     </>
