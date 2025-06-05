@@ -1,26 +1,26 @@
-"use client"
+"use client";
 
-import { useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { useAuth } from "@/contexts/AuthContext"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Truck, Users, Settings } from "lucide-react"
-import Link from "next/link"
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/contexts/AuthContext";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Truck, Users, Settings } from "lucide-react";
+import Link from "next/link";
 
 export default function DespachoMainPage() {
-  const { user, isLoading, isAuthenticated, isAdmin, isOperator } = useAuth()
-  const router = useRouter()
+  const { user, isLoading, isAuthenticated, isAdmin, isOperator } = useAuth();
+  const router = useRouter();
 
   useEffect(() => {
     if (!isLoading && isAuthenticated && user) {
       // Auto-redirect operators to their specific panel
       if (isOperator && user.role === "Operador") {
-        console.log(`🔄 Auto-redirecting Operador ${user.id} to their panel`)
-        router.push(`/despacho/${user.id}`)
+        console.log(`🔄 Auto-redirecting Operador ${user.id} to their panel`);
+        router.push(`/despacho/${user.id}`);
       }
     }
-  }, [isLoading, isAuthenticated, user, isOperator, router])
+  }, [isLoading, isAuthenticated, user, isOperator, router]);
 
   if (isLoading) {
     return (
@@ -30,7 +30,7 @@ export default function DespachoMainPage() {
           <p className="mt-2 text-gray-600">Cargando...</p>
         </div>
       </div>
-    )
+    );
   }
 
   if (!isAuthenticated || !user) {
@@ -41,14 +41,16 @@ export default function DespachoMainPage() {
             <CardTitle>Acceso Requerido</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-gray-600 mb-4">Necesitas iniciar sesión para acceder al sistema de despacho.</p>
+            <p className="text-gray-600 mb-4">
+              Necesitas iniciar sesión para acceder al sistema de despacho.
+            </p>
             <Button asChild className="w-full">
               <Link href="/login">Iniciar Sesión</Link>
             </Button>
           </CardContent>
         </Card>
       </div>
-    )
+    );
   }
 
   return (
@@ -57,11 +59,21 @@ export default function DespachoMainPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-3">
-              <Truck className="h-8 w-8 text-blue-600" />
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">Sistema de Despacho</h1>
-                <p className="text-sm text-gray-600">Gestión de entregas y asignaciones</p>
-              </div>
+              <Link
+                href="/"
+                className="flex items-center space-x-3 hover:opacity-80 transition-opacity cursor-pointer"
+                title="Ir al inicio"
+              >
+                <Truck className="h-8 w-8 text-blue-600" />
+                <div>
+                  <h1 className="text-xl font-bold text-gray-900">
+                    Sistema de Despacho
+                  </h1>
+                  <p className="text-sm text-gray-600">
+                    Gestión de entregas y asignaciones
+                  </p>
+                </div>
+              </Link>
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-sm text-gray-600">
@@ -84,7 +96,9 @@ export default function DespachoMainPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-gray-600 mb-4">Accede a tus asignaciones y despachos del día</p>
+                <p className="text-gray-600 mb-4">
+                  Accede a tus asignaciones y despachos del día
+                </p>
                 <Button asChild className="w-full">
                   <Link href={`/despacho/${user.id}`}>Ir a Mi Panel</Link>
                 </Button>
@@ -102,7 +116,9 @@ export default function DespachoMainPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-gray-600 mb-4">Supervisa todos los conductores y asignaciones</p>
+                <p className="text-gray-600 mb-4">
+                  Supervisa todos los conductores y asignaciones
+                </p>
                 <Button asChild variant="outline" className="w-full">
                   <Link href="/despacho/admin">Panel Admin</Link>
                 </Button>
@@ -120,15 +136,32 @@ export default function DespachoMainPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-gray-600 mb-4">Accede al panel de cualquier conductor</p>
+                <p className="text-gray-600 mb-4">
+                  Accede al panel de cualquier conductor
+                </p>
                 <div className="space-y-2">
-                  <Button asChild variant="outline" size="sm" className="w-full">
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                  >
                     <Link href="/despacho/3">Conductor ID: 3</Link>
                   </Button>
-                  <Button asChild variant="outline" size="sm" className="w-full">
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                  >
                     <Link href="/despacho/4">Conductor ID: 4</Link>
                   </Button>
-                  <Button asChild variant="outline" size="sm" className="w-full">
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                  >
                     <Link href="/despacho/5">Conductor ID: 5</Link>
                   </Button>
                 </div>
@@ -170,5 +203,5 @@ export default function DespachoMainPage() {
         )}
       </main>
     </div>
-  )
+  );
 }

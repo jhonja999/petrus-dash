@@ -69,21 +69,48 @@ export default function DespachoAdminPage() {
         setError(null);
         console.log(`🔄 Admin: Obteniendo todos los datos de despacho`);
 
-        const [dischargesResponse, assignmentsResponse, driversResponse] =
-          await Promise.all([
-            axios.get("/api/discharges"),
-            axios.get("/api/assignments"),
-            axios.get("/api/users?role=Operador"),
-          ]);
+        // Hacer las llamadas por separado para identificar cuál está fallando
+        try {
+          const dischargesResponse = await axios.get("/api/discharges");
+          console.log(`✅ Admin: Despachos obtenidos`, dischargesResponse.data);
+          
+          // La API puede retornar un array directo o un objeto con discharges
+          const dischargesData = Array.isArray(dischargesResponse.data) 
+            ? dischargesResponse.data 
+            : dischargesResponse.data.discharges || [];
+            
+          setAllDischarges(dischargesData);
+        } catch (error) {
+          console.error("❌ Admin: Error al obtener despachos:", error);
+          setAllDischarges([]);
+        }
 
-        console.log(`✅ Admin: Datos recibidos`);
-        setAllDischarges(dischargesResponse.data);
-        setAllAssignments(
-          assignmentsResponse.data.assignments || assignmentsResponse.data
-        );
-        setDrivers(driversResponse.data);
+        try {
+          const assignmentsResponse = await axios.get("/api/assignments");
+          console.log(`✅ Admin: Asignaciones obtenidas`, assignmentsResponse.data);
+          
+          // La API puede retornar un array directo o un objeto con assignments
+          const assignmentsData = Array.isArray(assignmentsResponse.data)
+            ? assignmentsResponse.data
+            : assignmentsResponse.data.assignments || [];
+            
+          setAllAssignments(assignmentsData);
+        } catch (error) {
+          console.error("❌ Admin: Error al obtener asignaciones:", error);
+          setAllAssignments([]);
+        }
+
+        try {
+          const driversResponse = await axios.get("/api/users?role=Operador");
+          console.log(`✅ Admin: Conductores obtenidos`);
+          setDrivers(driversResponse.data);
+        } catch (error) {
+          console.error("❌ Admin: Error al obtener conductores:", error);
+          setDrivers([]);
+        }
+
       } catch (error) {
-        console.error("❌ Admin: Error al obtener datos:", error);
+        console.error("❌ Admin: Error general al obtener datos:", error);
         setError("Error al cargar los datos");
       } finally {
         setLoading(false);
@@ -145,7 +172,7 @@ export default function DespachoAdminPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
+      {/* Encabezado */}
       <header className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
@@ -245,7 +272,7 @@ export default function DespachoAdminPage() {
           </CardContent>
         </Card>
 
-        {/* Tabs */}
+        {/* Pestañas */}
         <Tabs defaultValue="despachos" className="space-y-6">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="despachos">
@@ -257,6 +284,13 @@ export default function DespachoAdminPage() {
           </TabsList>
 
           <TabsContent value="despachos">
+            {error && (
+              <Card className="mb-4 border-red-200 bg-red-50">
+                <CardContent className="pt-6">
+                  <p className="text-red-700">{error}</p>
+                </CardContent>
+              </Card>
+            )}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {filteredDischarges.map((discharge) => (
                 <Card
@@ -311,9 +345,23 @@ export default function DespachoAdminPage() {
                 </Card>
               ))}
             </div>
+            {filteredDischarges.length === 0 && (
+              <Card>
+                <CardContent className="pt-6 text-center">
+                  <p className="text-gray-500">No se encontraron despachos con los filtros aplicados</p>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="asignaciones">
+            {error && (
+              <Card className="mb-4 border-red-200 bg-red-50">
+                <CardContent className="pt-6">
+                  <p className="text-red-700">{error}</p>
+                </CardContent>
+              </Card>
+            )}
             <div className="space-y-4">
               {filteredAssignments.map((assignment) => (
                 <Card
@@ -370,7 +418,7 @@ export default function DespachoAdminPage() {
                         {new Date(assignment.createdAt).toLocaleDateString()}
                       </p>
                       <p>
-                        <strong>Descargas:</strong>{" "}
+                        <strong>Despachos:</strong>{" "}
                         {assignment.discharges?.length || 0}
                       </p>
                       {assignment.notes && (
@@ -383,6 +431,13 @@ export default function DespachoAdminPage() {
                 </Card>
               ))}
             </div>
+            {filteredAssignments.length === 0 && (
+              <Card>
+                <CardContent className="pt-6 text-center">
+                  <p className="text-gray-500">No se encontraron asignaciones con los filtros aplicados</p>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
         </Tabs>
       </div>
