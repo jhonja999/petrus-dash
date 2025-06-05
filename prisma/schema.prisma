@@ -80,6 +80,7 @@ model Customer {
   ruc         String      @unique
   address     String
   Discharge   Discharge[]
+  ClientAssignment ClientAssignment[]
 
   @@map("customers")
 }
@@ -92,12 +93,13 @@ model Assignment {
   totalRemaining Decimal
   fuelType       FuelType
   isCompleted    Boolean   @default(false)
-  completedAt    DateTime? // Nueva columna para fecha de finalización
+  completedAt    DateTime?
   notes          String?
 
-  truck      Truck       @relation(fields: [truckId], references: [id])
-  driver     User        @relation(fields: [driverId], references: [id])
-  discharges Discharge[]
+  truck            Truck              @relation(fields: [truckId], references: [id])
+  driver           User               @relation(fields: [driverId], references: [id])
+  discharges       Discharge[]
+  clientAssignments ClientAssignment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -133,4 +135,25 @@ model Discharge {
   @@index([customerId])
   @@index([status])
   @@index([createdAt])
+}
+
+model ClientAssignment {
+  id                Int       @id @default(autoincrement())
+  assignmentId      Int
+  customerId        Int
+  allocatedQuantity Decimal
+  deliveredQuantity Decimal   @default(0.00)
+  remainingQuantity Decimal
+  status            String    @default("pending") // pending, in_progress, completed
+  
+  assignment Assignment @relation(fields: [assignmentId], references: [id])
+  customer   Customer   @relation(fields: [customerId], references: [id])
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("client_assignments")
+  @@index([assignmentId])
+  @@index([customerId])
+  @@index([status])
 }

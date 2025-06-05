@@ -72,7 +72,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
           {sidebarOpen && (
             <div className="flex items-center space-x-2">
-              <Truck className="h-8 w-8 text-blue-600" />
+               <Link
+                              href="/"
+                              className="flex items-center space-x-3 hover:opacity-80 transition-opacity cursor-pointer"
+                              title="Ir al inicio"
+                            >
+              <Truck className="h-8 w-8 text-blue-600" /></Link>
               <span className="text-xl font-bold text-gray-900">Petrus</span>
             </div>
           )}

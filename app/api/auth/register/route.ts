@@ -6,33 +6,61 @@ import { cookies } from "next/headers"
 
 export async function POST(request: NextRequest) {
   try {
-    // Check if user is authenticated and has admin privileges
-    const cookieStore = await cookies()
-    const token = cookieStore.get("token")?.value
-
-    if (!token) {
-      return NextResponse.json(
-        {
-          error: "Acceso denegado. Debe estar autenticado para registrar usuarios.",
-          success: false,
-        },
-        { status: 401 },
-      )
-    }
-
-    const adminUser = await verifyToken(token)
-    if (!adminUser || (adminUser.role !== "Admin" && adminUser.role !== "S_A")) {
-      return NextResponse.json(
-        {
-          error: "Acceso denegado. Solo administradores pueden registrar usuarios.",
-          success: false,
-        },
-        { status: 403 },
-      )
-    }
-
     const body = await request.json()
     const { email, dni, name, lastname, role = "Operador", state = "Activo", password } = body
+
+    // Check if there are any users in the database
+    const userCount = await prisma.user.count()
+    const isFirstUser = userCount === 0
+
+    // If this is NOT the first user, check authentication and admin privileges
+    if (!isFirstUser) {
+      const cookieStore = await cookies()
+      const token = cookieStore.get("token")?.value
+
+      if (!token) {
+        return NextResponse.json(
+          {
+            error: "Acceso denegado. Debe estar autenticado para registrar usuarios.",
+            success: false,
+          },
+          { status: 401 },
+        )
+      }
+
+      const adminUser = await verifyToken(token)
+      if (!adminUser || (adminUser.role !== "Admin" && adminUser.role !== "S_A")) {
+        return NextResponse.json(
+          {
+            error: "Acceso denegado. Solo administradores pueden registrar usuarios.",
+            success: false,
+          },
+          { status: 403 },
+        )
+      }
+
+      // Only S_A can create other S_A users
+      if (role === "S_A" && adminUser.role !== "S_A") {
+        return NextResponse.json(
+          {
+            error: "Solo Super Administradores pueden crear otros Super Administradores",
+            success: false,
+          },
+          { status: 403 },
+        )
+      }
+    } else {
+      // For the first user, enforce Admin or S_A role
+      if (role !== "Admin" && role !== "S_A") {
+        return NextResponse.json(
+          {
+            error: "El primer usuario debe ser registrado como Admin o S_A",
+            success: false,
+          },
+          { status: 400 },
+        )
+      }
+    }
 
     // Manual validation of required fields
     if (!email?.trim() || !dni?.trim() || !name?.trim() || !lastname?.trim()) {
@@ -80,17 +108,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Only S_A can create other S_A users
-    if (role === "S_A" && adminUser.role !== "S_A") {
-      return NextResponse.json(
-        {
-          error: "Solo Super Administradores pueden crear otros Super Administradores",
-          success: false,
-        },
-        { status: 403 },
-      )
-    }
-
     // Validate state against Prisma enum values
     const validStates = ["Activo", "Inactivo", "Suspendido", "Eliminado", "Asignado"]
     if (!validStates.includes(state)) {
@@ -121,8 +138,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Use provided password or default to DNI
+    // For first user, use DNI as default password. For subsequent users, use provided password or default to DNI
     const passwordToHash = password?.trim() || dni.trim()
+
     const hashedPassword = await bcrypt.hash(passwordToHash, 12)
 
     // Create user
@@ -138,9 +156,15 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    const message = isFirstUser 
+      ? "Primer usuario administrador registrado exitosamente. La contraseña inicial será tu DNI. Podrás cambiarla después del primer login." 
+      : "Usuario registrado exitosamente"
+
     return NextResponse.json({
       success: true,
-      message: "Usuario registrado exitosamente",
+      message,
+      isFirstUser,
+      passwordInfo: isFirstUser ? "La contraseña inicial es tu DNI. Podrás cambiarla después del primer login." : undefined,
       user: {
         id: user.id,
         email: user.email,

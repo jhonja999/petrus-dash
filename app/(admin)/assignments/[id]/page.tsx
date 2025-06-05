@@ -11,7 +11,18 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { TruckIcon, MapPin, Fuel, Calendar, ArrowLeft, Plus, Trash2, AlertCircle, CheckCircle } from "lucide-react"
+import {
+  TruckIcon,
+  MapPin,
+  Fuel,
+  Calendar,
+  ArrowLeft,
+  Plus,
+  Trash2,
+  AlertCircle,
+  CheckCircle,
+  Users,
+} from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import Link from "next/link"
 import axios from "axios"
@@ -39,22 +50,22 @@ interface Customer {
 interface Dispatch {
   id: number
   customer: Customer
-  totalDischarged: number
+  totalDischarged: number | string // Can be Decimal from Prisma
   createdAt: string
 }
 
 interface Assignment {
   id: number
-  driver: Driver
-  truck: Truck
+  driver?: Driver
+  truck?: Truck
   fuelType: string
-  totalLoaded: number
-  totalRemaining: number
-  destination: string
+  totalLoaded: number | string // Can be Decimal from Prisma
+  totalRemaining: number | string // Can be Decimal from Prisma
+  destination?: string
   notes?: string
   isCompleted: boolean
   createdAt: string
-  dispatches: Dispatch[]
+  dispatches?: Dispatch[] // Make dispatches optional
 }
 
 export default function AssignmentDetailPage() {
@@ -77,7 +88,14 @@ export default function AssignmentDetailPage() {
   const fetchAssignment = async () => {
     try {
       const response = await axios.get(`/api/assignments/${assignmentId}`)
-      setAssignment(response.data)
+
+      // Ensure dispatches is always an array
+      const assignmentData = response.data
+      if (!assignmentData.dispatches) {
+        assignmentData.dispatches = []
+      }
+
+      setAssignment(assignmentData)
     } catch (error) {
       console.error("Error fetching assignment:", error)
       toast({
@@ -96,17 +114,22 @@ export default function AssignmentDetailPage() {
     if (!assignment) return
 
     const dischargedAmount = Number.parseFloat(newDispatch.totalDischarged)
-    if (dischargedAmount > assignment.totalRemaining) {
+    const currentRemaining =
+      typeof assignment.totalRemaining === "number"
+        ? assignment.totalRemaining
+        : Number.parseFloat(String(assignment.totalRemaining))
+
+    if (dischargedAmount > currentRemaining) {
       toast({
         title: "Error",
-        description: `No se puede descargar más de ${assignment.totalRemaining} galones disponibles.`,
+        description: `No se puede descargar más de ${currentRemaining.toFixed(2)} galones disponibles.`,
         variant: "destructive",
       })
       return
     }
 
     try {
-      await axios.post(`/api/despacho/${assignment.driver.id}`, {
+      await axios.post(`/api/despacho/${assignment.driver?.id}`, {
         assignmentId: assignment.id,
         customerId: Number.parseInt(newDispatch.customerId),
         totalDischarged: dischargedAmount,
@@ -173,6 +196,27 @@ export default function AssignmentDetailPage() {
     )
   }
 
+  // Ensure dispatches is always an array
+  const dispatches = assignment.dispatches || []
+
+  // Safe conversion of Decimal/string values to numbers
+  const totalLoaded =
+    typeof assignment.totalLoaded === "number"
+      ? assignment.totalLoaded
+      : Number.parseFloat(String(assignment.totalLoaded || 0))
+
+  const totalRemaining =
+    typeof assignment.totalRemaining === "number"
+      ? assignment.totalRemaining
+      : Number.parseFloat(String(assignment.totalRemaining || 0))
+
+  // Calculate total discharged amount
+  const totalDischarged = dispatches.reduce((sum, d) => {
+    const amount =
+      typeof d.totalDischarged === "number" ? d.totalDischarged : Number.parseFloat(String(d.totalDischarged || 0))
+    return sum + amount
+  }, 0)
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -188,11 +232,18 @@ export default function AssignmentDetailPage() {
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Asignación #{assignment.id}</h1>
               <p className="text-gray-600">
-                {assignment.truck.placa} - {assignment.driver.name} {assignment.driver.lastname}
+                {assignment.truck?.placa || "N/A"} -{" "}
+                {assignment.driver ? `${assignment.driver.name} ${assignment.driver.lastname}` : "N/A"}
               </p>
             </div>
           </div>
           <div className="flex items-center space-x-2">
+            <Button variant="outline" size="sm" asChild className="mr-2">
+              <Link href={`/assignments/${assignment.id}/clients`}>
+                <Users className="h-4 w-4 mr-2" />
+                Gestionar Clientes
+              </Link>
+            </Button>
             {assignment.isCompleted ? (
               <Badge className="bg-green-100 text-green-800">
                 <CheckCircle className="h-3 w-3 mr-1" />
@@ -221,11 +272,11 @@ export default function AssignmentDetailPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Label className="text-sm font-medium text-gray-500">Camión</Label>
-                    <p className="text-lg font-semibold">{assignment.truck.placa}</p>
+                    <p className="text-lg font-semibold">{assignment.truck?.placa || "N/A"}</p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-500">Estado del Camión</Label>
-                    <Badge variant="outline">{assignment.truck.state}</Badge>
+                    <Badge variant="outline">{assignment.truck?.state || "Desconocido"}</Badge>
                   </div>
                 </div>
 
@@ -233,9 +284,9 @@ export default function AssignmentDetailPage() {
                   <div>
                     <Label className="text-sm font-medium text-gray-500">Conductor</Label>
                     <p className="text-lg font-semibold">
-                      {assignment.driver.name} {assignment.driver.lastname}
+                      {assignment.driver ? `${assignment.driver.name} ${assignment.driver.lastname}` : "N/A"}
                     </p>
-                    <p className="text-sm text-gray-600">DNI: {assignment.driver.dni}</p>
+                    {assignment.driver?.dni && <p className="text-sm text-gray-600">DNI: {assignment.driver.dni}</p>}
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-500">Fecha de Creación</Label>
@@ -252,11 +303,11 @@ export default function AssignmentDetailPage() {
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-500">Total Cargado</Label>
-                    <p className="text-lg font-semibold text-blue-600">{assignment.totalLoaded.toFixed(2)} gal</p>
+                    <p className="text-lg font-semibold text-blue-600">{totalLoaded.toFixed(2)} gal</p>
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-500">Remanente</Label>
-                    <p className="text-lg font-semibold text-green-600">{assignment.totalRemaining.toFixed(2)} gal</p>
+                    <p className="text-lg font-semibold text-green-600">{totalRemaining.toFixed(2)} gal</p>
                   </div>
                 </div>
 
@@ -282,43 +333,50 @@ export default function AssignmentDetailPage() {
                 <CardDescription>Historial de entregas de combustible a clientes</CardDescription>
               </CardHeader>
               <CardContent>
-                {assignment.dispatches.length === 0 ? (
+                {dispatches.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     <MapPin className="h-12 w-12 mx-auto mb-4 text-gray-300" />
                     <p>No hay despachos registrados</p>
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {assignment.dispatches.map((dispatch) => (
-                      <div key={dispatch.id} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <h4 className="font-semibold">{dispatch.customer.companyname}</h4>
-                            <Badge variant="outline" className="text-xs">
-                              RUC: {dispatch.customer.ruc}
-                            </Badge>
+                    {dispatches.map((dispatch) => {
+                      const dischargedAmount =
+                        typeof dispatch.totalDischarged === "number"
+                          ? dispatch.totalDischarged
+                          : Number.parseFloat(String(dispatch.totalDischarged || 0))
+
+                      return (
+                        <div key={dispatch.id} className="flex items-center justify-between p-4 border rounded-lg">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h4 className="font-semibold">{dispatch.customer.companyname}</h4>
+                              <Badge variant="outline" className="text-xs">
+                                RUC: {dispatch.customer.ruc}
+                              </Badge>
+                            </div>
+                            <div className="flex items-center gap-4 text-sm text-gray-600">
+                              <span className="flex items-center gap-1">
+                                <Fuel className="h-3 w-3" />
+                                {dischargedAmount.toFixed(2)} gal
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                {formatDate(new Date(dispatch.createdAt))}
+                              </span>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-4 text-sm text-gray-600">
-                            <span className="flex items-center gap-1">
-                              <Fuel className="h-3 w-3" />
-                              {dispatch.totalDischarged.toFixed(2)} gal
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
-                              {formatDate(new Date(dispatch.createdAt))}
-                            </span>
-                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDeleteDispatch(dispatch.id)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDeleteDispatch(dispatch.id)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </CardContent>
@@ -360,15 +418,13 @@ export default function AssignmentDetailPage() {
                       type="number"
                       step="0.01"
                       min="0"
-                      max={assignment.totalRemaining}
+                      max={totalRemaining}
                       value={newDispatch.totalDischarged}
                       onChange={(e) => setNewDispatch((prev) => ({ ...prev, totalDischarged: e.target.value }))}
                       placeholder="0.00"
                       required
                     />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Máximo disponible: {assignment.totalRemaining.toFixed(2)} gal
-                    </p>
+                    <p className="text-xs text-gray-500 mt-1">Máximo disponible: {totalRemaining.toFixed(2)} gal</p>
                   </div>
 
                   <Button type="submit" className="w-full">
@@ -390,18 +446,30 @@ export default function AssignmentDetailPage() {
               <CardContent className="space-y-3">
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Total Cargado:</span>
-                  <span className="font-semibold">{assignment.totalLoaded.toFixed(2)} gal</span>
+                  <span className="font-semibold">{totalLoaded.toFixed(2)} gal</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Total Despachado:</span>
-                  <span className="font-semibold">
-                    {assignment.dispatches.reduce((sum, d) => sum + d.totalDischarged, 0).toFixed(2)} gal
-                  </span>
+                  <span className="font-semibold">{totalDischarged.toFixed(2)} gal</span>
                 </div>
                 <Separator />
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-600">Remanente:</span>
-                  <span className="font-semibold text-green-600">{assignment.totalRemaining.toFixed(2)} gal</span>
+                  <span className="font-semibold text-green-600">{totalRemaining.toFixed(2)} gal</span>
+                </div>
+
+                {/* Truck capacity info */}
+                <div className="mt-4 p-3 bg-blue-50 rounded-md">
+                  <p className="text-sm text-blue-700">
+                    <TruckIcon className="h-4 w-4 inline mr-1" />
+                    Capacidad máxima del camión: 3000 gal
+                  </p>
+                  {totalRemaining <= 0 && (
+                    <p className="text-sm text-orange-700 mt-1">
+                      <AlertCircle className="h-4 w-4 inline mr-1" />
+                      Camión vacío. Listo para recarga.
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>

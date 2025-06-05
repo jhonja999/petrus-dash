@@ -21,18 +21,37 @@ import {
   CheckCircle,
   AlertTriangle,
   Eye,
-  Plus,
   Target,
+  Loader2,
 } from "lucide-react"
 import Link from "next/link"
 import axios from "axios"
 import type { Discharge, Assignment, Customer } from "@/types/globals.d"
 import { useAuth } from "@/contexts/AuthContext"
+import { useToast } from "@/hooks/use-toast"
+
+// ✅ New interface for client assignments
+interface ClientAssignment {
+  id: number
+  customerId: number
+  allocatedQuantity: number | string
+  deliveredQuantity: number | string
+  remainingQuantity: number | string
+  status: string
+  customer: Customer
+  assignmentId: number
+}
+
+// ✅ Extended Assignment interface
+interface ExtendedAssignment extends Assignment {
+  clientAssignments?: ClientAssignment[]
+}
 
 export default function DespachoDriverPage() {
   const params = useParams()
   const router = useRouter()
   const { user, isLoading, isAuthenticated } = useAuth()
+  const { toast } = useToast()
   const driverId = params.driverId as string
 
   console.log(`🎯 DespachoDriverPage: Loading for URL with driverId: "${driverId}"`)
@@ -48,30 +67,21 @@ export default function DespachoDriverPage() {
 
   // Estados principales
   const [discharges, setDischarges] = useState<Discharge[]>([])
-  const [assignments, setAssignments] = useState<Assignment[]>([])
+  const [assignments, setAssignments] = useState<ExtendedAssignment[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   // Estados para el modal de finalizar descarga
-  const [selectedDischarge, setSelectedDischarge] = useState<Discharge | null>(null)
+  const [selectedClientAssignment, setSelectedClientAssignment] = useState<ClientAssignment | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [marcadorInicial, setMarcadorInicial] = useState("")
   const [marcadorFinal, setMarcadorFinal] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
 
-  // Estados para crear nuevo despacho
-  const [showNewDischargeModal, setShowNewDischargeModal] = useState(false)
-  const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null)
-  const [newDischargeData, setNewDischargeData] = useState({
-    customerId: "",
-    totalDischarged: "",
-    marcadorInicial: "",
-  })
-
   // Estados para vista de asignación detallada
   const [showAssignmentDetail, setShowAssignmentDetail] = useState(false)
-  const [detailAssignment, setDetailAssignment] = useState<Assignment | null>(null)
+  const [detailAssignment, setDetailAssignment] = useState<ExtendedAssignment | null>(null)
 
   useEffect(() => {
     const fetchData = async () => {
@@ -138,42 +148,23 @@ export default function DespachoDriverPage() {
     }
   }
 
-  const openModal = (discharge: Discharge) => {
-    setSelectedDischarge(discharge)
+  // ✅ New function to open modal for client assignment
+  const openClientAssignmentModal = (clientAssignment: ClientAssignment, assignment: ExtendedAssignment) => {
+    setSelectedClientAssignment(clientAssignment)
     setIsModalOpen(true)
-    setMarcadorInicial(discharge.marcadorInicial?.toString() || "")
-    setMarcadorFinal(discharge.marcadorFinal?.toString() || "")
+    // Pre-fill with assignment's remaining fuel
+    setMarcadorInicial(assignment.totalRemaining.toString())
+    setMarcadorFinal("")
   }
 
   const closeModal = () => {
     setIsModalOpen(false)
-    setSelectedDischarge(null)
+    setSelectedClientAssignment(null)
     setMarcadorInicial("")
     setMarcadorFinal("")
   }
 
-  const openNewDischargeModal = (assignment: Assignment) => {
-    setSelectedAssignment(assignment)
-    setShowNewDischargeModal(true)
-    // Pre-llenar el marcador inicial con el combustible actual del camión
-    setNewDischargeData({
-      customerId: "",
-      totalDischarged: "",
-      marcadorInicial: assignment.totalRemaining.toString(),
-    })
-  }
-
-  const closeNewDischargeModal = () => {
-    setShowNewDischargeModal(false)
-    setSelectedAssignment(null)
-    setNewDischargeData({
-      customerId: "",
-      totalDischarged: "",
-      marcadorInicial: "",
-    })
-  }
-
-  const openAssignmentDetail = (assignment: Assignment) => {
+  const openAssignmentDetail = (assignment: ExtendedAssignment) => {
     setDetailAssignment(assignment)
     setShowAssignmentDetail(true)
   }
@@ -183,123 +174,151 @@ export default function DespachoDriverPage() {
     setDetailAssignment(null)
   }
 
-  const calculateDischargedAmount = () => {
+  const calculateDeliveredAmount = () => {
     const inicial = Number.parseFloat(marcadorInicial) || 0
     const final = Number.parseFloat(marcadorFinal) || 0
     return inicial - final
   }
 
-  const calculateNewDischargeAmount = () => {
-    const inicial = Number.parseFloat(newDischargeData.marcadorInicial) || 0
-    const toDischarge = Number.parseFloat(newDischargeData.totalDischarged) || 0
-    return inicial - toDischarge
-  }
-
-  const createNewDischarge = async () => {
-    if (
-      !selectedAssignment ||
-      !newDischargeData.customerId ||
-      !newDischargeData.totalDischarged ||
-      !newDischargeData.marcadorInicial
-    ) {
-      alert("Por favor complete todos los campos")
+  // ✅ New function to complete client assignment
+  const completeClientAssignment = async () => {
+    if (!selectedClientAssignment || !marcadorInicial || !marcadorFinal) {
+      toast({
+        title: "❌ Error",
+        description: "Por favor complete todos los campos",
+        variant: "destructive",
+      })
       return
     }
 
-    const totalDischarged = Number.parseFloat(newDischargeData.totalDischarged)
-    const marcadorInicial = Number.parseFloat(newDischargeData.marcadorInicial)
+    const deliveredAmount = calculateDeliveredAmount()
+    const expectedAmount = Number.parseFloat(selectedClientAssignment.allocatedQuantity.toString())
 
-    // Validar que no exceda el combustible disponible
-    if (totalDischarged > Number(selectedAssignment.totalRemaining)) {
-      alert(`No hay suficiente combustible. Disponible: ${selectedAssignment.totalRemaining} gal`)
+    if (deliveredAmount <= 0) {
+      toast({
+        title: "❌ Error",
+        description: "La cantidad entregada debe ser mayor a 0",
+        variant: "destructive",
+      })
       return
-    }
-
-    // Validar que el marcador inicial sea correcto
-    if (marcadorInicial !== Number(selectedAssignment.totalRemaining)) {
-      const confirm = window.confirm(
-        `El marcador inicial (${marcadorInicial}) no coincide con el combustible disponible (${selectedAssignment.totalRemaining}). ¿Desea continuar?`,
-      )
-      if (!confirm) return
     }
 
     setIsProcessing(true)
 
+    toast({
+      title: "⏳ Procesando...",
+      description: "Finalizando la entrega del cliente",
+    })
+
     try {
-      const response = await axios.post(`/api/despacho/${driverId}`, {
-        assignmentId: selectedAssignment.id,
-        customerId: Number.parseInt(newDischargeData.customerId),
-        totalDischarged: totalDischarged,
-        marcadorInicial: marcadorInicial,
-      })
-
-      if (response.status === 201) {
-        alert("Despacho creado exitosamente")
-        await refreshData()
-        closeNewDischargeModal()
-      }
-    } catch (error) {
-      console.error("Error creating discharge:", error)
-      if (axios.isAxiosError(error)) {
-        alert(error.response?.data?.error || "Error al crear el despacho")
-      } else {
-        alert("Error de conexión al crear el despacho")
-      }
-    } finally {
-      setIsProcessing(false)
-    }
-  }
-
-  const finalizeDischarge = async () => {
-    if (!selectedDischarge || !marcadorInicial || !marcadorFinal) {
-      alert("Por favor complete todos los campos")
-      return
-    }
-
-    const cantidadDepositada = calculateDischargedAmount()
-    const cantidadEsperada = Number.parseFloat(selectedDischarge.totalDischarged.toString())
-    const tolerancia = cantidadEsperada * 0.02
-    const esCorrecto = Math.abs(cantidadDepositada - cantidadEsperada) <= tolerancia
-
-    if (!esCorrecto) {
-      const diferencia = Math.abs(cantidadDepositada - cantidadEsperada).toFixed(2)
-      const confirmacion = confirm(
-        `La cantidad depositada (${cantidadDepositada.toFixed(2)}) difiere de la esperada (${cantidadEsperada}) por ${diferencia} unidades. ¿Desea continuar?`,
+      // Update the client assignment
+      const response = await axios.put(
+        `/api/assignments/${selectedClientAssignment.assignmentId}/clients/${selectedClientAssignment.id}`,
+        {
+          status: "completed",
+          deliveredQuantity: deliveredAmount,
+          allocatedQuantity: selectedClientAssignment.allocatedQuantity,
+        }
       )
-      if (!confirmacion) return
-    }
 
-    setIsProcessing(true)
+      // Create a discharge record for tracking
+      try {
+        await axios.post(`/api/despacho/${driverId}`, {
+          assignmentId: selectedClientAssignment.assignmentId,
+          customerId: selectedClientAssignment.customerId,
+          totalDischarged: deliveredAmount,
+          marcadorInicial: Number.parseFloat(marcadorInicial),
+          marcadorFinal: Number.parseFloat(marcadorFinal),
+          status: "finalizado",
+          cantidadReal: deliveredAmount,
+        })
+      } catch (dischargeError) {
+        console.log("Note: Could not create discharge record, but client assignment updated successfully")
+      }
 
-    try {
-      const response = await axios.put(`/api/discharges/${selectedDischarge.id}`, {
-        status: "finalizado",
-        marcadorInicial: Number.parseFloat(marcadorInicial),
-        marcadorFinal: Number.parseFloat(marcadorFinal),
-        cantidadReal: cantidadDepositada,
+      toast({
+        title: "✅ Entrega completada",
+        description: `${selectedClientAssignment.customer.companyname} - ${deliveredAmount.toFixed(2)} galones entregados`,
       })
 
-      setDischarges((prev) => prev.map((d) => (d.id === selectedDischarge.id ? response.data : d)))
-
-      // Actualizar la asignación correspondiente
+      // Refresh data
       await refreshData()
-
-      alert("Despacho finalizado correctamente")
       closeModal()
+
     } catch (error) {
-      console.error("Error finalizing discharge:", error)
-      alert("Error al finalizar el despacho")
+      console.error("Error completing client assignment:", error)
+      
+      let errorMessage = "Error al completar la entrega"
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 400) {
+          errorMessage = error.response.data?.error || "Datos inválidos"
+        } else if (error.response?.status === 404) {
+          errorMessage = "Asignación no encontrada"
+        } else if (error.response?.status === 403) {
+          errorMessage = "No tienes permisos para completar esta entrega"
+        }
+      }
+      
+      toast({
+        title: "❌ Error al completar entrega",
+        description: errorMessage,
+        variant: "destructive",
+      })
     } finally {
       setIsProcessing(false)
     }
   }
+
+  // ✅ Get all pending client assignments across all assignments
+  const getAllPendingDeliveries = () => {
+    const pendingDeliveries: (ClientAssignment & { assignment: ExtendedAssignment })[] = []
+    
+    assignments.forEach(assignment => {
+      if (assignment.clientAssignments) {
+        assignment.clientAssignments.forEach(clientAssignment => {
+          if (clientAssignment.status === "pending") {
+            pendingDeliveries.push({
+              ...clientAssignment,
+              assignment: assignment
+            })
+          }
+        })
+      }
+    })
+    
+    return pendingDeliveries
+  }
+
+  // ✅ Get all completed deliveries
+  const getAllCompletedDeliveries = () => {
+    const completedDeliveries: (ClientAssignment & { assignment: ExtendedAssignment })[] = []
+    
+    assignments.forEach(assignment => {
+      if (assignment.clientAssignments) {
+        assignment.clientAssignments.forEach(clientAssignment => {
+          if (clientAssignment.status === "completed") {
+            completedDeliveries.push({
+              ...clientAssignment,
+              assignment: assignment
+            })
+          }
+        })
+      }
+    })
+    
+    return completedDeliveries
+  }
+
+  const pendingDeliveries = getAllPendingDeliveries()
+  const completedDeliveries = getAllCompletedDeliveries()
+  const totalDeliveries = pendingDeliveries.length + completedDeliveries.length
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-2 text-gray-600">Cargando datos del despacho...</p>
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
+          <p className="text-gray-600">Cargando datos del despacho...</p>
         </div>
       </div>
     )
@@ -351,21 +370,29 @@ export default function DespachoDriverPage() {
                   </p>
                 </div>
               </div>
-              <Button
-                onClick={() => openNewDischargeModal(detailAssignment)}
-                className="bg-green-600 hover:bg-green-700"
-                disabled={Number(detailAssignment.totalRemaining) <= 0}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Nuevo Despacho
-              </Button>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Target className="h-5 w-5 text-blue-600" />
+                    Información de Entrega
+                  </CardTitle>
+                  <CardDescription>Entregas asignadas por el administrador</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3 text-sm text-gray-600">
+                    <p>• Las entregas son asignadas por el administrador</p>
+                    <p>• Tu función es realizar y finalizar las entregas</p>
+                    <p>• Registra los marcadores inicial y final correctamente</p>
+                    <p>• Contacta al administrador para nuevas asignaciones</p>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           </div>
         </header>
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="grid gap-6 lg:grid-cols-2">
-            {/* Assignment Info */}
             <Card>
               <CardHeader>
                 <CardTitle>Información de la Asignación</CardTitle>
@@ -415,42 +442,57 @@ export default function DespachoDriverPage() {
               </CardContent>
             </Card>
 
-            {/* Discharges for this assignment */}
             <Card>
               <CardHeader>
-                <CardTitle>Descargas de esta Asignación</CardTitle>
+                <CardTitle>Entregas Asignadas</CardTitle>
+                <CardDescription>
+                  {detailAssignment.clientAssignments?.length || 0} entregas programadas
+                </CardDescription>
               </CardHeader>
               <CardContent>
-                {detailAssignment.discharges && detailAssignment.discharges.length > 0 ? (
+                {detailAssignment.clientAssignments && detailAssignment.clientAssignments.length > 0 ? (
                   <div className="space-y-3">
-                    {detailAssignment.discharges.map((discharge) => (
-                      <div key={discharge.id} className="border rounded-lg p-3">
+                    {detailAssignment.clientAssignments.map((clientAssignment) => (
+                      <div key={clientAssignment.id} className="border rounded-lg p-3">
                         <div className="flex justify-between items-start mb-2">
-                          <h4 className="font-medium">{discharge.customer?.companyname}</h4>
+                          <h4 className="font-medium">{clientAssignment.customer?.companyname}</h4>
                           <Badge
                             className={
-                              discharge.status === "finalizado"
+                              clientAssignment.status === "completed"
                                 ? "bg-green-100 text-green-700"
                                 : "bg-yellow-100 text-yellow-700"
                             }
                           >
-                            {discharge.status === "finalizado" ? "Completado" : "Pendiente"}
+                            {clientAssignment.status === "completed" ? "Completado" : "Pendiente"}
                           </Badge>
                         </div>
-                        <p className="text-sm text-gray-600">Cantidad: {discharge.totalDischarged.toString()} gal</p>
-                        {discharge.status === "finalizado" && (
-                          <div className="text-xs text-gray-500 mt-1">
-                            <p>Marcador inicial: {discharge.marcadorInicial?.toString() || "N/A"}</p>
-                            <p>Marcador final: {discharge.marcadorFinal?.toString() || "N/A"}</p>
-                            <p>Cantidad real: {discharge.cantidadReal?.toString() || "N/A"} gal</p>
-                          </div>
+                        <p className="text-sm text-gray-600">
+                          Cantidad asignada: {Number(clientAssignment.allocatedQuantity).toFixed(2)} gal
+                        </p>
+                        {clientAssignment.status === "completed" && (
+                          <p className="text-sm text-green-600">
+                            Cantidad entregada: {Number(clientAssignment.deliveredQuantity).toFixed(2)} gal
+                          </p>
                         )}
-                        <p className="text-xs text-gray-500">{new Date(discharge.createdAt).toLocaleString()}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          RUC: {clientAssignment.customer?.ruc} • Dirección: {clientAssignment.customer?.address}
+                        </p>
+                        
+                        {clientAssignment.status === "pending" && (
+                          <Button
+                            onClick={() => openClientAssignmentModal(clientAssignment, detailAssignment)}
+                            size="sm"
+                            className="w-full mt-2 bg-green-600 hover:bg-green-700"
+                          >
+                            <Target className="h-4 w-4 mr-2" />
+                            Completar Entrega
+                          </Button>
+                        )}
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-gray-500 text-center py-4">No hay descargas registradas para esta asignación</p>
+                  <p className="text-gray-500 text-center py-4">No hay entregas asignadas para esta asignación</p>
                 )}
               </CardContent>
             </Card>
@@ -462,18 +504,23 @@ export default function DespachoDriverPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
       <header className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-3">              
               <Button asChild variant="outline" size="sm">
                 <Link href="/despacho">
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Volver
                 </Link>
               </Button>
+              <Link
+                href="/"
+                className="flex items-center space-x-3 hover:opacity-80 transition-opacity cursor-pointer"
+                title="Ir al inicio"
+              >
               <Truck className="h-8 w-8 text-blue-600" />
+              </Link>
               <div>
                 <h1 className="text-xl font-bold text-gray-900">Panel del Conductor</h1>
                 <p className="text-sm text-gray-600">
@@ -491,13 +538,12 @@ export default function DespachoDriverPage() {
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Tabs defaultValue="despachos" className="space-y-6">
+        <Tabs defaultValue="entregas" className="space-y-6">
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="despachos" className="flex items-center gap-2">
+            <TabsTrigger value="entregas" className="flex items-center gap-2">
               <MapPin className="h-4 w-4" />
-              Despachos ({discharges.length})
+              Entregas ({totalDeliveries})
             </TabsTrigger>
             <TabsTrigger value="asignaciones" className="flex items-center gap-2">
               <FileText className="h-4 w-4" />
@@ -505,102 +551,128 @@ export default function DespachoDriverPage() {
             </TabsTrigger>
           </TabsList>
 
-          {/* Tab: Despachos */}
-          <TabsContent value="despachos" className="space-y-6">
+          {/* ✅ New Entregas Tab */}
+          <TabsContent value="entregas" className="space-y-6">
             <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-gray-900">Despachos del Día</h2>
+              <h2 className="text-2xl font-bold text-gray-900">Entregas del Día</h2>
               <Badge variant="outline" className="bg-blue-50 text-blue-700">
-                {discharges.filter((d) => d.status === "finalizado").length} de {discharges.length} completados
+                {completedDeliveries.length} de {totalDeliveries} completadas
               </Badge>
             </div>
 
-            {discharges.length === 0 ? (
+            {totalDeliveries === 0 ? (
               <Card className="text-center">
                 <CardContent className="pt-6">
                   <MapPin className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No hay despachos para hoy</h3>
-                  <p className="text-gray-600">Los despachos aparecerán cuando tengas asignaciones activas</p>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No hay entregas para hoy</h3>
+                  <p className="text-gray-600">Las entregas aparecerán cuando el administrador te asigne clientes específicos</p>
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {discharges.map((discharge) => (
-                  <Card
-                    key={discharge.id}
-                    className="hover:shadow-lg transition-shadow duration-300 border-l-4 border-l-blue-500"
-                  >
-                    <CardHeader className="pb-3">
-                      <div className="flex justify-between items-start">
-                        <CardTitle className="text-lg">
-                          {discharge.customer?.companyname || "Cliente Desconocido"}
-                        </CardTitle>
-                        <Badge
-                          className={
-                            discharge.status === "finalizado"
-                              ? "bg-green-100 text-green-700"
-                              : "bg-yellow-100 text-yellow-700"
-                          }
+              <div className="space-y-6">
+                {/* Pending Deliveries */}
+                {pendingDeliveries.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                      <Clock className="h-5 w-5 text-yellow-500" />
+                      Entregas Pendientes ({pendingDeliveries.length})
+                    </h3>
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      {pendingDeliveries.map((delivery) => (
+                        <Card
+                          key={`${delivery.assignmentId}-${delivery.id}`}
+                          className="hover:shadow-lg transition-shadow duration-300 border-l-4 border-l-yellow-500"
                         >
-                          {discharge.status === "finalizado" ? (
-                            <>
-                              <CheckCircle className="h-3 w-3 mr-1" />
-                              Completado
-                            </>
-                          ) : (
-                            <>
-                              <Clock className="h-3 w-3 mr-1" />
-                              Pendiente
-                            </>
-                          )}
-                        </Badge>
-                      </div>
-                      <CardDescription>RUC: {discharge.customer?.ruc || "N/A"}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="flex items-center space-x-2">
-                        <Fuel className="h-4 w-4 text-blue-600" />
-                        <span className="text-sm font-medium">Total a descargar:</span>
-                        <span className="text-lg font-bold text-green-600">
-                          {discharge.totalDischarged.toString()} gal
-                        </span>
-                      </div>
+                          <CardHeader className="pb-3">
+                            <div className="flex justify-between items-start">
+                              <CardTitle className="text-lg">
+                                {delivery.customer?.companyname || "Cliente Desconocido"}
+                              </CardTitle>
+                              <Badge className="bg-yellow-100 text-yellow-700">
+                                <Clock className="h-3 w-3 mr-1" />
+                                Pendiente
+                              </Badge>
+                            </div>
+                            <CardDescription>
+                              Asignación #{delivery.assignment.id} • {delivery.assignment.truck.placa}
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent className="space-y-4">
+                            <div className="flex items-center space-x-2">
+                              <Fuel className="h-4 w-4 text-blue-600" />
+                              <span className="text-sm font-medium">Cantidad asignada:</span>
+                              <span className="text-lg font-bold text-blue-600">
+                                {Number(delivery.allocatedQuantity).toFixed(2)} gal
+                              </span>
+                            </div>
 
-                      {discharge.marcadorInicial && (
-                        <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
-                          <p>Marcador inicial: {discharge.marcadorInicial.toString()} gal</p>
-                          {discharge.marcadorFinal && (
-                            <>
-                              <p>Marcador final: {discharge.marcadorFinal.toString()} gal</p>
-                              <p className="font-medium text-blue-600">
-                                Cantidad real: {discharge.cantidadReal?.toString() || "N/A"} gal
+                            <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
+                              <p>RUC: {delivery.customer?.ruc || "N/A"}</p>
+                              <p>Dirección: {delivery.customer?.address || "N/A"}</p>
+                            </div>
+
+                            <Button
+                              onClick={() => openClientAssignmentModal(delivery, delivery.assignment)}
+                              className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+                            >
+                              <Target className="h-4 w-4 mr-2" />
+                              Completar Entrega
+                            </Button>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Completed Deliveries */}
+                {completedDeliveries.length > 0 && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                      <CheckCircle className="h-5 w-5 text-green-500" />
+                      Entregas Completadas ({completedDeliveries.length})
+                    </h3>
+                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      {completedDeliveries.map((delivery) => (
+                        <Card
+                          key={`${delivery.assignmentId}-${delivery.id}`}
+                          className="hover:shadow-lg transition-shadow duration-300 border-l-4 border-l-green-500"
+                        >
+                          <CardHeader className="pb-3">
+                            <div className="flex justify-between items-start">
+                              <CardTitle className="text-lg">
+                                {delivery.customer?.companyname || "Cliente Desconocido"}
+                              </CardTitle>
+                              <Badge className="bg-green-100 text-green-700">
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                                Completado
+                              </Badge>
+                            </div>
+                            <CardDescription>
+                              Asignación #{delivery.assignment.id} • {delivery.assignment.truck.placa}
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent className="space-y-2">
+                            <div className="text-sm text-gray-600">
+                              <p><strong>Cantidad asignada:</strong> {Number(delivery.allocatedQuantity).toFixed(2)} gal</p>
+                              <p className="text-green-600">
+                                <strong>Cantidad entregada:</strong> {Number(delivery.deliveredQuantity).toFixed(2)} gal
                               </p>
-                            </>
-                          )}
-                        </div>
-                      )}
-
-                      <div className="text-xs text-gray-500">
-                        <Clock className="h-3 w-3 inline mr-1" />
-                        {new Date(discharge.createdAt).toLocaleString()}
-                      </div>
-
-                      {discharge.status !== "finalizado" && (
-                        <Button
-                          onClick={() => openModal(discharge)}
-                          className="w-full bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700"
-                        >
-                          <Target className="h-4 w-4 mr-2" />
-                          Finalizar Despacho
-                        </Button>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
+                            </div>
+                            
+                            <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
+                              <p>RUC: {delivery.customer?.ruc || "N/A"}</p>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </TabsContent>
 
-          {/* Tab: Asignaciones */}
           <TabsContent value="asignaciones" className="space-y-6">
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold text-gray-900">Asignaciones del Día</h2>
@@ -639,6 +711,11 @@ export default function DespachoDriverPage() {
                           <Badge variant="outline" className="bg-gray-50">
                             {assignment.fuelType}
                           </Badge>
+                          {assignment.clientAssignments && assignment.clientAssignments.length > 0 && (
+                            <Badge variant="secondary">
+                              {assignment.clientAssignments.length} entregas
+                            </Badge>
+                          )}
                         </div>
                       </div>
                       <CardDescription>Creada: {new Date(assignment.createdAt).toLocaleDateString()}</CardDescription>
@@ -663,7 +740,6 @@ export default function DespachoDriverPage() {
                         </div>
                       </div>
 
-                      {/* Progress Bar */}
                       <div>
                         <div className="flex justify-between text-sm text-gray-600 mb-1">
                           <span>Progreso</span>
@@ -695,15 +771,12 @@ export default function DespachoDriverPage() {
                           <Eye className="h-4 w-4 mr-2" />
                           Ver Detalles
                         </Button>
-                        {!assignment.isCompleted && Number(assignment.totalRemaining) > 0 && (
-                          <Button
-                            onClick={() => openNewDischargeModal(assignment)}
-                            size="sm"
-                            className="flex-1 bg-green-600 hover:bg-green-700"
-                          >
-                            <Plus className="h-4 w-4 mr-2" />
-                            Nuevo Despacho
-                          </Button>
+                        {assignment.clientAssignments && assignment.clientAssignments.length > 0 ? (
+                          <Badge className="bg-blue-100 text-blue-700">
+                            {assignment.clientAssignments.filter(ca => ca.status === "pending").length} pendientes
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-gray-100 text-gray-700">Sin entregas asignadas</Badge>
                         )}
                       </div>
 
@@ -723,185 +796,89 @@ export default function DespachoDriverPage() {
         </Tabs>
       </main>
 
-      {/* Modal para crear nuevo despacho */}
-      {showNewDischargeModal && selectedAssignment && (
+      {/* ✅ Updated Modal for Client Assignment Completion */}
+      {isModalOpen && selectedClientAssignment && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <Card className="w-full max-w-md max-h-[90vh] overflow-y-auto">
             <CardHeader>
-              <CardTitle className="text-xl">Crear Nuevo Despacho</CardTitle>
+              <CardTitle className="text-xl">Completar Entrega</CardTitle>
               <CardDescription>
-                Asignación #{selectedAssignment.id} - {selectedAssignment.truck.placa}
+                {selectedClientAssignment.customer?.companyname} - {selectedClientAssignment.customer?.ruc}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="bg-blue-50 p-4 rounded-lg">
                 <p className="text-sm text-blue-700 font-medium">
-                  Combustible disponible:
-                  <span className="font-bold ml-1">{selectedAssignment.totalRemaining.toString()} gal</span>
+                  Cantidad asignada:
+                  <span className="font-bold ml-1">{Number(selectedClientAssignment.allocatedQuantity).toFixed(2)} gal</span>
+                </p>
+                <p className="text-xs text-blue-600 mt-1">
+                  Dirección: {selectedClientAssignment.customer?.address || "N/A"}
                 </p>
               </div>
 
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="customer">Cliente</Label>
-                  <Select
-                    value={newDischargeData.customerId}
-                    onValueChange={(value) => setNewDischargeData((prev) => ({ ...prev, customerId: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar cliente" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {customers.map((customer) => (
-                        <SelectItem key={customer.id} value={customer.id.toString()}>
-                          {customer.companyname} - {customer.ruc}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="marcadorInicial">Marcador Inicial (Combustible Actual)</Label>
-                  <Input
-                    id="marcadorInicial"
-                    type="number"
-                    step="0.01"
-                    value={newDischargeData.marcadorInicial}
-                    onChange={(e) => setNewDischargeData((prev) => ({ ...prev, marcadorInicial: e.target.value }))}
-                    placeholder="Ej: 1000.50"
-                  />
-                  <p className="text-xs text-gray-500">Este debe coincidir con el combustible actual del camión</p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="totalDischarged">Cantidad a Descargar</Label>
-                  <Input
-                    id="totalDischarged"
-                    type="number"
-                    step="0.01"
-                    value={newDischargeData.totalDischarged}
-                    onChange={(e) => setNewDischargeData((prev) => ({ ...prev, totalDischarged: e.target.value }))}
-                    placeholder="Ej: 500.00"
-                    max={selectedAssignment.totalRemaining.toString()}
-                  />
-                </div>
-
-                {newDischargeData.marcadorInicial && newDischargeData.totalDischarged && (
-                  <div className="bg-green-50 p-4 rounded-lg">
-                    <Label className="text-sm text-green-700">Marcador final estimado:</Label>
-                    <p className="font-bold text-green-700">{calculateNewDischargeAmount().toFixed(2)} gal</p>
-                    <p className="text-xs text-green-600 mt-1">Combustible restante después del despacho</p>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <Button onClick={closeNewDischargeModal} variant="outline" className="flex-1">
-                  Cancelar
-                </Button>
-                <Button
-                  onClick={createNewDischarge}
-                  disabled={
-                    isProcessing ||
-                    !newDischargeData.customerId ||
-                    !newDischargeData.totalDischarged ||
-                    !newDischargeData.marcadorInicial
-                  }
-                  className="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
-                >
-                  {isProcessing ? "Creando..." : "Crear Despacho"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
-      {/* Modal para finalizar descarga */}
-      {isModalOpen && selectedDischarge && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <CardHeader>
-              <CardTitle className="text-xl">Finalizar Despacho</CardTitle>
-              <CardDescription>
-                {selectedDischarge.customer?.companyname} - ID: {selectedDischarge.id}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <p className="text-sm text-blue-700 font-medium">
-                  Cantidad esperada:
-                  <span className="font-bold ml-1">{selectedDischarge.totalDischarged.toString()} gal</span>
-                </p>
-                {selectedDischarge.marcadorInicial && (
-                  <p className="text-sm text-blue-700 font-medium mt-1">
-                    Marcador inicial:
-                    <span className="font-bold ml-1">{selectedDischarge.marcadorInicial.toString()} gal</span>
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="marcadorInicial">Marcador Inicial</Label>
+                  <Label htmlFor="marcadorInicial">Marcador Inicial (Combustible Antes)</Label>
                   <Input
                     id="marcadorInicial"
                     type="number"
                     step="0.01"
                     value={marcadorInicial}
                     onChange={(e) => setMarcadorInicial(e.target.value)}
-                    placeholder="Ej: 1000.50"
+                    placeholder="Ej: 2500.00"
                   />
+                  <p className="text-xs text-gray-500">Galones de combustible antes de la entrega</p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="marcadorFinal">Marcador Final</Label>
+                  <Label htmlFor="marcadorFinal">Marcador Final (Combustible Después)</Label>
                   <Input
                     id="marcadorFinal"
                     type="number"
                     step="0.01"
                     value={marcadorFinal}
                     onChange={(e) => setMarcadorFinal(e.target.value)}
-                    placeholder="Ej: 500.25"
+                    placeholder="Ej: 2000.00"
                   />
+                  <p className="text-xs text-gray-500">Galones de combustible después de la entrega</p>
                 </div>
 
                 {marcadorInicial && marcadorFinal && (
-                  <div className="space-y-2">
-                    <div className="bg-green-50 p-4 rounded-lg">
-                      <Label className="text-sm text-green-700">Cantidad calculada:</Label>
-                      <p className="font-bold text-green-700">{calculateDischargedAmount().toFixed(2)} gal</p>
+                  <div className="bg-green-50 p-4 rounded-lg">
+                    <Label className="text-sm text-green-700">Cantidad entregada:</Label>
+                    <p className="font-bold text-green-700 text-xl">{calculateDeliveredAmount().toFixed(2)} gal</p>
+                    
+                    {selectedClientAssignment && (
                       <p className="text-xs text-green-600 mt-1">
-                        Diferencia:{" "}
-                        {Math.abs(calculateDischargedAmount() - Number(selectedDischarge.totalDischarged)).toFixed(2)}{" "}
-                        gal
+                        Diferencia con lo asignado:{" "}
+                        {Math.abs(calculateDeliveredAmount() - Number(selectedClientAssignment.allocatedQuantity)).toFixed(2)} gal
                       </p>
-                    </div>
-
-                    {Math.abs(calculateDischargedAmount() - Number(selectedDischarge.totalDischarged)) >
-                      Number(selectedDischarge.totalDischarged) * 0.02 && (
-                      <Alert variant="destructive">
-                        <AlertTriangle className="h-4 w-4" />
-                        <AlertDescription>
-                          La diferencia excede la tolerancia del 2%. Verifique los marcadores antes de continuar.
-                        </AlertDescription>
-                      </Alert>
                     )}
                   </div>
                 )}
               </div>
 
               <div className="flex gap-3 pt-4">
-                <Button onClick={closeModal} variant="outline" className="flex-1">
+                <Button onClick={closeModal} variant="outline" className="flex-1" disabled={isProcessing}>
                   Cancelar
                 </Button>
                 <Button
-                  onClick={finalizeDischarge}
+                  onClick={completeClientAssignment}
                   disabled={isProcessing || !marcadorInicial || !marcadorFinal}
                   className="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
                 >
-                  {isProcessing ? "Procesando..." : "Finalizar"}
+                  {isProcessing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Completando...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Completar Entrega
+                    </>
+                  )}
                 </Button>
               </div>
             </CardContent>
