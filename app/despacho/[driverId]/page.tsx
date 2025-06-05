@@ -12,14 +12,12 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   Truck,
   MapPin,
-  Fuel,
   Clock,
   ArrowLeft,
   FileText,
   Calendar,
   CheckCircle,
   AlertTriangle,
-  Eye,
   Target,
   Loader2,
   RefreshCw,
@@ -29,6 +27,18 @@ import axios from "axios"
 import { useAuth } from "@/contexts/AuthContext"
 import { useToast } from "@/hooks/use-toast"
 
+// Estilos para animaciones
+const styles = `
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  
+  .animate-fadeIn {
+    animation: fadeIn 0.3s ease-out;
+  }
+`
+
 interface ClientAssignment {
   id: number
   customerId: number
@@ -36,6 +46,7 @@ interface ClientAssignment {
   deliveredQuantity: number | string
   remainingQuantity: number | string
   status: string
+  completedAt?: Date | string | null
   customer: {
     id: number
     companyname: string
@@ -82,9 +93,7 @@ export default function DespachoDriverPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
-  const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split("T")[0]
-  )
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split("T")[0])
 
   // Estados para el modal
   const [selectedClientAssignment, setSelectedClientAssignment] = useState<ClientAssignment | null>(null)
@@ -102,7 +111,7 @@ export default function DespachoDriverPage() {
     }
   }, [isLoading, isAuthenticated, router])
 
-// ✅ Función principal para cargar datos
+  // ✅ Función principal para cargar datos
   const fetchData = async (dateToFetch?: string) => {
     if (!driverId || isNaN(Number(driverId))) {
       setError(`ID de conductor inválido: "${driverId}"`)
@@ -114,15 +123,15 @@ export default function DespachoDriverPage() {
       setError(null)
       const targetDate = dateToFetch || selectedDate
       const today = new Date().toISOString().split("T")[0]
-      
+
       console.log(`🔄 Fetching assignments for driver ${driverId} on ${targetDate}`)
       console.log(`📅 Today is: ${today}, Target date: ${targetDate}`)
 
       // ✅ Auto-completar solo si estamos viendo el día actual
       if (targetDate === today) {
         try {
-          const autoCompleteResponse = await axios.post('/api/assignments/auto-complete', { 
-            driverId: Number(driverId) 
+          const autoCompleteResponse = await axios.post("/api/assignments/auto-complete", {
+            driverId: Number(driverId),
           })
           console.log("✅ Auto-completed old assignments:", autoCompleteResponse.data)
         } catch (autoCompleteError) {
@@ -131,7 +140,7 @@ export default function DespachoDriverPage() {
       }
 
       let assignmentsResponse
-      
+
       // ✅ Si es HOY, obtener TODAS las asignaciones ACTIVAS
       if (targetDate === today) {
         console.log("📊 Fetching ACTIVE assignments (not filtered by date)")
@@ -139,13 +148,11 @@ export default function DespachoDriverPage() {
       } else {
         // Si es una fecha específica del pasado, filtrar por esa fecha
         console.log(`📊 Fetching assignments for specific date: ${targetDate}`)
-        assignmentsResponse = await axios.get(
-          `/api/assignments/dashboard?driverId=${driverId}&date=${targetDate}`
-        )
+        assignmentsResponse = await axios.get(`/api/assignments/dashboard?driverId=${driverId}&date=${targetDate}`)
       }
 
       console.log(`✅ Loaded ${assignmentsResponse.data.length} assignments`)
-      
+
       // Log each assignment for debugging
       assignmentsResponse.data.forEach((assignment: any, index: number) => {
         console.log(`📋 Assignment ${index + 1}:`, {
@@ -154,10 +161,10 @@ export default function DespachoDriverPage() {
           remaining: assignment.totalRemaining,
           completed: assignment.isCompleted,
           createdAt: assignment.createdAt,
-          clientAssignments: assignment.clientAssignments?.length || 0
+          clientAssignments: assignment.clientAssignments?.length || 0,
         })
       })
-      
+
       setAssignments(assignmentsResponse.data)
       setLastRefresh(new Date())
 
@@ -165,13 +172,13 @@ export default function DespachoDriverPage() {
       if (targetDate === today && assignmentsResponse.data.length === 0) {
         toast({
           title: "📋 Sin asignaciones activas",
-          description: "No tienes asignaciones activas en este momento. Contacta al administrador si necesitas una asignación.",
+          description:
+            "No tienes asignaciones activas en este momento. Contacta al administrador si necesitas una asignación.",
         })
       }
-      
     } catch (error) {
       console.error("❌ Error fetching data:", error)
-      
+
       let errorMessage = "Error al cargar los datos"
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 400) {
@@ -183,7 +190,7 @@ export default function DespachoDriverPage() {
         }
         console.error("❌ API Error details:", error.response?.data)
       }
-      
+
       setError(errorMessage)
     } finally {
       setLoading(false)
@@ -207,10 +214,13 @@ export default function DespachoDriverPage() {
   useEffect(() => {
     const today = new Date().toISOString().split("T")[0]
     if (selectedDate === today) {
-      const interval = setInterval(() => {
-        console.log("🔄 Auto-refreshing current day assignments")
-        fetchData(selectedDate)
-      }, 5 * 60 * 1000) // 5 minutos
+      const interval = setInterval(
+        () => {
+          console.log("🔄 Auto-refreshing current day assignments")
+          fetchData(selectedDate)
+        },
+        5 * 60 * 1000,
+      ) // 5 minutos
 
       return () => clearInterval(interval)
     }
@@ -231,10 +241,11 @@ export default function DespachoDriverPage() {
     setMarcadorFinal("")
   }
 
+  // ✅ Corregir el cálculo: marcadorFinal es la cantidad entregada directamente
   const calculateDeliveredAmount = () => {
-    const inicial = Number.parseFloat(marcadorInicial) || 0
-    const final = Number.parseFloat(marcadorFinal) || 0
-    return inicial - final
+    const deliveredAmount = Number.parseFloat(marcadorFinal) || 0
+    // La cantidad entregada es directamente el marcador final
+    return deliveredAmount > 0 ? Number.parseFloat(deliveredAmount.toFixed(2)) : 0
   }
 
   const completeClientAssignment = async () => {
@@ -250,8 +261,29 @@ export default function DespachoDriverPage() {
     const deliveredAmount = calculateDeliveredAmount()
     if (deliveredAmount <= 0) {
       toast({
-        title: "❌ Error", 
+        title: "❌ Error",
         description: "La cantidad entregada debe ser mayor a 0",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Verificar que no se entregue más combustible del que hay disponible en el camión
+    const availableFuel = Number.parseFloat(marcadorInicial)
+    if (deliveredAmount > availableFuel) {
+      toast({
+        title: "❌ Error",
+        description: `No se puede entregar ${deliveredAmount.toFixed(2)} galones. Solo hay ${availableFuel.toFixed(2)} galones disponibles en el camión.`,
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Verificar si la cantidad entregada es significativamente mayor que la asignada (más del 20%)
+    if (deliveredAmount > Number(selectedClientAssignment.allocatedQuantity) * 1.2) {
+      toast({
+        title: "⚠️ Advertencia",
+        description: `La cantidad entregada (${deliveredAmount.toFixed(2)} gal) es mucho mayor que la asignada (${Number(selectedClientAssignment.allocatedQuantity).toFixed(2)} gal). Verifique la cantidad.`,
         variant: "destructive",
       })
       return
@@ -260,31 +292,62 @@ export default function DespachoDriverPage() {
     setIsProcessing(true)
 
     try {
-      await axios.put(
+      console.log("📤 Sending delivery completion request:", {
+        assignmentId: selectedClientAssignment.assignmentId,
+        clientId: selectedClientAssignment.id,
+        data: {
+          status: "completed",
+          deliveredQuantity: deliveredAmount,
+          allocatedQuantity: selectedClientAssignment.allocatedQuantity,
+          marcadorInicial: marcadorInicial,
+          marcadorFinal: marcadorFinal,
+        },
+      })
+
+      const response = await axios.put(
         `/api/assignments/${selectedClientAssignment.assignmentId}/clients/${selectedClientAssignment.id}`,
         {
           status: "completed",
           deliveredQuantity: deliveredAmount,
           allocatedQuantity: selectedClientAssignment.allocatedQuantity,
-        }
+          marcadorInicial: marcadorInicial,
+          marcadorFinal: marcadorFinal,
+        },
       )
+
+      console.log("✅ Entrega completada con éxito:", response.data)
 
       toast({
         title: "✅ Entrega completada",
-        description: `${selectedClientAssignment.customer.companyname} - ${deliveredAmount.toFixed(2)} galones`,
+        description: `${selectedClientAssignment.customer.companyname} - ${deliveredAmount.toFixed(2)} galones entregados`,
       })
 
-      await fetchData(selectedDate)
+      // Cerrar modal primero
       closeModal()
 
+      // Refrescar los datos después de completar
+      await fetchData(selectedDate)
+
+      // Mostrar mensaje de éxito adicional
+      setTimeout(() => {
+        toast({
+          title: "🔄 Datos actualizados",
+          description: "Los dashboards han sido actualizados con la nueva información.",
+        })
+      }, 1000)
     } catch (error) {
-      console.error("Error completing assignment:", error)
-      
+      console.error("❌ Error completing assignment:", error)
+
       let errorMessage = "Error al completar la entrega"
-      if (axios.isAxiosError(error) && error.response?.data?.error) {
-        errorMessage = error.response.data.error
+      if (axios.isAxiosError(error)) {
+        if (error.response?.data?.error) {
+          errorMessage = error.response.data.error
+        } else if (error.response?.data?.details) {
+          errorMessage = `${error.response.data.error}: ${error.response.data.details}`
+        }
+        console.error("❌ Full error response:", error.response?.data)
       }
-      
+
       toast({
         title: "❌ Error",
         description: errorMessage,
@@ -298,39 +361,39 @@ export default function DespachoDriverPage() {
   // ✅ Obtener entregas para el día seleccionado
   const getAllPendingDeliveries = () => {
     const pendingDeliveries: (ClientAssignment & { assignment: ExtendedAssignment })[] = []
-    
-    assignments.forEach(assignment => {
+
+    assignments.forEach((assignment) => {
       if (assignment.clientAssignments) {
-        assignment.clientAssignments.forEach(clientAssignment => {
+        assignment.clientAssignments.forEach((clientAssignment) => {
           if (clientAssignment.status === "pending") {
             pendingDeliveries.push({
               ...clientAssignment,
-              assignment: assignment
+              assignment: assignment,
             })
           }
         })
       }
     })
-    
+
     return pendingDeliveries
   }
 
   const getAllCompletedDeliveries = () => {
     const completedDeliveries: (ClientAssignment & { assignment: ExtendedAssignment })[] = []
-    
-    assignments.forEach(assignment => {
+
+    assignments.forEach((assignment) => {
       if (assignment.clientAssignments) {
-        assignment.clientAssignments.forEach(clientAssignment => {
+        assignment.clientAssignments.forEach((clientAssignment) => {
           if (clientAssignment.status === "completed") {
             completedDeliveries.push({
               ...clientAssignment,
-              assignment: assignment
+              assignment: assignment,
             })
           }
         })
       }
     })
-    
+
     return completedDeliveries
   }
 
@@ -381,10 +444,11 @@ export default function DespachoDriverPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <style>{styles}</style>
       <header className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-3">              
+            <div className="flex items-center space-x-3">
               <Button asChild variant="outline" size="sm">
                 <Link href="/despacho">
                   <ArrowLeft className="h-4 w-4 mr-2" />
@@ -410,12 +474,12 @@ export default function DespachoDriverPage() {
                   className="w-auto"
                 />
               </div>
-              
+
               {/* ✅ Indicador de día actual */}
               <Badge className={isToday ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-700"}>
                 {isToday ? "Hoy" : "Histórico"}
               </Badge>
-              
+
               {/* ✅ Botón de refresh */}
               <Button
                 onClick={() => fetchData(selectedDate)}
@@ -437,8 +501,8 @@ export default function DespachoDriverPage() {
           <Alert>
             <Calendar className="h-4 w-4" />
             <AlertDescription>
-              Estás viendo datos históricos del {new Date(selectedDate).toLocaleDateString()}. 
-              Las entregas de días anteriores se completan automáticamente.
+              Estás viendo datos históricos del {new Date(selectedDate).toLocaleDateString()}. Las entregas de días
+              anteriores se completan automáticamente.
             </AlertDescription>
           </Alert>
         </div>
@@ -456,7 +520,7 @@ export default function DespachoDriverPage() {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardContent className="pt-6">
               <div className="text-center">
@@ -466,7 +530,7 @@ export default function DespachoDriverPage() {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardContent className="pt-6">
               <div className="text-center">
@@ -476,7 +540,7 @@ export default function DespachoDriverPage() {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card>
             <CardContent className="pt-6">
               <div className="text-center">
@@ -506,13 +570,14 @@ export default function DespachoDriverPage() {
                 <CardContent className="pt-6">
                   <MapPin className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                    {isToday ? "No hay entregas para hoy" : `No hay entregas para ${new Date(selectedDate).toLocaleDateString()}`}
+                    {isToday
+                      ? "No hay entregas para hoy"
+                      : `No hay entregas para ${new Date(selectedDate).toLocaleDateString()}`}
                   </h3>
                   <p className="text-gray-600">
-                    {isToday 
-                      ? "Las entregas aparecerán cuando el administrador te asigne clientes específicos" 
-                      : "No se encontraron entregas para esta fecha"
-                    }
+                    {isToday
+                      ? "Las entregas aparecerán cuando el administrador te asigne clientes específicos"
+                      : "No se encontraron entregas para esta fecha"}
                   </p>
                 </CardContent>
               </Card>
@@ -546,12 +611,20 @@ export default function DespachoDriverPage() {
                             </CardDescription>
                           </CardHeader>
                           <CardContent className="space-y-4">
-                            <div className="flex items-center space-x-2">
-                              <Fuel className="h-4 w-4 text-blue-600" />
-                              <span className="text-sm font-medium">Cantidad asignada:</span>
-                              <span className="text-lg font-bold text-blue-600">
-                                {Number(delivery.allocatedQuantity).toFixed(2)} gal
-                              </span>
+                            <div className="flex flex-col gap-2">
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-gray-700">Cantidad asignada:</span>
+                                <span className="text-lg font-bold text-blue-600">
+                                  {Number(delivery.allocatedQuantity).toFixed(2)} gal
+                                </span>
+                              </div>
+
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-gray-700">Combustible disponible:</span>
+                                <span className="text-md font-medium text-green-600">
+                                  {Number(delivery.assignment.totalRemaining).toFixed(2)} gal
+                                </span>
+                              </div>
                             </div>
 
                             <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
@@ -562,7 +635,7 @@ export default function DespachoDriverPage() {
                             {isToday && (
                               <Button
                                 onClick={() => openClientAssignmentModal(delivery, delivery.assignment)}
-                                className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+                                className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 transition-all duration-200 active:scale-95"
                               >
                                 <Target className="h-4 w-4 mr-2" />
                                 Completar Entrega
@@ -602,16 +675,58 @@ export default function DespachoDriverPage() {
                               Asignación #{delivery.assignment.id} • {delivery.assignment.truck.placa}
                             </CardDescription>
                           </CardHeader>
-                          <CardContent className="space-y-2">
-                            <div className="text-sm text-gray-600">
-                              <p><strong>Cantidad asignada:</strong> {Number(delivery.allocatedQuantity).toFixed(2)} gal</p>
-                              <p className="text-green-600">
-                                <strong>Cantidad entregada:</strong> {Number(delivery.deliveredQuantity).toFixed(2)} gal
-                              </p>
+                          <CardContent className="space-y-3">
+                            <div className="flex flex-col gap-1">
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-gray-600">Cantidad asignada:</span>
+                                <span className="font-medium">{Number(delivery.allocatedQuantity).toFixed(2)} gal</span>
+                              </div>
+
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-gray-600">Cantidad entregada:</span>
+                                <span className="font-medium text-green-600">
+                                  {Number(delivery.deliveredQuantity).toFixed(2)} gal
+                                </span>
+                              </div>
+
+                              {Math.abs(Number(delivery.allocatedQuantity) - Number(delivery.deliveredQuantity)) >
+                              0.01 ? (
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-600">Diferencia:</span>
+                                  <span
+                                    className={`font-medium ${
+                                      Number(delivery.deliveredQuantity) > Number(delivery.allocatedQuantity)
+                                        ? "text-blue-600"
+                                        : "text-orange-600"
+                                    }`}
+                                  >
+                                    {Math.abs(
+                                      Number(delivery.allocatedQuantity) - Number(delivery.deliveredQuantity),
+                                    ).toFixed(2)}{" "}
+                                    gal
+                                    {Number(delivery.deliveredQuantity) > Number(delivery.allocatedQuantity)
+                                      ? " (extra)"
+                                      : " (menos)"}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-600">Diferencia:</span>
+                                  <span className="font-medium text-green-600">0.00 gal (cantidad exacta)</span>
+                                </div>
+                              )}
                             </div>
-                            
+
                             <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
                               <p>RUC: {delivery.customer?.ruc || "N/A"}</p>
+                              <p>
+                                Completado:{" "}
+                                {delivery.completedAt
+                                  ? new Date(delivery.completedAt).toLocaleString()
+                                  : delivery.assignment.completedAt
+                                    ? new Date(delivery.assignment.completedAt).toLocaleString()
+                                    : "N/A"}
+                              </p>
                             </div>
                           </CardContent>
                         </Card>
@@ -629,13 +744,14 @@ export default function DespachoDriverPage() {
                 <CardContent className="pt-6">
                   <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                    {isToday ? "No hay asignaciones para hoy" : `No hay asignaciones para ${new Date(selectedDate).toLocaleDateString()}`}
+                    {isToday
+                      ? "No hay asignaciones para hoy"
+                      : `No hay asignaciones para ${new Date(selectedDate).toLocaleDateString()}`}
                   </h3>
                   <p className="text-gray-600">
-                    {isToday 
-                      ? "No tienes asignaciones programadas para el día de hoy" 
-                      : "No se encontraron asignaciones para esta fecha"
-                    }
+                    {isToday
+                      ? "No tienes asignaciones programadas para el día de hoy"
+                      : "No se encontraron asignaciones para esta fecha"}
                   </p>
                 </CardContent>
               </Card>
@@ -660,9 +776,7 @@ export default function DespachoDriverPage() {
                             {assignment.fuelType}
                           </Badge>
                           {assignment.clientAssignments && assignment.clientAssignments.length > 0 && (
-                            <Badge variant="secondary">
-                              {assignment.clientAssignments.length} entregas
-                            </Badge>
+                            <Badge variant="secondary">{assignment.clientAssignments.length} entregas</Badge>
                           )}
                         </div>
                       </div>
@@ -721,15 +835,20 @@ export default function DespachoDriverPage() {
                             {assignment.clientAssignments.map((ca) => (
                               <div key={ca.id} className="flex justify-between items-center p-2 bg-gray-50 rounded">
                                 <span>{ca.customer.companyname}</span>
-                                <Badge className={
-                                  ca.status === "completed" 
-                                    ? "bg-green-100 text-green-700" 
+                                <Badge
+                                  className={
+                                    ca.status === "completed"
+                                      ? "bg-green-100 text-green-700"
+                                      : ca.status === "expired"
+                                        ? "bg-red-100 text-red-700"
+                                        : "bg-yellow-100 text-yellow-700"
+                                  }
+                                >
+                                  {ca.status === "completed"
+                                    ? "Completada"
                                     : ca.status === "expired"
-                                    ? "bg-red-100 text-red-700"
-                                    : "bg-yellow-100 text-yellow-700"
-                                }>
-                                  {ca.status === "completed" ? "Completada" : 
-                                   ca.status === "expired" ? "Expirada" : "Pendiente"}
+                                      ? "Expirada"
+                                      : "Pendiente"}
                                 </Badge>
                               </div>
                             ))}
@@ -759,7 +878,7 @@ export default function DespachoDriverPage() {
 
       {/* ✅ Modal para completar entrega */}
       {isModalOpen && selectedClientAssignment && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-fadeIn">
           <Card className="w-full max-w-md max-h-[90vh] overflow-y-auto">
             <CardHeader>
               <CardTitle className="text-xl">Completar Entrega</CardTitle>
@@ -771,7 +890,9 @@ export default function DespachoDriverPage() {
               <div className="bg-blue-50 p-4 rounded-lg">
                 <p className="text-sm text-blue-700 font-medium">
                   Cantidad asignada:
-                  <span className="font-bold ml-1">{Number(selectedClientAssignment.allocatedQuantity).toFixed(2)} gal</span>
+                  <span className="font-bold ml-1">
+                    {Number(selectedClientAssignment.allocatedQuantity).toFixed(2)} gal
+                  </span>
                 </p>
                 <p className="text-xs text-blue-600 mt-1">
                   Dirección: {selectedClientAssignment.customer?.address || "N/A"}
@@ -780,7 +901,7 @@ export default function DespachoDriverPage() {
 
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="marcadorInicial">Marcador Inicial (Combustible Antes)</Label>
+                  <Label htmlFor="marcadorInicial">Combustible Disponible en el Camión</Label>
                   <Input
                     id="marcadorInicial"
                     type="number"
@@ -788,32 +909,71 @@ export default function DespachoDriverPage() {
                     value={marcadorInicial}
                     onChange={(e) => setMarcadorInicial(e.target.value)}
                     placeholder="Ej: 2500.00"
+                    className="focus:ring-2 focus:ring-blue-500"
                   />
-                  <p className="text-xs text-gray-500">Galones de combustible antes de la entrega</p>
+                  <p className="text-xs text-gray-500">
+                    Galones de combustible disponibles en el camión antes de la entrega
+                  </p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="marcadorFinal">Marcador Final (Combustible Después)</Label>
+                  <Label htmlFor="marcadorFinal">Cantidad Entregada al Cliente</Label>
                   <Input
                     id="marcadorFinal"
                     type="number"
                     step="0.01"
                     value={marcadorFinal}
                     onChange={(e) => setMarcadorFinal(e.target.value)}
-                    placeholder="Ej: 2000.00"
+                    placeholder="Ej: 500.00"
+                    className="focus:ring-2 focus:ring-blue-500"
                   />
-                  <p className="text-xs text-gray-500">Galones de combustible después de la entrega</p>
+                  <p className="text-xs text-gray-500">Galones de combustible entregados al cliente</p>
                 </div>
 
                 {marcadorInicial && marcadorFinal && (
-                  <div className="bg-green-50 p-4 rounded-lg">
-                    <Label className="text-sm text-green-700">Cantidad entregada:</Label>
-                    <p className="font-bold text-green-700 text-xl">{calculateDeliveredAmount().toFixed(2)} gal</p>
-                    
-                    {selectedClientAssignment && (
-                      <p className="text-xs text-green-600 mt-1">
-                        Diferencia con lo asignado:{" "}
-                        {Math.abs(calculateDeliveredAmount() - Number(selectedClientAssignment.allocatedQuantity)).toFixed(2)} gal
+                  <div className={`p-4 rounded-lg ${calculateDeliveredAmount() > 0 ? "bg-green-50" : "bg-red-50"}`}>
+                    <Label className={`text-sm ${calculateDeliveredAmount() > 0 ? "text-green-700" : "text-red-700"}`}>
+                      Cantidad entregada:
+                    </Label>
+                    <p
+                      className={`font-bold text-xl ${calculateDeliveredAmount() > 0 ? "text-green-700" : "text-red-700"}`}
+                    >
+                      {calculateDeliveredAmount().toFixed(2)} gal
+                    </p>
+
+                    {selectedClientAssignment && calculateDeliveredAmount() > 0 && (
+                      <div className="mt-2 space-y-1">
+                        <p className="text-xs text-green-600">
+                          Diferencia con lo asignado: {(() => {
+                            const difference = Math.abs(
+                              calculateDeliveredAmount() - Number(selectedClientAssignment.allocatedQuantity),
+                            )
+                            if (difference < 0.01) {
+                              return "0.00 gal (cantidad exacta)"
+                            } else {
+                              return `${difference.toFixed(2)} gal ${
+                                calculateDeliveredAmount() > Number(selectedClientAssignment.allocatedQuantity)
+                                  ? "(entregando más)"
+                                  : "(entregando menos)"
+                              }`
+                            }
+                          })()}
+                        </p>
+
+                        <p className="text-xs text-blue-600">
+                          Combustible restante en camión:{" "}
+                          {(Number.parseFloat(marcadorInicial) - calculateDeliveredAmount()).toFixed(2)} gal
+                        </p>
+                      </div>
+                    )}
+
+                    {calculateDeliveredAmount() <= 0 && (
+                      <p className="text-xs text-red-600 mt-1">La cantidad entregada debe ser mayor a 0</p>
+                    )}
+
+                    {calculateDeliveredAmount() > Number.parseFloat(marcadorInicial) && (
+                      <p className="text-xs text-red-600 mt-1">
+                        No se puede entregar más combustible del disponible en el camión
                       </p>
                     )}
                   </div>
@@ -821,13 +981,24 @@ export default function DespachoDriverPage() {
               </div>
 
               <div className="flex gap-3 pt-4">
-                <Button onClick={closeModal} variant="outline" className="flex-1" disabled={isProcessing}>
+                <Button
+                  onClick={closeModal}
+                  variant="outline"
+                  className="flex-1 hover:bg-gray-100 active:scale-95 transition-all duration-200"
+                  disabled={isProcessing}
+                >
                   Cancelar
                 </Button>
                 <Button
                   onClick={completeClientAssignment}
-                  disabled={isProcessing || !marcadorInicial || !marcadorFinal}
-                  className="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+                  disabled={
+                    isProcessing ||
+                    !marcadorInicial ||
+                    !marcadorFinal ||
+                    calculateDeliveredAmount() <= 0 ||
+                    calculateDeliveredAmount() > Number.parseFloat(marcadorInicial)
+                  }
+                  className="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 transition-all duration-200 active:scale-95"
                 >
                   {isProcessing ? (
                     <>

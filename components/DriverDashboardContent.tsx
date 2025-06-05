@@ -27,7 +27,7 @@ export default function DriverDashboardContent() {
     if (!isLoading && isAuthenticated) {
       console.log(`🔍 DriverDashboardContent: Checking access for user ${user?.id}, role: ${user?.role}`)
       console.log(`🔍 DriverDashboardContent: isConductor: ${isConductor}, isOperator: ${isOperator}`)
-      
+
       // Verificar que el usuario esté autenticado
       if (!user) {
         console.log(`❌ DriverDashboardContent: No user found`)
@@ -123,17 +123,15 @@ export default function DriverDashboardContent() {
             <AlertCircle className="h-8 w-8 text-red-600" />
           </div>
           <h2 className="text-xl font-bold text-gray-800 mb-2">Acceso Denegado</h2>
-          <p className="text-gray-600 mb-4">
-            {accessError || "No tienes permisos para acceder a esta página."}
-          </p>
+          <p className="text-gray-600 mb-4">{accessError || "No tienes permisos para acceder a esta página."}</p>
           <div className="space-y-2">
-            <Button onClick={() => window.location.href = "/"} className="w-full">
+            <Button onClick={() => (window.location.href = "/")} className="w-full">
               Volver al Inicio
             </Button>
             {user && (
-              <Button 
-                onClick={() => window.location.href = `/despacho/${user.id}`} 
-                variant="outline" 
+              <Button
+                onClick={() => (window.location.href = `/despacho/${user.id}`)}
+                variant="outline"
                 className="w-full"
               >
                 Ir a Mi Panel
