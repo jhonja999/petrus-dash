@@ -1,152 +1,187 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { verifyToken } from "@/lib/jwt"
-import { cookies } from "next/headers"
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string; clientId: string }> }) {
+export async function PUT(
+  request: Request,
+  context: { params: { assignmentId: string; clientId: string } }
+) {
   try {
-    const { id, clientId } = await params
-    const assignmentId = Number.parseInt(id)
-    const clientAssignmentId = Number.parseInt(clientId)
+    const params = await context.params
+    const { assignmentId, clientId } = params
+    const body = await request.json()
+    const { status, deliveredQuantity, marcadorInicial, marcadorFinal } = body
 
-    if (isNaN(assignmentId) || isNaN(clientAssignmentId)) {
-      return NextResponse.json({ error: "ID inválido" }, { status: 400 })
+    console.log(`📝 Updating client assignment ${clientId} for assignment ${assignmentId}`)
+
+    // Validate input
+    if (!status || !deliveredQuantity) {
+      return NextResponse.json(
+        { error: "status y deliveredQuantity son requeridos" },
+        { status: 400 }
+      )
     }
 
-    const clientAssignment = await prisma.clientAssignment.findFirst({
+    // Get the client assignment
+    const clientAssignment = await prisma.clientAssignment.findUnique({
       where: {
-        id: clientAssignmentId,
-        assignmentId,
+        id: Number(clientId),
+      },
+      include: {
+        assignment: true,
+      },
+    })
+
+    if (!clientAssignment) {
+      return NextResponse.json(
+        { error: "Asignación de cliente no encontrada" },
+        { status: 404 }
+      )
+    }
+
+    // Verify it belongs to the correct assignment
+    if (clientAssignment.assignmentId !== Number(assignmentId)) {
+      return NextResponse.json(
+        { error: "La asignación de cliente no pertenece a esta asignación" },
+        { status: 400 }
+      )
+    }
+
+    // Verify the assignment is not completed
+    if (clientAssignment.assignment.isCompleted) {
+      return NextResponse.json(
+        { error: "No se puede modificar una asignación completada" },
+        { status: 400 }
+      )
+    }
+
+    // Update the client assignment with markers
+    const updatedClientAssignment = await prisma.clientAssignment.update({
+      where: {
+        id: Number(clientId),
+      },
+      data: {
+        status: status,
+        deliveredQuantity: Number(deliveredQuantity),
+        remainingQuantity: Number(clientAssignment.allocatedQuantity) - Number(deliveredQuantity),
+        marcadorInicial: marcadorInicial ? Number(marcadorInicial) : undefined,
+        marcadorFinal: marcadorFinal ? Number(marcadorFinal) : undefined,
+        completedAt: status === "completed" ? new Date() : undefined,
       },
       include: {
         customer: true,
       },
     })
 
-    if (!clientAssignment) {
-      return NextResponse.json({ error: "Asignación de cliente no encontrada" }, { status: 404 })
+    // Update the assignment's remaining quantity
+    const totalDelivered = Number(deliveredQuantity)
+    await prisma.assignment.update({
+      where: {
+        id: Number(assignmentId),
+      },
+      data: {
+        totalRemaining: {
+          decrement: totalDelivered,
+        },
+      },
+    })
+
+    // Check if all client assignments are completed
+    const allClientAssignments = await prisma.clientAssignment.findMany({
+      where: {
+        assignmentId: Number(assignmentId),
+      },
+    })
+
+    const allCompleted = allClientAssignments.every(ca => ca.status === "completed" || ca.status === "expired")
+    
+    if (allCompleted) {
+      await prisma.assignment.update({
+        where: {
+          id: Number(assignmentId),
+        },
+        data: {
+          isCompleted: true,
+          completedAt: new Date(),
+        },
+      })
     }
 
-    return NextResponse.json(clientAssignment)
-  } catch (error: any) {
-    console.error("Error fetching client assignment:", error.message || error)
+    console.log(`✅ Client assignment ${clientId} updated successfully`)
+
+    return NextResponse.json(updatedClientAssignment)
+  } catch (error) {
+    console.error("❌ Error updating client assignment:", error)
     return NextResponse.json(
-      { error: "Error al obtener asignación de cliente", details: error.message },
-      { status: 500 },
+      { error: "Error al actualizar la asignación de cliente" },
+      { status: 500 }
     )
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string; clientId: string }> }) {
+export async function DELETE(
+  request: Request,
+  context: { params: { assignmentId: string; clientId: string } }
+) {
   try {
-    const token = (await cookies()).get("token")?.value
-    if (!token) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
-    }
+    const params = await context.params
+    const { assignmentId, clientId } = params
 
-    const payload = await verifyToken(token)
-    if (!payload) {
-      return NextResponse.json({ error: "Token inválido" }, { status: 401 })
-    }
-
-    const { id, clientId } = await params
-    const assignmentId = Number.parseInt(id)
-    const clientAssignmentId = Number.parseInt(clientId)
-
-    if (isNaN(assignmentId) || isNaN(clientAssignmentId)) {
-      return NextResponse.json({ error: "IDs inválidos" }, { status: 400 })
-    }
-
-    const body = await request.json()
-    const { status, deliveredQuantity, allocatedQuantity } = body
-
-    // Get current client assignment to calculate remaining quantity
-    const currentClientAssignment = await prisma.clientAssignment.findUnique({
-      where: { id: clientAssignmentId },
-    })
-
-    if (!currentClientAssignment) {
-      return NextResponse.json({ error: "Asignación de cliente no encontrada" }, { status: 404 })
-    }
-
-    // Calculate remaining quantity
-    const allocated = allocatedQuantity
-      ? Number.parseFloat(allocatedQuantity)
-      : Number.parseFloat(currentClientAssignment.allocatedQuantity.toString())
-    const delivered = deliveredQuantity
-      ? Number.parseFloat(deliveredQuantity)
-      : Number.parseFloat(currentClientAssignment.deliveredQuantity.toString())
-    const remaining = allocated - delivered
-
-    // Update the client assignment
-    const updatedClientAssignment = await prisma.clientAssignment.update({
-      where: { id: clientAssignmentId },
-      data: {
-        status,
-        deliveredQuantity: delivered,
-        remainingQuantity: remaining,
-        allocatedQuantity: allocatedQuantity ? Number.parseFloat(allocatedQuantity) : undefined,
+    // Get the client assignment
+    const clientAssignment = await prisma.clientAssignment.findUnique({
+      where: {
+        id: Number(clientId),
       },
       include: {
-        customer: true,
-      },
-    })
-
-    return NextResponse.json(updatedClientAssignment)
-  } catch (error) {
-    console.error("Error updating client assignment:", error)
-    return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
-  }
-}
-
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string; clientId: string }> }) {
-  try {
-    const token = (await cookies()).get("token")?.value
-    if (!token) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
-    }
-
-    const payload = await verifyToken(token)
-    if (!payload || (payload.role !== "Admin" && payload.role !== "S_A")) {
-      return NextResponse.json({ error: "Acceso denegado" }, { status: 403 })
-    }
-
-    const { id, clientId } = await params
-    const assignmentId = Number.parseInt(id)
-    const clientAssignmentId = Number.parseInt(clientId)
-
-    if (isNaN(assignmentId) || isNaN(clientAssignmentId)) {
-      return NextResponse.json({ error: "IDs inválidos" }, { status: 400 })
-    }
-
-    // Check if client assignment exists and belongs to the assignment
-    const clientAssignment = await prisma.clientAssignment.findFirst({
-      where: {
-        id: clientAssignmentId,
-        assignmentId,
+        assignment: true,
       },
     })
 
     if (!clientAssignment) {
-      return NextResponse.json({ error: "Asignación de cliente no encontrada" }, { status: 404 })
+      return NextResponse.json(
+        { error: "Asignación de cliente no encontrada" },
+        { status: 404 }
+      )
     }
 
-    // Only allow deletion if status is pending
-    if (clientAssignment.status !== "pending") {
+    // Verify it belongs to the correct assignment
+    if (clientAssignment.assignmentId !== Number(assignmentId)) {
       return NextResponse.json(
-        { error: "No se puede eliminar una asignación que ya está en progreso o completada" },
-        { status: 400 },
+        { error: "La asignación de cliente no pertenece a esta asignación" },
+        { status: 400 }
+      )
+    }
+
+    // Verify the assignment is not completed
+    if (clientAssignment.assignment.isCompleted) {
+      return NextResponse.json(
+        { error: "No se puede eliminar de una asignación completada" },
+        { status: 400 }
+      )
+    }
+
+    // Verify the client assignment is not completed
+    if (clientAssignment.status === "completed") {
+      return NextResponse.json(
+        { error: "No se puede eliminar una entrega completada" },
+        { status: 400 }
       )
     }
 
     // Delete the client assignment
     await prisma.clientAssignment.delete({
-      where: { id: clientAssignmentId },
+      where: {
+        id: Number(clientId),
+      },
     })
 
-    return NextResponse.json({ message: "Asignación de cliente eliminada exitosamente" })
+    console.log(`✅ Client assignment ${clientId} deleted successfully`)
+
+    return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("Error deleting client assignment:", error)
-    return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
+    console.error("❌ Error deleting client assignment:", error)
+    return NextResponse.json(
+      { error: "Error al eliminar la asignación de cliente" },
+      { status: 500 }
+    )
   }
 }

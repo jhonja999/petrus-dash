@@ -1,3 +1,4 @@
+
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 
@@ -5,50 +6,22 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
     const driverId = searchParams.get("driverId")
-    const date = searchParams.get("date")
 
     if (!driverId) {
       return NextResponse.json({ error: "driverId es requerido" }, { status: 400 })
     }
 
-    // Parse the date or use today - Important: use local timezone
-    let targetDate: Date
-    if (date) {
-      // When date comes as YYYY-MM-DD, parse it correctly
-      const [year, month, day] = date.split('-').map(Number)
-      targetDate = new Date(year, month - 1, day)
-    } else {
-      targetDate = new Date()
-    }
+    console.log(`🔍 Active Assignments: Fetching for driver ${driverId}`)
 
-    // Get start and end of day in local timezone
-    const startOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate())
-    const endOfDay = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate() + 1)
-
-    console.log(`📊 Dashboard API: Fetching assignments for driver ${driverId}`)
-    console.log(`📅 Date range: ${startOfDay.toISOString()} to ${endOfDay.toISOString()}`)
-
-    // Get assignments for the specific date OR assignments that are active
-    const assignments = await prisma.assignment.findMany({
+    // Get all active (not completed) assignments for the driver
+    const activeAssignments = await prisma.assignment.findMany({
       where: {
         driverId: Number.parseInt(driverId),
-        OR: [
-          // Assignments created today
-          {
-            createdAt: {
-              gte: startOfDay,
-              lt: endOfDay,
-            },
-          },
-          // OR active assignments not yet completed
-          {
-            isCompleted: false,
-            // Only include if it has remaining fuel
-            totalRemaining: {
-              gt: 0
-            }
-          }
-        ]
+        isCompleted: false,
+        // Only include if it has remaining fuel
+        totalRemaining: {
+          gt: 0
+        }
       },
       include: {
         driver: {
@@ -94,6 +67,11 @@ export async function GET(request: Request) {
               },
             },
           },
+          where: {
+            status: {
+              in: ["pendiente", "en_proceso"] // Solo descargas activas
+            }
+          },
           orderBy: {
             createdAt: "desc",
           },
@@ -104,11 +82,23 @@ export async function GET(request: Request) {
       },
     })
 
-    console.log(`✅ Dashboard API: Found ${assignments.length} assignments for ${startOfDay.toISOString().split('T')[0]}`)
+    console.log(`✅ Active Assignments: Found ${activeAssignments.length} active assignments`)
 
-    return NextResponse.json(assignments)
+    // Log details for debugging - ✅ Corregido el acceso a propiedades
+    activeAssignments.forEach(assignment => {
+      console.log(`📋 Assignment #${assignment.id}:`, {
+        truck: assignment.truck.placa, // ✅ Corregido: ahora sí existe truck
+        remaining: assignment.totalRemaining,
+        completed: assignment.isCompleted,
+        createdAt: assignment.createdAt,
+        clientAssignments: assignment.clientAssignments.length, // ✅ Corregido: ahora sí existe
+        activeDischarges: assignment.discharges.length
+      })
+    })
+
+    return NextResponse.json(activeAssignments)
   } catch (error) {
-    console.error("❌ Dashboard API Error:", error)
+    console.error("❌ Active Assignments Error:", error)
     return NextResponse.json(
       { error: "Error interno del servidor" },
       { status: 500 }

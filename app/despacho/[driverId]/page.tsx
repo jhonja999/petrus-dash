@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Truck,
   MapPin,
@@ -23,14 +22,13 @@ import {
   Eye,
   Target,
   Loader2,
+  RefreshCw,
 } from "lucide-react"
 import Link from "next/link"
 import axios from "axios"
-import type { Discharge, Assignment, Customer } from "@/types/globals.d"
 import { useAuth } from "@/contexts/AuthContext"
 import { useToast } from "@/hooks/use-toast"
 
-// ✅ New interface for client assignments
 interface ClientAssignment {
   id: number
   customerId: number
@@ -38,12 +36,37 @@ interface ClientAssignment {
   deliveredQuantity: number | string
   remainingQuantity: number | string
   status: string
-  customer: Customer
+  customer: {
+    id: number
+    companyname: string
+    ruc: string
+    address?: string
+  }
   assignmentId: number
 }
 
-// ✅ Extended Assignment interface
-interface ExtendedAssignment extends Assignment {
+interface ExtendedAssignment {
+  id: number
+  driverId: number
+  truckId: number
+  fuelType: string
+  totalLoaded: number | string
+  totalRemaining: number | string
+  isCompleted: boolean
+  completedAt?: Date | null
+  createdAt: Date
+  updatedAt: Date
+  notes?: string | null
+  driver: {
+    id: number
+    name: string
+    lastname: string
+  }
+  truck: {
+    id: number
+    placa: string
+    capacidad: number
+  }
   clientAssignments?: ClientAssignment[]
 }
 
@@ -54,105 +77,149 @@ export default function DespachoDriverPage() {
   const { toast } = useToast()
   const driverId = params.driverId as string
 
-  console.log(`🎯 DespachoDriverPage: Loading for URL with driverId: "${driverId}"`)
-
-  // Basic auth check
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      console.log("🔒 DespachoDriverPage: User not authenticated, redirecting to login")
-      router.push("/login")
-      return
-    }
-  }, [isLoading, isAuthenticated, router])
-
   // Estados principales
-  const [discharges, setDischarges] = useState<Discharge[]>([])
   const [assignments, setAssignments] = useState<ExtendedAssignment[]>([])
-  const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
+  const [selectedDate, setSelectedDate] = useState<string>(
+    new Date().toISOString().split("T")[0]
+  )
 
-  // Estados para el modal de finalizar descarga
+  // Estados para el modal
   const [selectedClientAssignment, setSelectedClientAssignment] = useState<ClientAssignment | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [marcadorInicial, setMarcadorInicial] = useState("")
   const [marcadorFinal, setMarcadorFinal] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
 
-  // Estados para vista de asignación detallada
-  const [showAssignmentDetail, setShowAssignmentDetail] = useState(false)
-  const [detailAssignment, setDetailAssignment] = useState<ExtendedAssignment | null>(null)
-
+  // Basic auth check
   useEffect(() => {
-    const fetchData = async () => {
-      if (!driverId) return
+    if (!isLoading && !isAuthenticated) {
+      console.log("🔒 DespachoDriverPage: User not authenticated")
+      router.push("/login")
+      return
+    }
+  }, [isLoading, isAuthenticated, router])
 
-      // Validate driverId is a number
-      if (isNaN(Number(driverId))) {
-        console.log(`❌ DespachoDriverPage: Invalid driverId: "${driverId}"`)
-        setError(`ID de conductor inválido: "${driverId}". Debe ser un número.`)
-        setLoading(false)
-        return
-      }
-
-      try {
-        setError(null)
-        console.log(`🔄 DespachoDriverPage: Fetching data for driver ${driverId}`)
-
-        const today = new Date().toISOString().split("T")[0]
-
-        const [dischargesResponse, assignmentsResponse, customersResponse] = await Promise.all([
-          axios.get(`/api/despacho/${driverId}`),
-          axios.get(`/api/assignments/dashboard?driverId=${driverId}&date=${today}`),
-          axios.get("/api/customers"),
-        ])
-
-        console.log(`✅ DespachoDriverPage: Received ${dischargesResponse.data.length} discharges`)
-        console.log(`✅ DespachoDriverPage: Received ${assignmentsResponse.data.length} assignments`)
-
-        setDischarges(dischargesResponse.data)
-        setAssignments(assignmentsResponse.data)
-        setCustomers(customersResponse.data)
-      } catch (error) {
-        console.error("❌ DespachoDriverPage: Error fetching data:", error)
-        if (axios.isAxiosError(error)) {
-          if (error.response?.status === 400) {
-            setError("ID de conductor inválido o datos incorrectos")
-          } else if (error.response?.status === 403) {
-            setError("No tienes permisos para acceder a este panel")
-          } else {
-            setError("Error al cargar los datos")
-          }
-        } else {
-          setError("Error de conexión")
-        }
-      } finally {
-        setLoading(false)
-      }
+// ✅ Función principal para cargar datos
+  const fetchData = async (dateToFetch?: string) => {
+    if (!driverId || isNaN(Number(driverId))) {
+      setError(`ID de conductor inválido: "${driverId}"`)
+      setLoading(false)
+      return
     }
 
-    fetchData()
-  }, [driverId])
-
-  const refreshData = async () => {
     try {
+      setError(null)
+      const targetDate = dateToFetch || selectedDate
       const today = new Date().toISOString().split("T")[0]
-      const [dischargesResponse, assignmentsResponse] = await Promise.all([
-        axios.get(`/api/despacho/${driverId}`),
-        axios.get(`/api/assignments/dashboard?driverId=${driverId}&date=${today}`),
-      ])
-      setDischarges(dischargesResponse.data)
+      
+      console.log(`🔄 Fetching assignments for driver ${driverId} on ${targetDate}`)
+      console.log(`📅 Today is: ${today}, Target date: ${targetDate}`)
+
+      // ✅ Auto-completar solo si estamos viendo el día actual
+      if (targetDate === today) {
+        try {
+          const autoCompleteResponse = await axios.post('/api/assignments/auto-complete', { 
+            driverId: Number(driverId) 
+          })
+          console.log("✅ Auto-completed old assignments:", autoCompleteResponse.data)
+        } catch (autoCompleteError) {
+          console.log("⚠️ Auto-complete failed, continuing anyway", autoCompleteError)
+        }
+      }
+
+      let assignmentsResponse
+      
+      // ✅ Si es HOY, obtener TODAS las asignaciones ACTIVAS
+      if (targetDate === today) {
+        console.log("📊 Fetching ACTIVE assignments (not filtered by date)")
+        assignmentsResponse = await axios.get(`/api/assignments/active?driverId=${driverId}`)
+      } else {
+        // Si es una fecha específica del pasado, filtrar por esa fecha
+        console.log(`📊 Fetching assignments for specific date: ${targetDate}`)
+        assignmentsResponse = await axios.get(
+          `/api/assignments/dashboard?driverId=${driverId}&date=${targetDate}`
+        )
+      }
+
+      console.log(`✅ Loaded ${assignmentsResponse.data.length} assignments`)
+      
+      // Log each assignment for debugging
+      assignmentsResponse.data.forEach((assignment: any, index: number) => {
+        console.log(`📋 Assignment ${index + 1}:`, {
+          id: assignment.id,
+          truck: assignment.truck?.placa,
+          remaining: assignment.totalRemaining,
+          completed: assignment.isCompleted,
+          createdAt: assignment.createdAt,
+          clientAssignments: assignment.clientAssignments?.length || 0
+        })
+      })
+      
       setAssignments(assignmentsResponse.data)
+      setLastRefresh(new Date())
+
+      // ✅ Mostrar alerta si no hay asignaciones activas para hoy
+      if (targetDate === today && assignmentsResponse.data.length === 0) {
+        toast({
+          title: "📋 Sin asignaciones activas",
+          description: "No tienes asignaciones activas en este momento. Contacta al administrador si necesitas una asignación.",
+        })
+      }
+      
     } catch (error) {
-      console.error("Error refreshing data:", error)
+      console.error("❌ Error fetching data:", error)
+      
+      let errorMessage = "Error al cargar los datos"
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 400) {
+          errorMessage = "ID de conductor inválido"
+        } else if (error.response?.status === 403) {
+          errorMessage = "No tienes permisos para acceder a este panel"
+        } else if (error.response?.status === 404) {
+          errorMessage = "No se encontraron datos para este conductor"
+        }
+        console.error("❌ API Error details:", error.response?.data)
+      }
+      
+      setError(errorMessage)
+    } finally {
+      setLoading(false)
     }
   }
 
-  // ✅ New function to open modal for client assignment
+  // ✅ Cargar datos al inicializar
+  useEffect(() => {
+    fetchData()
+  }, [driverId])
+
+  // ✅ Cargar datos cuando cambie la fecha
+  useEffect(() => {
+    if (selectedDate) {
+      setLoading(true)
+      fetchData(selectedDate)
+    }
+  }, [selectedDate])
+
+  // ✅ Auto-refresh cada 5 minutos si es el día actual
+  useEffect(() => {
+    const today = new Date().toISOString().split("T")[0]
+    if (selectedDate === today) {
+      const interval = setInterval(() => {
+        console.log("🔄 Auto-refreshing current day assignments")
+        fetchData(selectedDate)
+      }, 5 * 60 * 1000) // 5 minutos
+
+      return () => clearInterval(interval)
+    }
+  }, [selectedDate])
+
+  // ✅ Funciones del modal
   const openClientAssignmentModal = (clientAssignment: ClientAssignment, assignment: ExtendedAssignment) => {
     setSelectedClientAssignment(clientAssignment)
     setIsModalOpen(true)
-    // Pre-fill with assignment's remaining fuel
     setMarcadorInicial(assignment.totalRemaining.toString())
     setMarcadorFinal("")
   }
@@ -164,23 +231,12 @@ export default function DespachoDriverPage() {
     setMarcadorFinal("")
   }
 
-  const openAssignmentDetail = (assignment: ExtendedAssignment) => {
-    setDetailAssignment(assignment)
-    setShowAssignmentDetail(true)
-  }
-
-  const closeAssignmentDetail = () => {
-    setShowAssignmentDetail(false)
-    setDetailAssignment(null)
-  }
-
   const calculateDeliveredAmount = () => {
     const inicial = Number.parseFloat(marcadorInicial) || 0
     const final = Number.parseFloat(marcadorFinal) || 0
     return inicial - final
   }
 
-  // ✅ New function to complete client assignment
   const completeClientAssignment = async () => {
     if (!selectedClientAssignment || !marcadorInicial || !marcadorFinal) {
       toast({
@@ -192,11 +248,9 @@ export default function DespachoDriverPage() {
     }
 
     const deliveredAmount = calculateDeliveredAmount()
-    const expectedAmount = Number.parseFloat(selectedClientAssignment.allocatedQuantity.toString())
-
     if (deliveredAmount <= 0) {
       toast({
-        title: "❌ Error",
+        title: "❌ Error", 
         description: "La cantidad entregada debe ser mayor a 0",
         variant: "destructive",
       })
@@ -205,14 +259,8 @@ export default function DespachoDriverPage() {
 
     setIsProcessing(true)
 
-    toast({
-      title: "⏳ Procesando...",
-      description: "Finalizando la entrega del cliente",
-    })
-
     try {
-      // Update the client assignment
-      const response = await axios.put(
+      await axios.put(
         `/api/assignments/${selectedClientAssignment.assignmentId}/clients/${selectedClientAssignment.id}`,
         {
           status: "completed",
@@ -221,46 +269,24 @@ export default function DespachoDriverPage() {
         }
       )
 
-      // Create a discharge record for tracking
-      try {
-        await axios.post(`/api/despacho/${driverId}`, {
-          assignmentId: selectedClientAssignment.assignmentId,
-          customerId: selectedClientAssignment.customerId,
-          totalDischarged: deliveredAmount,
-          marcadorInicial: Number.parseFloat(marcadorInicial),
-          marcadorFinal: Number.parseFloat(marcadorFinal),
-          status: "finalizado",
-          cantidadReal: deliveredAmount,
-        })
-      } catch (dischargeError) {
-        console.log("Note: Could not create discharge record, but client assignment updated successfully")
-      }
-
       toast({
         title: "✅ Entrega completada",
-        description: `${selectedClientAssignment.customer.companyname} - ${deliveredAmount.toFixed(2)} galones entregados`,
+        description: `${selectedClientAssignment.customer.companyname} - ${deliveredAmount.toFixed(2)} galones`,
       })
 
-      // Refresh data
-      await refreshData()
+      await fetchData(selectedDate)
       closeModal()
 
     } catch (error) {
-      console.error("Error completing client assignment:", error)
+      console.error("Error completing assignment:", error)
       
       let errorMessage = "Error al completar la entrega"
-      if (axios.isAxiosError(error)) {
-        if (error.response?.status === 400) {
-          errorMessage = error.response.data?.error || "Datos inválidos"
-        } else if (error.response?.status === 404) {
-          errorMessage = "Asignación no encontrada"
-        } else if (error.response?.status === 403) {
-          errorMessage = "No tienes permisos para completar esta entrega"
-        }
+      if (axios.isAxiosError(error) && error.response?.data?.error) {
+        errorMessage = error.response.data.error
       }
       
       toast({
-        title: "❌ Error al completar entrega",
+        title: "❌ Error",
         description: errorMessage,
         variant: "destructive",
       })
@@ -269,7 +295,7 @@ export default function DespachoDriverPage() {
     }
   }
 
-  // ✅ Get all pending client assignments across all assignments
+  // ✅ Obtener entregas para el día seleccionado
   const getAllPendingDeliveries = () => {
     const pendingDeliveries: (ClientAssignment & { assignment: ExtendedAssignment })[] = []
     
@@ -289,7 +315,6 @@ export default function DespachoDriverPage() {
     return pendingDeliveries
   }
 
-  // ✅ Get all completed deliveries
   const getAllCompletedDeliveries = () => {
     const completedDeliveries: (ClientAssignment & { assignment: ExtendedAssignment })[] = []
     
@@ -313,12 +338,15 @@ export default function DespachoDriverPage() {
   const completedDeliveries = getAllCompletedDeliveries()
   const totalDeliveries = pendingDeliveries.length + completedDeliveries.length
 
+  // ✅ Verificar si es día actual
+  const isToday = selectedDate === new Date().toISOString().split("T")[0]
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
-          <p className="text-gray-600">Cargando datos del despacho...</p>
+          <p className="text-gray-600">Cargando panel del conductor...</p>
         </div>
       </div>
     )
@@ -337,7 +365,8 @@ export default function DespachoDriverPage() {
           <CardContent className="space-y-4">
             <p className="text-gray-600">{error}</p>
             <div className="space-y-2">
-              <Button onClick={() => window.location.reload()} className="w-full">
+              <Button onClick={() => fetchData(selectedDate)} className="w-full">
+                <RefreshCw className="h-4 w-4 mr-2" />
                 Reintentar
               </Button>
               <Button asChild variant="outline" className="w-full">
@@ -346,158 +375,6 @@ export default function DespachoDriverPage() {
             </div>
           </CardContent>
         </Card>
-      </div>
-    )
-  }
-
-  // Assignment Detail Modal
-  if (showAssignmentDetail && detailAssignment) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <header className="bg-white border-b border-gray-200 shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center h-16">
-              <div className="flex items-center space-x-3">
-                <Button onClick={closeAssignmentDetail} variant="outline" size="sm">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Volver
-                </Button>
-                <FileText className="h-8 w-8 text-blue-600" />
-                <div>
-                  <h1 className="text-xl font-bold text-gray-900">Asignación #{detailAssignment.id}</h1>
-                  <p className="text-sm text-gray-600">
-                    {detailAssignment.truck.placa} - {detailAssignment.fuelType}
-                  </p>
-                </div>
-              </div>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Target className="h-5 w-5 text-blue-600" />
-                    Información de Entrega
-                  </CardTitle>
-                  <CardDescription>Entregas asignadas por el administrador</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3 text-sm text-gray-600">
-                    <p>• Las entregas son asignadas por el administrador</p>
-                    <p>• Tu función es realizar y finalizar las entregas</p>
-                    <p>• Registra los marcadores inicial y final correctamente</p>
-                    <p>• Contacta al administrador para nuevas asignaciones</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-        </header>
-
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          <div className="grid gap-6 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Información de la Asignación</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-sm font-medium text-gray-600">Total Cargado</Label>
-                    <p className="text-2xl font-bold text-blue-600">{detailAssignment.totalLoaded.toString()} gal</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium text-gray-600">Remanente</Label>
-                    <p className="text-2xl font-bold text-orange-600">
-                      {detailAssignment.totalRemaining.toString()} gal
-                    </p>
-                  </div>
-                </div>
-
-                <div>
-                  <Label className="text-sm font-medium text-gray-600">Progreso</Label>
-                  <div className="mt-1">
-                    <div className="bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full"
-                        style={{
-                          width: `${((Number(detailAssignment.totalLoaded) - Number(detailAssignment.totalRemaining)) / Number(detailAssignment.totalLoaded)) * 100}%`,
-                        }}
-                      ></div>
-                    </div>
-                    <p className="text-sm text-gray-600 mt-1">
-                      {(
-                        ((Number(detailAssignment.totalLoaded) - Number(detailAssignment.totalRemaining)) /
-                          Number(detailAssignment.totalLoaded)) *
-                        100
-                      ).toFixed(1)}
-                      % completado
-                    </p>
-                  </div>
-                </div>
-
-                {detailAssignment.notes && (
-                  <div>
-                    <Label className="text-sm font-medium text-gray-600">Notas</Label>
-                    <p className="text-gray-800 bg-gray-50 p-3 rounded-lg mt-1">{detailAssignment.notes}</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Entregas Asignadas</CardTitle>
-                <CardDescription>
-                  {detailAssignment.clientAssignments?.length || 0} entregas programadas
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {detailAssignment.clientAssignments && detailAssignment.clientAssignments.length > 0 ? (
-                  <div className="space-y-3">
-                    {detailAssignment.clientAssignments.map((clientAssignment) => (
-                      <div key={clientAssignment.id} className="border rounded-lg p-3">
-                        <div className="flex justify-between items-start mb-2">
-                          <h4 className="font-medium">{clientAssignment.customer?.companyname}</h4>
-                          <Badge
-                            className={
-                              clientAssignment.status === "completed"
-                                ? "bg-green-100 text-green-700"
-                                : "bg-yellow-100 text-yellow-700"
-                            }
-                          >
-                            {clientAssignment.status === "completed" ? "Completado" : "Pendiente"}
-                          </Badge>
-                        </div>
-                        <p className="text-sm text-gray-600">
-                          Cantidad asignada: {Number(clientAssignment.allocatedQuantity).toFixed(2)} gal
-                        </p>
-                        {clientAssignment.status === "completed" && (
-                          <p className="text-sm text-green-600">
-                            Cantidad entregada: {Number(clientAssignment.deliveredQuantity).toFixed(2)} gal
-                          </p>
-                        )}
-                        <p className="text-xs text-gray-500 mt-1">
-                          RUC: {clientAssignment.customer?.ruc} • Dirección: {clientAssignment.customer?.address}
-                        </p>
-                        
-                        {clientAssignment.status === "pending" && (
-                          <Button
-                            onClick={() => openClientAssignmentModal(clientAssignment, detailAssignment)}
-                            size="sm"
-                            className="w-full mt-2 bg-green-600 hover:bg-green-700"
-                          >
-                            <Target className="h-4 w-4 mr-2" />
-                            Completar Entrega
-                          </Button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-gray-500 text-center py-4">No hay entregas asignadas para esta asignación</p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </main>
       </div>
     )
   }
@@ -514,13 +391,7 @@ export default function DespachoDriverPage() {
                   Volver
                 </Link>
               </Button>
-              <Link
-                href="/"
-                className="flex items-center space-x-3 hover:opacity-80 transition-opacity cursor-pointer"
-                title="Ir al inicio"
-              >
               <Truck className="h-8 w-8 text-blue-600" />
-              </Link>
               <div>
                 <h1 className="text-xl font-bold text-gray-900">Panel del Conductor</h1>
                 <p className="text-sm text-gray-600">
@@ -529,16 +400,94 @@ export default function DespachoDriverPage() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <Badge className="bg-green-100 text-green-800">
-                <Calendar className="h-3 w-3 mr-1" />
-                {new Date().toLocaleDateString()}
+              {/* ✅ Selector de fecha */}
+              <div className="flex items-center space-x-2">
+                <Calendar className="h-4 w-4 text-gray-600" />
+                <Input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="w-auto"
+                />
+              </div>
+              
+              {/* ✅ Indicador de día actual */}
+              <Badge className={isToday ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-700"}>
+                {isToday ? "Hoy" : "Histórico"}
               </Badge>
+              
+              {/* ✅ Botón de refresh */}
+              <Button
+                onClick={() => fetchData(selectedDate)}
+                variant="outline"
+                size="sm"
+                className="flex items-center gap-2"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Actualizar
+              </Button>
             </div>
           </div>
         </div>
       </header>
 
+      {/* ✅ Alert para fechas pasadas */}
+      {!isToday && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+          <Alert>
+            <Calendar className="h-4 w-4" />
+            <AlertDescription>
+              Estás viendo datos históricos del {new Date(selectedDate).toLocaleDateString()}. 
+              Las entregas de días anteriores se completan automáticamente.
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* ✅ Header con estadísticas */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-center">
+                <FileText className="h-8 w-8 text-blue-600 mx-auto mb-2" />
+                <p className="text-2xl font-bold text-blue-600">{assignments.length}</p>
+                <p className="text-sm text-gray-600">Asignaciones</p>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-center">
+                <Clock className="h-8 w-8 text-yellow-600 mx-auto mb-2" />
+                <p className="text-2xl font-bold text-yellow-600">{pendingDeliveries.length}</p>
+                <p className="text-sm text-gray-600">Entregas Pendientes</p>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-center">
+                <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
+                <p className="text-2xl font-bold text-green-600">{completedDeliveries.length}</p>
+                <p className="text-sm text-gray-600">Entregas Completadas</p>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-center">
+                <RefreshCw className="h-8 w-8 text-gray-600 mx-auto mb-2" />
+                <p className="text-xs text-gray-600">Última actualización</p>
+                <p className="text-sm font-medium">{lastRefresh.toLocaleTimeString()}</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         <Tabs defaultValue="entregas" className="space-y-6">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="entregas" className="flex items-center gap-2">
@@ -551,26 +500,25 @@ export default function DespachoDriverPage() {
             </TabsTrigger>
           </TabsList>
 
-          {/* ✅ New Entregas Tab */}
           <TabsContent value="entregas" className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-gray-900">Entregas del Día</h2>
-              <Badge variant="outline" className="bg-blue-50 text-blue-700">
-                {completedDeliveries.length} de {totalDeliveries} completadas
-              </Badge>
-            </div>
-
             {totalDeliveries === 0 ? (
               <Card className="text-center">
                 <CardContent className="pt-6">
                   <MapPin className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No hay entregas para hoy</h3>
-                  <p className="text-gray-600">Las entregas aparecerán cuando el administrador te asigne clientes específicos</p>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    {isToday ? "No hay entregas para hoy" : `No hay entregas para ${new Date(selectedDate).toLocaleDateString()}`}
+                  </h3>
+                  <p className="text-gray-600">
+                    {isToday 
+                      ? "Las entregas aparecerán cuando el administrador te asigne clientes específicos" 
+                      : "No se encontraron entregas para esta fecha"
+                    }
+                  </p>
                 </CardContent>
               </Card>
             ) : (
               <div className="space-y-6">
-                {/* Pending Deliveries */}
+                {/* Entregas Pendientes */}
                 {pendingDeliveries.length > 0 && (
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
@@ -611,13 +559,15 @@ export default function DespachoDriverPage() {
                               <p>Dirección: {delivery.customer?.address || "N/A"}</p>
                             </div>
 
-                            <Button
-                              onClick={() => openClientAssignmentModal(delivery, delivery.assignment)}
-                              className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
-                            >
-                              <Target className="h-4 w-4 mr-2" />
-                              Completar Entrega
-                            </Button>
+                            {isToday && (
+                              <Button
+                                onClick={() => openClientAssignmentModal(delivery, delivery.assignment)}
+                                className="w-full bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700"
+                              >
+                                <Target className="h-4 w-4 mr-2" />
+                                Completar Entrega
+                              </Button>
+                            )}
                           </CardContent>
                         </Card>
                       ))}
@@ -625,7 +575,7 @@ export default function DespachoDriverPage() {
                   </div>
                 )}
 
-                {/* Completed Deliveries */}
+                {/* Entregas Completadas */}
                 {completedDeliveries.length > 0 && (
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
@@ -674,20 +624,18 @@ export default function DespachoDriverPage() {
           </TabsContent>
 
           <TabsContent value="asignaciones" className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-gray-900">Asignaciones del Día</h2>
-              <Badge variant="outline" className="bg-green-50 text-green-700">
-                {assignments.filter((a) => a.isCompleted).length} de {assignments.length} completadas
-              </Badge>
-            </div>
-
             {assignments.length === 0 ? (
               <Card className="text-center">
                 <CardContent className="pt-6">
                   <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">No hay asignaciones para hoy</h3>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    {isToday ? "No hay asignaciones para hoy" : `No hay asignaciones para ${new Date(selectedDate).toLocaleDateString()}`}
+                  </h3>
                   <p className="text-gray-600">
-                    No tienes asignaciones programadas para el día de hoy ({new Date().toLocaleDateString()}).
+                    {isToday 
+                      ? "No tienes asignaciones programadas para el día de hoy" 
+                      : "No se encontraron asignaciones para esta fecha"
+                    }
                   </p>
                 </CardContent>
               </Card>
@@ -718,7 +666,12 @@ export default function DespachoDriverPage() {
                           )}
                         </div>
                       </div>
-                      <CardDescription>Creada: {new Date(assignment.createdAt).toLocaleDateString()}</CardDescription>
+                      <CardDescription>
+                        Creada: {new Date(assignment.createdAt).toLocaleDateString()}
+                        {assignment.completedAt && (
+                          <> • Completada: {new Date(assignment.completedAt).toLocaleDateString()}</>
+                        )}
+                      </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="grid grid-cols-3 gap-4">
@@ -761,24 +714,32 @@ export default function DespachoDriverPage() {
                         </div>
                       </div>
 
-                      <div className="flex gap-2 pt-2">
-                        <Button
-                          onClick={() => openAssignmentDetail(assignment)}
-                          variant="outline"
-                          size="sm"
-                          className="flex-1"
-                        >
-                          <Eye className="h-4 w-4 mr-2" />
-                          Ver Detalles
-                        </Button>
-                        {assignment.clientAssignments && assignment.clientAssignments.length > 0 ? (
-                          <Badge className="bg-blue-100 text-blue-700">
-                            {assignment.clientAssignments.filter(ca => ca.status === "pending").length} pendientes
-                          </Badge>
-                        ) : (
-                          <Badge className="bg-gray-100 text-gray-700">Sin entregas asignadas</Badge>
-                        )}
-                      </div>
+                      {assignment.clientAssignments && assignment.clientAssignments.length > 0 ? (
+                        <div className="text-sm text-gray-600">
+                          <p className="font-medium mb-2">Entregas asignadas:</p>
+                          <div className="space-y-1">
+                            {assignment.clientAssignments.map((ca) => (
+                              <div key={ca.id} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                                <span>{ca.customer.companyname}</span>
+                                <Badge className={
+                                  ca.status === "completed" 
+                                    ? "bg-green-100 text-green-700" 
+                                    : ca.status === "expired"
+                                    ? "bg-red-100 text-red-700"
+                                    : "bg-yellow-100 text-yellow-700"
+                                }>
+                                  {ca.status === "completed" ? "Completada" : 
+                                   ca.status === "expired" ? "Expirada" : "Pendiente"}
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-500 text-center p-4 bg-gray-50 rounded">
+                          Sin entregas específicas asignadas
+                        </div>
+                      )}
 
                       {assignment.notes && (
                         <div className="bg-gray-50 p-3 rounded-lg">
@@ -796,7 +757,7 @@ export default function DespachoDriverPage() {
         </Tabs>
       </main>
 
-      {/* ✅ Updated Modal for Client Assignment Completion */}
+      {/* ✅ Modal para completar entrega */}
       {isModalOpen && selectedClientAssignment && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <Card className="w-full max-w-md max-h-[90vh] overflow-y-auto">

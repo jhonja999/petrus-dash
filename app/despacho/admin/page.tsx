@@ -66,59 +66,78 @@ export default function DespachoAdminPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        setError(null);
-        console.log(`🔄 Admin: Obteniendo todos los datos de despacho`);
+        setError(null)
+        console.log(`🔄 Admin: Obteniendo todos los datos de despacho`)
+
+        // Auto-completar asignaciones antiguas de todos los conductores
+        try {
+          const driversResponse = await axios.get("/api/users?role=Operador")
+          const operatorDrivers = driversResponse.data
+
+          for (const driver of operatorDrivers) {
+            try {
+              await axios.post('/api/assignments/auto-complete', { 
+                driverId: driver.id 
+              })
+            } catch (error) {
+              console.log(`⚠️ Auto-complete failed for driver ${driver.id}`)
+            }
+          }
+          console.log("✅ Auto-completed assignments for all drivers")
+        } catch (error) {
+          console.log("⚠️ Failed to auto-complete assignments")
+        }
 
         // Hacer las llamadas por separado para identificar cuál está fallando
         try {
-          const dischargesResponse = await axios.get("/api/discharges");
-          console.log(`✅ Admin: Despachos obtenidos`, dischargesResponse.data);
+          const dischargesResponse = await axios.get("/api/discharges")
+          console.log(`✅ Admin: Despachos obtenidos`, dischargesResponse.data)
           
           // La API puede retornar un array directo o un objeto con discharges
           const dischargesData = Array.isArray(dischargesResponse.data) 
             ? dischargesResponse.data 
-            : dischargesResponse.data.discharges || [];
+            : dischargesResponse.data.discharges || []
             
-          setAllDischarges(dischargesData);
+          setAllDischarges(dischargesData)
         } catch (error) {
-          console.error("❌ Admin: Error al obtener despachos:", error);
-          setAllDischarges([]);
+          console.error("❌ Admin: Error al obtener despachos:", error)
+          setAllDischarges([])
         }
 
         try {
-          const assignmentsResponse = await axios.get("/api/assignments");
-          console.log(`✅ Admin: Asignaciones obtenidas`, assignmentsResponse.data);
+          const assignmentsResponse = await axios.get("/api/assignments")
+          console.log(`✅ Admin: Asignaciones obtenidas`, assignmentsResponse.data)
           
           // La API puede retornar un array directo o un objeto con assignments
           const assignmentsData = Array.isArray(assignmentsResponse.data)
             ? assignmentsResponse.data
-            : assignmentsResponse.data.assignments || [];
+            : assignmentsResponse.data.assignments || []
             
-          setAllAssignments(assignmentsData);
+          setAllAssignments(assignmentsData)
         } catch (error) {
-          console.error("❌ Admin: Error al obtener asignaciones:", error);
-          setAllAssignments([]);
+          console.error("❌ Admin: Error al obtener asignaciones:", error)
+          setAllAssignments([])
         }
 
         try {
-          const driversResponse = await axios.get("/api/users?role=Operador");
-          console.log(`✅ Admin: Conductores obtenidos`);
-          setDrivers(driversResponse.data);
+          const driversResponse = await axios.get("/api/users?role=Operador")
+          console.log(`✅ Admin: Conductores obtenidos`)
+          setDrivers(driversResponse.data)
         } catch (error) {
-          console.error("❌ Admin: Error al obtener conductores:", error);
-          setDrivers([]);
+          console.error("❌ Admin: Error al obtener conductores:", error)
+          setDrivers([])
         }
 
       } catch (error) {
-        console.error("❌ Admin: Error general al obtener datos:", error);
-        setError("Error al cargar los datos");
+        console.error("❌ Admin: Error general al obtener datos:", error)
+        setError("Error al cargar los datos")
       } finally {
-        setLoading(false);
+        setLoading(false)
       }
-    };
+    }
 
-    fetchData();
-  }, []);
+    fetchData()
+  }, [])
 
   // Filtrar datos
   const filteredDischarges = allDischarges.filter((discharge) => {
