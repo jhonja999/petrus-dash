@@ -4,7 +4,6 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import DashboardLayout from "@/components/shared/DashboardLayout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -174,17 +173,14 @@ export default function AssignmentDetailPage() {
 
   if (loading) {
     return (
-      <DashboardLayout>
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
         </div>
-      </DashboardLayout>
     )
   }
 
   if (!assignment) {
     return (
-      <DashboardLayout>
         <div className="text-center py-12">
           <h2 className="text-xl font-semibold text-gray-900">Asignación no encontrada</h2>
           <p className="text-gray-600 mt-2">La asignación solicitada no existe.</p>
@@ -192,7 +188,6 @@ export default function AssignmentDetailPage() {
             <Link href="/assignments">Volver a Asignaciones</Link>
           </Button>
         </div>
-      </DashboardLayout>
     )
   }
 
@@ -218,7 +213,6 @@ export default function AssignmentDetailPage() {
   }, 0)
 
   return (
-    <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -476,6 +470,5 @@ export default function AssignmentDetailPage() {
           </div>
         </div>
       </div>
-    </DashboardLayout>
   )
 }

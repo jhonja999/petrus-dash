@@ -29,9 +29,11 @@ export function useTruckState() {
     try {
       await axios.put(`/api/trucks/${truckId}`, { state: newState })
       setTrucks((prev) => prev.map((truck) => (truck.id === truckId ? { ...truck, state: newState as any } : truck)))
+      return true
     } catch (err) {
       setError("Error al actualizar estado del camión")
       console.error(err)
+      return false
     }
   }
 

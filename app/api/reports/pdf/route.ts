@@ -1,7 +1,9 @@
-// app/api/reports/route.ts
+// app/api/reports/pdf/route.ts
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { verifyToken } from "@/lib/jwt"
+import { readFile } from "fs/promises"
+import { join } from "path"
 
 export async function GET(request: NextRequest) {
   try {
@@ -22,7 +24,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    
+
     // Parse query parameters
     const date = searchParams.get("date")
     const startDate = searchParams.get("startDate")
@@ -31,7 +33,7 @@ export async function GET(request: NextRequest) {
     const driverId = searchParams.get("driverId")
     const fuelType = searchParams.get("fuelType")
 
-    console.log("Report params:", { date, startDate, endDate, truckId, driverId, fuelType })
+    console.log("PDF Assignment report params:", { date, startDate, endDate, truckId, driverId, fuelType })
 
     // Build where clause for filtering
     const where: any = {}
@@ -41,7 +43,7 @@ export async function GET(request: NextRequest) {
       const targetDate = new Date(date)
       const nextDay = new Date(targetDate)
       nextDay.setDate(nextDay.getDate() + 1)
-      
+
       where.createdAt = {
         gte: targetDate,
         lt: nextDay,
@@ -52,7 +54,7 @@ export async function GET(request: NextRequest) {
       if (endDate) {
         end.setDate(end.getDate() + 1) // Include end date
       }
-      
+
       where.createdAt = {
         gte: start,
         lt: end,
@@ -61,11 +63,11 @@ export async function GET(request: NextRequest) {
 
     // Other filters
     if (truckId && truckId !== "all") {
-      where.truckId = parseInt(truckId)
+      where.truckId = Number.parseInt(truckId)
     }
 
     if (driverId && driverId !== "all") {
-      where.driverId = parseInt(driverId)
+      where.driverId = Number.parseInt(driverId)
     }
 
     if (fuelType && fuelType !== "all") {
@@ -115,20 +117,18 @@ export async function GET(request: NextRequest) {
 
     // Calculate summary statistics
     const totalFuelLoaded = assignments.reduce(
-      (sum, assignment) => sum + parseFloat(assignment.totalLoaded.toString()),
-      0
+      (sum, assignment) => sum + Number.parseFloat(assignment.totalLoaded.toString()),
+      0,
     )
 
     const totalFuelRemaining = assignments.reduce(
-      (sum, assignment) => sum + parseFloat(assignment.totalRemaining.toString()),
-      0
+      (sum, assignment) => sum + Number.parseFloat(assignment.totalRemaining.toString()),
+      0,
     )
 
     const totalFuelDischarged = totalFuelLoaded - totalFuelRemaining
 
-    const completedAssignments = assignments.filter(
-      (assignment) => assignment.isCompleted
-    ).length
+    const completedAssignments = assignments.filter((assignment) => assignment.isCompleted).length
 
     const pendingAssignments = assignments.length - completedAssignments
 
@@ -137,94 +137,96 @@ export async function GET(request: NextRequest) {
     const driversActive = new Set(assignments.map((a) => a.driverId)).size
 
     // Calculate efficiency percentage
-    const efficiencyPercentage = totalFuelLoaded > 0 
-      ? (totalFuelDischarged / totalFuelLoaded) * 100 
-      : 0
+    const efficiencyPercentage = totalFuelLoaded > 0 ? (totalFuelDischarged / totalFuelLoaded) * 100 : 0
 
     // Additional statistics
-    const averageFuelPerAssignment = assignments.length > 0 
-      ? totalFuelLoaded / assignments.length 
-      : 0
+    const averageFuelPerAssignment = assignments.length > 0 ? totalFuelLoaded / assignments.length : 0
 
     const dischargeStatistics = {
       totalDischarges: assignments.reduce((sum, a) => sum + a.discharges.length, 0),
       completedDischarges: assignments.reduce(
-        (sum, a) => sum + a.discharges.filter(d => d.status === "finalizado").length, 
-        0
+        (sum, a) => sum + a.discharges.filter((d) => d.status === "finalizado").length,
+        0,
       ),
       pendingDischarges: assignments.reduce(
-        (sum, a) => sum + a.discharges.filter(d => d.status === "pendiente").length, 
-        0
+        (sum, a) => sum + a.discharges.filter((d) => d.status === "pendiente").length,
+        0,
       ),
     }
 
-    // Fuel type breakdown
-    const fuelTypeBreakdown = assignments.reduce((acc, assignment) => {
-      const fuel = assignment.fuelType
-      if (!acc[fuel]) {
-        acc[fuel] = {
-          count: 0,
-          totalLoaded: 0,
-          totalRemaining: 0,
-        }
-      }
-      acc[fuel].count++
-      acc[fuel].totalLoaded += parseFloat(assignment.totalLoaded.toString())
-      acc[fuel].totalRemaining += parseFloat(assignment.totalRemaining.toString())
-      return acc
-    }, {} as Record<string, { count: number; totalLoaded: number; totalRemaining: number }>)
+    // Generate date range text
+    const dateRangeText = date
+      ? new Date(date).toLocaleDateString("es-ES")
+      : startDate
+        ? `${new Date(startDate).toLocaleDateString("es-ES")} - ${new Date(endDate || startDate).toLocaleDateString("es-ES")}`
+        : "Rango no especificado"
 
-    const reportData = {
-      assignments,
-      summary: {
-        totalFuelLoaded,
-        totalFuelDischarged,
-        totalFuelRemaining,
-        completedAssignments,
-        pendingAssignments,
-        trucksUsed,
-        driversActive,
-        efficiencyPercentage,
-        averageFuelPerAssignment,
-        ...dischargeStatistics,
-      },
-      breakdown: {
-        fuelTypes: fuelTypeBreakdown,
-      },
-      metadata: {
-        totalRecords: assignments.length,
-        dateRange: {
-          start: startDate || date,
-          end: endDate || date,
-        },
-        filters: {
-          truckId: truckId !== "all" ? truckId : null,
-          driverId: driverId !== "all" ? driverId : null,
-          fuelType: fuelType !== "all" ? fuelType : null,
-        },
-        generatedAt: new Date().toISOString(),
-      },
+    // Try to read watermark file
+    let watermarkBase64 = ""
+    try {
+      const watermarkPath = join(process.cwd(), "public", "watermark.webp")
+      const watermarkBuffer = await readFile(watermarkPath)
+      watermarkBase64 = `data:image/webp;base64,${watermarkBuffer.toString("base64")}`
+    } catch (error) {
+      console.warn("Could not load watermark file:", error)
     }
 
-    console.log("Report generated successfully")
-    return NextResponse.json(reportData)
+    // Create PDF data structure for client-side generation
+    const pdfData = {
+      title: "Reporte de Asignaciones de Combustible",
+      dateRange: dateRangeText,
+      generatedAt: new Date().toLocaleString("es-ES"),
+      watermark: watermarkBase64,
+      summary: {
+        totalFuelLoaded: totalFuelLoaded.toFixed(2),
+        totalFuelDischarged: totalFuelDischarged.toFixed(2),
+        totalFuelRemaining: totalFuelRemaining.toFixed(2),
+        completedAssignments,
+        pendingAssignments,
+        totalAssignments: assignments.length,
+        trucksUsed,
+        driversActive,
+        efficiencyPercentage: efficiencyPercentage.toFixed(1),
+        averageFuelPerAssignment: averageFuelPerAssignment.toFixed(1),
+        ...dischargeStatistics,
+      },
+      assignments: assignments.map((assignment) => {
+        const totalLoaded = Number(assignment.totalLoaded)
+        const totalRemaining = Number(assignment.totalRemaining)
+        const discharged = totalLoaded - totalRemaining
 
+        return {
+          date: new Date(assignment.createdAt).toLocaleDateString("es-ES"),
+          truck: assignment.truck.placa,
+          driver: `${assignment.driver.name} ${assignment.driver.lastname}`,
+          fuelType: assignment.fuelType,
+          loaded: totalLoaded.toFixed(2),
+          discharged: discharged.toFixed(2),
+          remaining: totalRemaining.toFixed(2),
+          status: assignment.isCompleted ? "Completado" : "Pendiente",
+          statusClass: assignment.isCompleted ? "completed" : "pending",
+        }
+      }),
+    }
+
+    console.log("PDF assignment report data prepared successfully")
+    return NextResponse.json(pdfData)
   } catch (error) {
-    console.error("Error generating report:", error)
-    
+    console.error("Error generating PDF assignment report data:", error)
+
     // More detailed error logging
     if (error instanceof Error) {
       console.error("Error name:", error.name)
       console.error("Error message:", error.message)
       console.error("Error stack:", error.stack)
     }
-    
+
     return NextResponse.json(
-      { 
+      {
         error: "Internal server error",
-        details: error instanceof Error ? error.message : "Unknown error"
+        details: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 }
+      { status: 500 },
     )
   }
 }

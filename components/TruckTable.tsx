@@ -12,6 +12,7 @@ import type { Truck } from "@/types/globals"
 interface TruckTableProps {
   trucks: Truck[]
   onUpdateState?: (truckId: number, newState: string) => void
+  onRefreshTrucks?: () => void
   isAdmin?: boolean
 }
 
@@ -32,7 +33,7 @@ const fuelTypeLabels = {
   ELECTRICA: "Eléctrica",
 }
 
-export function TruckTable({ trucks, onUpdateState, isAdmin = false }: TruckTableProps) {
+export function TruckTable({ trucks, onUpdateState, onRefreshTrucks, isAdmin = false }: TruckTableProps) {
   const [selectedStates, setSelectedStates] = useState<Record<number, string>>({})
 
   const handleStateChange = (truckId: number, newState: string) => {

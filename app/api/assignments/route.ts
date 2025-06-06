@@ -1,268 +1,408 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { verifyToken, isAdmin } from "@/lib/jwt"
+import { verifyToken } from "@/lib/jwt"
 import { cookies } from "next/headers"
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    // Verify authentication
-    const cookieStore = await cookies()
-    const token = cookieStore.get("token")?.value
-
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const user = await verifyToken(token)
-    if (!user) {
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 })
-    }
-
     const { searchParams } = new URL(request.url)
     const driverId = searchParams.get("driverId")
-    const dateFilter = searchParams.get("date")
+    const date = searchParams.get("date")
     const page = Number.parseInt(searchParams.get("page") || "1")
     const limit = Number.parseInt(searchParams.get("limit") || "10")
 
-    console.log(
-      `🔍 Assignments API: Query params - driverId: ${driverId}, date: ${dateFilter}, page: ${page}, limit: ${limit}`,
-    )
+    console.log("🔍 Assignments API: Query params -", { driverId, date, page, limit })
+
+    const skip = (page - 1) * limit
 
     // Build where clause
     const where: any = {}
 
-    // Filter by driver ID if provided
-    if (driverId) {
-      const driverIdNum = Number.parseInt(driverId)
-      if (isNaN(driverIdNum)) {
-        return NextResponse.json({ error: "Invalid driver ID format" }, { status: 400 })
-      }
-      where.driverId = driverIdNum
-      console.log(`🎯 Assignments API: Filtering by driverId: ${driverIdNum}`)
+    if (driverId && driverId !== "null") {
+      where.driverId = Number.parseInt(driverId)
     }
 
-    // Filter by date if provided
-    if (dateFilter) {
-      const startDate = new Date(dateFilter)
-      const endDate = new Date(dateFilter)
-      endDate.setDate(endDate.getDate() + 1)
+    if (date) {
+      const targetDate = new Date(date)
+      const nextDay = new Date(targetDate)
+      nextDay.setDate(nextDay.getDate() + 1)
 
       where.createdAt = {
-        gte: startDate,
-        lt: endDate,
-      }
-      console.log(`📅 Assignments API: Filtering by date range: ${startDate.toISOString()} to ${endDate.toISOString()}`)
-    }
-
-    // Check permissions for driver-specific requests
-    if (driverId && !isAdmin(user)) {
-      if (user.id !== Number.parseInt(driverId)) {
-        return NextResponse.json({ error: "Access denied. You can only view your own assignments." }, { status: 403 })
+        gte: targetDate,
+        lt: nextDay,
       }
     }
 
-    console.log(`🔍 Assignments API: Final where clause:`, where)
+    console.log("🔍 Assignments API: Final where clause:", where)
 
-    // If filtering by specific driver, return simple array
-    if (driverId) {
-      const assignments = await prisma.assignment.findMany({
-        where,
-        include: {
-          truck: {
-            select: {
-              id: true,
-              placa: true,
-              // Removed 'model' field as it doesn't exist in the schema
-            },
-          },
-          driver: {
-            select: {
-              id: true,
-              name: true,
-              lastname: true,
-              dni: true,
-            },
-          },
-          discharges: {
-            include: {
-              customer: {
-                select: {
-                  id: true,
-                  companyname: true,
-                  ruc: true,
-                },
-              },
-            },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-      })
-
-      console.log(`✅ Assignments API: Found ${assignments.length} assignments for driver ${driverId}`)
-      return NextResponse.json(assignments)
-    }
-
-    // For admin requests without specific driver, return paginated results
-    const skip = (page - 1) * limit
-
-    const [assignments, total] = await Promise.all([
-      prisma.assignment.findMany({
-        where,
-        include: {
-          truck: {
-            select: {
-              id: true,
-              placa: true,
-              // Removed 'model' field as it doesn't exist in the schema
-            },
-          },
-          driver: {
-            select: {
-              id: true,
-              name: true,
-              lastname: true,
-              dni: true,
-            },
-          },
-          discharges: {
-            include: {
-              customer: {
-                select: {
-                  id: true,
-                  companyname: true,
-                  ruc: true,
-                },
-              },
-            },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-        skip,
-        take: limit,
-      }),
-      prisma.assignment.count({ where }),
-    ])
-
-    console.log(`✅ Assignments API: Found ${assignments.length} assignments (total: ${total})`)
-
-    return NextResponse.json({
-      assignments,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    })
-  } catch (error) {
-    console.error("❌ Assignments API: Error fetching assignments:", error)
-    return NextResponse.json(
-      {
-        error: "Internal server error",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    )
-  }
-}
-
-export async function POST(request: Request) {
-  try {
-    // Verify authentication
-    const cookieStore = await cookies()
-    const token = cookieStore.get("token")?.value
-
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const user = await verifyToken(token)
-    if (!user || !isAdmin(user)) {
-      return NextResponse.json({ error: "Access denied. Admin privileges required." }, { status: 403 })
-    }
-
-    const body = await request.json()
-    const { driverId, truckId, totalLoaded, fuelType, notes } = body
-
-    // Validation
-    if (!driverId || !truckId || !totalLoaded || !fuelType) {
-      return NextResponse.json(
-        {
-          error: "Missing required fields (driverId, truckId, totalLoaded, fuelType)",
-        },
-        { status: 400 },
-      )
-    }
-
-    if (isNaN(totalLoaded) || totalLoaded <= 0) {
-      return NextResponse.json({ error: "Total loaded must be a positive number" }, { status: 400 })
-    }
-
-    // Verify driver exists and is active
-    const driver = await prisma.user.findUnique({
-      where: { id: Number.parseInt(driverId) },
-    })
-
-    if (!driver || driver.role !== "Operador" || driver.state !== "Activo") {
-      return NextResponse.json({ error: "Driver not found or not active" }, { status: 404 })
-    }
-
-    // Verify truck exists and is available
-    const truck = await prisma.truck.findUnique({
-      where: { id: Number.parseInt(truckId) },
-    })
-
-    if (!truck || truck.state !== "Activo") {
-      return NextResponse.json({ error: "Truck not found or not available" }, { status: 404 })
-    }
-
-    // Create assignment
-    const newAssignment = await prisma.assignment.create({
-      data: {
-        driverId: Number.parseInt(driverId),
-        truckId: Number.parseInt(truckId),
-        totalLoaded: Number.parseFloat(totalLoaded),
-        totalRemaining: Number.parseFloat(totalLoaded),
-        fuelType,
-        notes: notes || null,
-      },
+    // Get assignments with proper completion status verification
+    const assignments = await prisma.assignment.findMany({
+      where,
       include: {
-        truck: {
-          select: {
-            id: true,
-            placa: true,
-            // Removed 'model' field as it doesn't exist in the schema
-          },
-        },
         driver: {
           select: {
             id: true,
             name: true,
             lastname: true,
-            dni: true,
+            role: true,
           },
         },
-        discharges: true,
+        truck: {
+          select: {
+            id: true,
+            placa: true,
+            typefuel: true,
+            capacitygal: true,
+            state: true,
+          },
+        },
+        clientAssignments: {
+          include: {
+            customer: {
+              select: {
+                id: true,
+                companyname: true,
+                ruc: true,
+              },
+            },
+          },
+        },
+        discharges: {
+          include: {
+            customer: {
+              select: {
+                id: true,
+                companyname: true,
+                ruc: true,
+              },
+            },
+          },
+        },
       },
+      orderBy: {
+        createdAt: "desc",
+      },
+      skip,
+      take: limit,
     })
 
-    // Update truck status to "Asignado"
-    await prisma.truck.update({
-      where: { id: Number.parseInt(truckId) },
-      data: { state: "Asignado" },
-    })
+    // Verify and fix completion status for each assignment
+    const correctedAssignments = await Promise.all(
+      assignments.map(async (assignment) => {
+        const clientAssignments = assignment.clientAssignments
 
-    console.log(`✅ Assignments API: Created assignment ${newAssignment.id} for driver ${driverId}`)
+        if (clientAssignments.length > 0) {
+          // Check if all client assignments are actually completed
+          const allCompleted = clientAssignments.every((ca) => ca.status === "completed")
 
-    return NextResponse.json(newAssignment, { status: 201 })
-  } catch (error) {
-    console.error("❌ Assignments API: Error creating assignment:", error)
-    return NextResponse.json(
-      {
-        error: "Internal server error",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
+          // If assignment is marked as completed but not all client assignments are completed
+          if (assignment.isCompleted && !allCompleted) {
+            console.log(`🔧 Fixing assignment ${assignment.id}: marked completed but has pending deliveries`)
+
+            // Fix the assignment status
+            const updatedAssignment = await prisma.assignment.update({
+              where: { id: assignment.id },
+              data: {
+                isCompleted: false,
+                completedAt: null,
+              },
+              include: {
+                driver: {
+                  select: {
+                    id: true,
+                    name: true,
+                    lastname: true,
+                    role: true,
+                  },
+                },
+                truck: {
+                  select: {
+                    id: true,
+                    placa: true,
+                    typefuel: true,
+                    capacitygal: true,
+                    state: true,
+                  },
+                },
+                clientAssignments: {
+                  include: {
+                    customer: {
+                      select: {
+                        id: true,
+                        companyname: true,
+                        ruc: true,
+                      },
+                    },
+                  },
+                },
+                discharges: {
+                  include: {
+                    customer: {
+                      select: {
+                        id: true,
+                        companyname: true,
+                        ruc: true,
+                      },
+                    },
+                  },
+                },
+              },
+            })
+
+            // Also fix truck status if needed
+            if (assignment.truck && assignment.truck.state === "Activo") {
+              await prisma.truck.update({
+                where: { id: assignment.truckId },
+                data: { state: "Asignado" },
+              })
+              console.log(`🚛 Fixed truck ${assignment.truck.placa} status: Activo → Asignado`)
+            }
+
+            return updatedAssignment
+          }
+
+          // If assignment is not marked as completed but all client assignments are completed
+          if (!assignment.isCompleted && allCompleted && clientAssignments.length > 0) {
+            console.log(`🔧 Fixing assignment ${assignment.id}: should be completed`)
+
+            const updatedAssignment = await prisma.assignment.update({
+              where: { id: assignment.id },
+              data: {
+                isCompleted: true,
+                completedAt: new Date(),
+              },
+              include: {
+                driver: {
+                  select: {
+                    id: true,
+                    name: true,
+                    lastname: true,
+                    role: true,
+                  },
+                },
+                truck: {
+                  select: {
+                    id: true,
+                    placa: true,
+                    typefuel: true,
+                    capacitygal: true,
+                    state: true,
+                  },
+                },
+                clientAssignments: {
+                  include: {
+                    customer: {
+                      select: {
+                        id: true,
+                        companyname: true,
+                        ruc: true,
+                      },
+                    },
+                  },
+                },
+                discharges: {
+                  include: {
+                    customer: {
+                      select: {
+                        id: true,
+                        companyname: true,
+                        ruc: true,
+                      },
+                    },
+                  },
+                },
+              },
+            })
+
+            // Fix truck status
+            if (assignment.truck && assignment.truck.state === "Asignado") {
+              await prisma.truck.update({
+                where: { id: assignment.truckId },
+                data: { state: "Activo" },
+              })
+              console.log(`🚛 Fixed truck ${assignment.truck.placa} status: Asignado → Activo`)
+            }
+
+            return updatedAssignment
+          }
+        }
+
+        return assignment
+      }),
     )
+
+    // Get total count for pagination
+    const totalCount = await prisma.assignment.count({ where })
+
+    console.log(`✅ Assignments API: Found ${correctedAssignments.length} assignments (total: ${totalCount})`)
+
+    return NextResponse.json({
+      assignments: correctedAssignments,
+      pagination: {
+        page,
+        limit,
+        total: totalCount,
+        pages: Math.ceil(totalCount / limit),
+      },
+    })
+  } catch (error) {
+    console.error("❌ Error fetching assignments:", error)
+    return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const token = (await cookies()).get("token")?.value
+    if (!token) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+    }
+
+    const payload = await verifyToken(token)
+    if (!payload || (payload.role !== "Admin" && payload.role !== "S_A")) {
+      return NextResponse.json({ error: "Acceso denegado" }, { status: 403 })
+    }
+
+    const body = await request.json()
+    const { truckId, driverId, fuelType, totalLoaded, clients } = body
+
+    console.log("📝 Creating new assignment:", {
+      truckId,
+      driverId,
+      fuelType,
+      totalLoaded,
+      clientsCount: clients?.length,
+    })
+
+    // Validate required fields
+    if (!truckId || !driverId || !fuelType || !totalLoaded || !clients || clients.length === 0) {
+      return NextResponse.json({ error: "Todos los campos son requeridos" }, { status: 400 })
+    }
+
+    // Check if truck is available
+    const truck = await prisma.truck.findUnique({
+      where: { id: truckId },
+      include: {
+        Assignment: {
+          where: { isCompleted: false },
+        },
+      },
+    })
+
+    if (!truck) {
+      return NextResponse.json({ error: "Camión no encontrado" }, { status: 404 })
+    }
+
+    if (truck.state !== "Activo") {
+      return NextResponse.json({ error: "El camión no está disponible para asignación" }, { status: 400 })
+    }
+
+    if (truck.Assignment.length > 0) {
+      return NextResponse.json({ error: "El camión ya tiene una asignación activa" }, { status: 400 })
+    }
+
+    // Check if driver exists and is available
+    const driver = await prisma.user.findUnique({
+      where: { id: driverId },
+      include: {
+        Assignment: {
+          where: { isCompleted: false },
+        },
+      },
+    })
+
+    if (!driver) {
+      return NextResponse.json({ error: "Conductor no encontrado" }, { status: 404 })
+    }
+
+    if (driver.Assignment.length > 0) {
+      return NextResponse.json({ error: "El conductor ya tiene una asignación activa" }, { status: 400 })
+    }
+
+    // Validate total allocated quantity
+    const totalAllocated = clients.reduce((sum: number, client: any) => sum + Number(client.quantity), 0)
+    if (totalAllocated > totalLoaded) {
+      return NextResponse.json({ error: "La cantidad total asignada excede la carga del camión" }, { status: 400 })
+    }
+
+    // Create assignment with client assignments in a transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create the main assignment
+      const assignment = await tx.assignment.create({
+        data: {
+          truckId,
+          driverId,
+          fuelType,
+          totalLoaded: Number(totalLoaded),
+          totalRemaining: Number(totalLoaded),
+          isCompleted: false,
+        },
+      })
+
+      // Create client assignments
+      const clientAssignments = await Promise.all(
+        clients.map((client: any) =>
+          tx.clientAssignment.create({
+            data: {
+              assignmentId: assignment.id,
+              customerId: client.customerId,
+              allocatedQuantity: Number(client.quantity),
+              deliveredQuantity: 0,
+              status: "pending",
+            },
+          }),
+        ),
+      )
+
+      // Update truck status to "Asignado"
+      await tx.truck.update({
+        where: { id: truckId },
+        data: { state: "Asignado" },
+      })
+
+      return { assignment, clientAssignments }
+    })
+
+    console.log(`✅ Assignment created successfully: ID ${result.assignment.id}`)
+
+    // Return the created assignment with related data
+    const createdAssignment = await prisma.assignment.findUnique({
+      where: { id: result.assignment.id },
+      include: {
+        driver: {
+          select: {
+            id: true,
+            name: true,
+            lastname: true,
+            role: true,
+          },
+        },
+        truck: {
+          select: {
+            id: true,
+            placa: true,
+            typefuel: true,
+            capacitygal: true,
+            state: true,
+          },
+        },
+        clientAssignments: {
+          include: {
+            customer: {
+              select: {
+                id: true,
+                companyname: true,
+                ruc: true,
+              },
+            },
+          },
+        },
+      },
+    })
+
+    return NextResponse.json(createdAssignment, { status: 201 })
+  } catch (error) {
+    console.error("❌ Error creating assignment:", error)
+    return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }
 }

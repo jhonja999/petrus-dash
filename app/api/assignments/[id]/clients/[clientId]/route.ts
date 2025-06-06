@@ -1,203 +1,81 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { verifyToken } from "@/lib/jwt"
+import { cookies } from "next/headers"
 
-export async function PUT(request: Request, context: { params: { id: string; clientId: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string; clientId: string }> }) {
   try {
-    const params = await context.params
-    const { id: assignmentId, clientId } = params
-    const body = await request.json()
-    const { status, deliveredQuantity, marcadorInicial, marcadorFinal } = body
+    const { id, clientId } = await params
+    const assignmentId = Number.parseInt(id)
+    const clientAssignmentId = Number.parseInt(clientId)
 
-    console.log(`📝 Updating client assignment ${clientId} for assignment ${assignmentId}`)
-    console.log(`📊 Request body:`, body)
-    console.log(`📊 URL params:`, { assignmentId, clientId })
-
-    // Validate input
-    if (!status) {
-      return NextResponse.json({ error: "status es requerido" }, { status: 400 })
+    if (isNaN(assignmentId) || isNaN(clientAssignmentId)) {
+      return NextResponse.json({ error: "ID inválido" }, { status: 400 })
     }
 
-    if (!deliveredQuantity || isNaN(Number(deliveredQuantity)) || Number(deliveredQuantity) <= 0) {
-      return NextResponse.json({ error: "deliveredQuantity debe ser un número válido mayor a 0" }, { status: 400 })
-    }
-
-    // Get the client assignment with assignment details
-    const clientAssignment = await prisma.clientAssignment.findUnique({
+    const clientAssignment = await prisma.clientAssignment.findFirst({
       where: {
-        id: Number(clientId),
+        id: clientAssignmentId,
+        assignmentId,
       },
       include: {
-        assignment: {
-          include: {
-            truck: true,
-            driver: true,
-          },
-        },
         customer: true,
       },
-    })
-
-    console.log(`📊 Found client assignment:`, {
-      id: clientAssignment?.id,
-      assignmentId: clientAssignment?.assignmentId,
-      expectedAssignmentId: Number(assignmentId),
-      status: clientAssignment?.status,
     })
 
     if (!clientAssignment) {
       return NextResponse.json({ error: "Asignación de cliente no encontrada" }, { status: 404 })
     }
 
-    // Verify it belongs to the correct assignment
-    if (clientAssignment.assignmentId !== Number(assignmentId)) {
-      console.log(`❌ Assignment ID mismatch:`, {
-        clientAssignmentId: clientAssignment.assignmentId,
-        expectedAssignmentId: Number(assignmentId),
-      })
-      return NextResponse.json(
-        {
-          error: `La asignación de cliente pertenece a la asignación ${clientAssignment.assignmentId}, no a la ${assignmentId}`,
-        },
-        { status: 400 },
-      )
-    }
-
-    // Verify the assignment is not completed
-    if (clientAssignment.assignment.isCompleted) {
-      return NextResponse.json({ error: "No se puede modificar una asignación completada" }, { status: 400 })
-    }
-
-    // Verify the client assignment is not already completed
-    if (clientAssignment.status === "completed") {
-      return NextResponse.json({ error: "Esta entrega ya está completada" }, { status: 400 })
-    }
-
-    const deliveredAmount = Number(deliveredQuantity)
-    const allocatedAmount = Number(clientAssignment.allocatedQuantity)
-
-    // Calculate remaining quantity for this specific client assignment
-    const remainingQuantity = Math.max(0, allocatedAmount - deliveredAmount)
-
-    console.log(`📊 Delivery calculation:`, {
-      allocated: allocatedAmount,
-      delivered: deliveredAmount,
-      remaining: remainingQuantity,
-    })
-
-    // Update the client assignment
-    const updatedClientAssignment = await prisma.clientAssignment.update({
-      where: {
-        id: Number(clientId),
-      },
-      data: {
-        status: status,
-        deliveredQuantity: deliveredAmount,
-        remainingQuantity: remainingQuantity,
-        marcadorInicial: marcadorInicial ? Number(marcadorInicial) : null,
-        marcadorFinal: marcadorFinal ? Number(marcadorFinal) : null,
-        completedAt: status === "completed" ? new Date() : null,
-      },
-      include: {
-        customer: true,
-        assignment: {
-          include: {
-            truck: true,
-            driver: true,
-          },
-        },
-      },
-    })
-
-    // Update the assignment's total remaining quantity
-    const currentAssignment = await prisma.assignment.findUnique({
-      where: { id: Number(assignmentId) },
-      select: { totalRemaining: true },
-    })
-
-    if (currentAssignment) {
-      const newTotalRemaining = Math.max(0, Number(currentAssignment.totalRemaining) - deliveredAmount)
-
-      await prisma.assignment.update({
-        where: {
-          id: Number(assignmentId),
-        },
-        data: {
-          totalRemaining: newTotalRemaining,
-          updatedAt: new Date(),
-        },
-      })
-
-      console.log(`📊 Assignment ${assignmentId} total remaining updated to: ${newTotalRemaining}`)
-    }
-
-    // Check if all client assignments for this assignment are completed
-    const allClientAssignments = await prisma.clientAssignment.findMany({
-      where: {
-        assignmentId: Number(assignmentId),
-      },
-    })
-
-    const allCompleted = allClientAssignments.every((ca) => ca.status === "completed" || ca.status === "expired")
-
-    // If all client assignments are completed, mark the main assignment as completed
-    if (allCompleted) {
-      console.log(`✅ All client assignments completed for assignment ${assignmentId}. Marking as completed.`)
-
-      await prisma.assignment.update({
-        where: {
-          id: Number(assignmentId),
-        },
-        data: {
-          isCompleted: true,
-          completedAt: new Date(),
-          updatedAt: new Date(),
-        },
-      })
-    }
-
-    console.log(`✅ Client assignment ${clientId} updated successfully`)
-
-    // Return the updated client assignment with all necessary data
-    return NextResponse.json({
-      success: true,
-      clientAssignment: updatedClientAssignment,
-      message: "Entrega completada exitosamente",
-    })
-  } catch (error) {
-    console.error("❌ Error updating client assignment:", error)
-
-    // More detailed error logging
-    if (error instanceof Error) {
-      console.error("❌ Error details:", {
-        message: error.message,
-        stack: error.stack,
-      })
-    }
-
+    return NextResponse.json(clientAssignment)
+  } catch (error: any) {
+    console.error("Error fetching client assignment:", error.message || error)
     return NextResponse.json(
-      {
-        error: "Error interno del servidor al actualizar la asignación de cliente",
-        details: error instanceof Error ? error.message : "Error desconocido",
-      },
+      { error: "Error al obtener asignación de cliente", details: error.message },
       { status: 500 },
     )
   }
 }
 
-export async function DELETE(request: Request, context: { params: { id: string; clientId: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string; clientId: string }> }) {
   try {
-    const params = await context.params
-    const { id: assignmentId, clientId } = params
+    const token = (await cookies()).get("token")?.value
+    if (!token) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+    }
 
-    console.log(`🗑️ Deleting client assignment ${clientId} from assignment ${assignmentId}`)
+    const payload = await verifyToken(token)
+    if (!payload) {
+      return NextResponse.json({ error: "Token inválido" }, { status: 401 })
+    }
+
+    const { id: assignmentId, clientId } = await params
+    const body = await request.json()
+    const { status, deliveredQuantity } = body
+
+    console.log("📊 PUT - URL params:", { assignmentId, clientId })
+    console.log("📊 PUT - Request body:", { status, deliveredQuantity })
+
+    // Validate IDs
+    const assignmentIdNum = Number.parseInt(assignmentId)
+    const clientIdNum = Number.parseInt(clientId)
+
+    if (isNaN(assignmentIdNum) || isNaN(clientIdNum)) {
+      return NextResponse.json({ error: "IDs inválidos" }, { status: 400 })
+    }
 
     // Get the client assignment
-    const clientAssignment = await prisma.clientAssignment.findUnique({
+    const clientAssignment = await prisma.clientAssignment.findFirst({
       where: {
-        id: Number(clientId),
+        id: clientIdNum,
+        assignmentId: assignmentIdNum,
       },
       include: {
-        assignment: true,
+        assignment: {
+          include: {
+            truck: true,
+          },
+        },
       },
     })
 
@@ -205,33 +83,294 @@ export async function DELETE(request: Request, context: { params: { id: string; 
       return NextResponse.json({ error: "Asignación de cliente no encontrada" }, { status: 404 })
     }
 
-    // Verify it belongs to the correct assignment
-    if (clientAssignment.assignmentId !== Number(assignmentId)) {
-      return NextResponse.json({ error: "La asignación de cliente no pertenece a esta asignación" }, { status: 400 })
+    console.log("📊 Found client assignment:", {
+      id: clientAssignment.id,
+      assignmentId: clientAssignment.assignmentId,
+      currentStatus: clientAssignment.status,
+    })
+
+    // Update the client assignment
+    const updatedClientAssignment = await prisma.clientAssignment.update({
+      where: { id: clientIdNum },
+      data: {
+        status,
+        deliveredQuantity: deliveredQuantity
+          ? Number.parseFloat(deliveredQuantity)
+          : clientAssignment.allocatedQuantity,
+        completedAt: status === "completed" ? new Date() : null,
+      },
+    })
+
+    // Get ALL client assignments for this assignment to check completion status
+    const allClientAssignments = await prisma.clientAssignment.findMany({
+      where: { assignmentId: assignmentIdNum },
+    })
+
+    // Calculate total delivered and remaining for the assignment
+    const totalAllocated = allClientAssignments.reduce((sum, ca) => sum + Number(ca.allocatedQuantity), 0)
+    const totalDelivered = allClientAssignments.reduce((sum, ca) => {
+      // Use the updated status for the current client assignment
+      const deliveredQty =
+        ca.id === clientIdNum
+          ? Number(deliveredQuantity || clientAssignment.allocatedQuantity)
+          : Number(ca.deliveredQuantity || 0)
+      return sum + deliveredQty
+    }, 0)
+    const totalRemaining = Number(clientAssignment.assignment.totalLoaded) - totalDelivered
+
+    console.log("📊 Delivery calculation:", {
+      totalLoaded: Number(clientAssignment.assignment.totalLoaded),
+      allocated: totalAllocated,
+      delivered: totalDelivered,
+      remaining: totalRemaining,
+    })
+
+    // Update assignment's total remaining
+    await prisma.assignment.update({
+      where: { id: assignmentIdNum },
+      data: { totalRemaining },
+    })
+
+    console.log(`📊 Assignment ${assignmentId} total remaining updated to: ${totalRemaining}`)
+
+    // ✅ ARREGLO MEJORADO: Verificar si TODAS las entregas están completadas
+    const allCompleted = allClientAssignments.every((ca) => {
+      // For the current client assignment being updated, use the new status
+      if (ca.id === clientIdNum) {
+        return status === "completed"
+      }
+      // For other client assignments, use their current status
+      return ca.status === "completed"
+    })
+
+    const completedCount = allClientAssignments.filter((ca) => {
+      if (ca.id === clientIdNum) {
+        return status === "completed"
+      }
+      return ca.status === "completed"
+    }).length
+
+    console.log("📊 Checking completion status:", {
+      totalClientAssignments: allClientAssignments.length,
+      completedCount,
+      allCompleted,
+      currentClientStatus: status,
+    })
+
+    if (allCompleted) {
+      console.log(`✅ All client assignments completed for assignment ${assignmentId}. Marking as completed.`)
+
+      // Mark assignment as completed
+      const completedAssignment = await prisma.assignment.update({
+        where: { id: assignmentIdNum },
+        data: {
+          isCompleted: true,
+          completedAt: new Date(),
+        },
+        include: {
+          truck: true,
+        },
+      })
+
+      // 🚛 UPDATE TRUCK STATUS TO ACTIVE
+      if (completedAssignment.truck) {
+        await prisma.truck.update({
+          where: { id: completedAssignment.truckId },
+          data: {
+            state: "Activo",
+            lastRemaining: totalRemaining,
+          },
+        })
+
+        console.log(
+          `🚛 Truck ${completedAssignment.truck.placa} status updated from ${completedAssignment.truck.state} to Activo`,
+        )
+      }
+    } else {
+      console.log(
+        `📊 Assignment ${assignmentId} still has ${allClientAssignments.length - completedCount} pending deliveries. Keeping as in-progress.`,
+      )
+
+      // Ensure assignment is not marked as completed if there are still pending deliveries
+      await prisma.assignment.update({
+        where: { id: assignmentIdNum },
+        data: {
+          isCompleted: false,
+          completedAt: null,
+        },
+      })
+
+      // Keep truck status as "Asignado" if assignment is still in progress
+      if (clientAssignment.assignment.truck) {
+        await prisma.truck.update({
+          where: { id: clientAssignment.assignment.truckId },
+          data: {
+            state: "Asignado",
+            lastRemaining: totalRemaining,
+          },
+        })
+
+        console.log(
+          `🚛 Truck ${clientAssignment.assignment.truck.placa} status kept as Asignado (${allClientAssignments.length - completedCount} deliveries pending)`,
+        )
+      }
     }
 
-    // Verify the assignment is not completed
-    if (clientAssignment.assignment.isCompleted) {
-      return NextResponse.json({ error: "No se puede eliminar de una asignación completada" }, { status: 400 })
+    console.log(`✅ Client assignment ${clientId} updated successfully`)
+
+    return NextResponse.json({
+      message: "Asignación de cliente actualizada exitosamente",
+      clientAssignment: updatedClientAssignment,
+      totalRemaining,
+      assignmentCompleted: allCompleted,
+      pendingDeliveries: allClientAssignments.length - completedCount,
+    })
+  } catch (error: any) {
+    console.error("❌ Error updating client assignment:", error.message || error)
+    return NextResponse.json({ error: "Error interno del servidor", details: error.message }, { status: 500 })
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string; clientId: string }> }) {
+  try {
+    console.log("🗑️ DELETE - Starting client assignment deletion")
+
+    const token = (await cookies()).get("token")?.value
+    if (!token) {
+      console.log("❌ DELETE - No token provided")
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
     }
 
-    // Verify the client assignment is not completed
-    if (clientAssignment.status === "completed") {
-      return NextResponse.json({ error: "No se puede eliminar una entrega completada" }, { status: 400 })
+    const payload = await verifyToken(token)
+    if (!payload || (payload.role !== "Admin" && payload.role !== "S_A")) {
+      console.log("❌ DELETE - Invalid token or insufficient permissions")
+      return NextResponse.json({ error: "Acceso denegado" }, { status: 403 })
+    }
+
+    const { id: assignmentId, clientId } = await params
+    console.log("🗑️ DELETE - URL params:", { assignmentId, clientId })
+
+    // Validate IDs
+    const assignmentIdNum = Number.parseInt(assignmentId)
+    const clientIdNum = Number.parseInt(clientId)
+
+    if (isNaN(assignmentIdNum) || isNaN(clientIdNum)) {
+      console.log("❌ DELETE - Invalid IDs:", { assignmentId, clientId })
+      return NextResponse.json({ error: "IDs inválidos" }, { status: 400 })
+    }
+
+    // Check if client assignment exists and belongs to the assignment
+    const clientAssignment = await prisma.clientAssignment.findFirst({
+      where: {
+        id: clientIdNum,
+        assignmentId: assignmentIdNum,
+      },
+    })
+
+    if (!clientAssignment) {
+      console.log("❌ DELETE - Client assignment not found")
+      return NextResponse.json({ error: "Asignación de cliente no encontrada" }, { status: 404 })
+    }
+
+    console.log("🗑️ DELETE - Found client assignment:", {
+      id: clientAssignment.id,
+      status: clientAssignment.status,
+      assignmentId: clientAssignment.assignmentId,
+    })
+
+    // Only allow deletion if status is pending
+    if (clientAssignment.status !== "pending") {
+      console.log("❌ DELETE - Cannot delete non-pending assignment")
+      return NextResponse.json(
+        { error: "No se puede eliminar una asignación que ya está en progreso o completada" },
+        { status: 400 },
+      )
     }
 
     // Delete the client assignment
     await prisma.clientAssignment.delete({
-      where: {
-        id: Number(clientId),
+      where: { id: clientIdNum },
+    })
+
+    console.log("✅ DELETE - Client assignment deleted successfully")
+
+    // Recalculate assignment totals
+    const remainingClientAssignments = await prisma.clientAssignment.findMany({
+      where: { assignmentId: assignmentIdNum },
+    })
+
+    const totalAllocated = remainingClientAssignments.reduce((sum, ca) => sum + Number(ca.allocatedQuantity), 0)
+    const totalDelivered = remainingClientAssignments.reduce((sum, ca) => sum + Number(ca.deliveredQuantity || 0), 0)
+
+    // Get original assignment to calculate remaining properly
+    const assignment = await prisma.assignment.findUnique({
+      where: { id: assignmentIdNum },
+      include: { truck: true },
+    })
+
+    if (!assignment) {
+      return NextResponse.json({ error: "Asignación no encontrada" }, { status: 404 })
+    }
+
+    const totalRemaining = Number(assignment.totalLoaded) - totalDelivered
+
+    console.log("🗑️ DELETE - Recalculated totals:", {
+      totalLoaded: Number(assignment.totalLoaded),
+      allocated: totalAllocated,
+      delivered: totalDelivered,
+      remaining: totalRemaining,
+    })
+
+    // Update assignment
+    await prisma.assignment.update({
+      where: { id: assignmentIdNum },
+      data: {
+        totalRemaining,
+        isCompleted: false, // Reset completion status
+        completedAt: null,
       },
     })
 
-    console.log(`✅ Client assignment ${clientId} deleted successfully`)
+    // Update truck status back to Asignado if there are remaining client assignments
+    if (assignment.truck && remainingClientAssignments.length > 0) {
+      await prisma.truck.update({
+        where: { id: assignment.truckId },
+        data: {
+          state: "Asignado",
+          lastRemaining: totalRemaining,
+        },
+      })
 
-    return NextResponse.json({ success: true, message: "Asignación de cliente eliminada exitosamente" })
-  } catch (error) {
-    console.error("❌ Error deleting client assignment:", error)
-    return NextResponse.json({ error: "Error al eliminar la asignación de cliente" }, { status: 500 })
+      console.log(`🚛 DELETE - Truck ${assignment.truck.placa} status reverted to Asignado`)
+    } else if (assignment.truck && remainingClientAssignments.length === 0) {
+      // If no client assignments remain, set truck back to Activo
+      await prisma.truck.update({
+        where: { id: assignment.truckId },
+        data: {
+          state: "Activo",
+          lastRemaining: assignment.totalLoaded,
+        },
+      })
+
+      console.log(`🚛 DELETE - Truck ${assignment.truck.placa} status set to Activo (no clients remaining)`)
+    }
+
+    console.log("✅ DELETE - Operation completed successfully")
+
+    return NextResponse.json({
+      message: "Asignación de cliente eliminada exitosamente",
+      totalRemaining,
+    })
+  } catch (error: any) {
+    console.error("❌ DELETE - Error deleting client assignment:", error)
+    console.error("❌ DELETE - Error stack:", error.stack)
+    return NextResponse.json(
+      {
+        error: "Error interno del servidor",
+        details: error.message,
+        stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
+      },
+      { status: 500 },
+    )
   }
 }

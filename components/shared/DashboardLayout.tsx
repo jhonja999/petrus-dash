@@ -23,6 +23,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import LogoPetrus from "./LogoPetrus"
 
 interface DashboardLayoutProps {
   children: React.ReactNode
@@ -77,8 +78,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
                               className="flex items-center space-x-3 hover:opacity-80 transition-opacity cursor-pointer"
                               title="Ir al inicio"
                             >
-              <Truck className="h-8 w-8 text-blue-600" /></Link>
-              <span className="text-xl font-bold text-gray-900">Petrus</span>
+              {/* <Truck className="h-8 w-8 text-blue-600" /> */}
+              
+              <LogoPetrus />
+              </Link>
+              {/* <span className="text-xl font-bold text-gray-900">Petrus</span> */}
             </div>
           )}
           <Button variant="ghost" size="sm" onClick={() => setSidebarOpen(!sidebarOpen)} className="hidden lg:flex">

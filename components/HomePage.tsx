@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { ArrowRight, Truck, Users, Fuel, BarChart3, Shield, CheckCircle, Zap, LogIn, UserPlus } from "lucide-react"
 import { useAuth } from "@/hooks/useAuth"
+import LogoPetrus from "./shared/LogoPetrus"
 
 export default function HomePage() {
   const { user, isAuthenticated, isLoading } = useAuth()
@@ -65,11 +66,12 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-blue-600 rounded-lg">
+              {/* <div className="p-2 bg-blue-600 rounded-lg">
                 <Truck className="h-6 w-6 text-white" />
-              </div>
+              </div> */}
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Petrus</h1>
+                <LogoPetrus className="mt-5"/>
+                {/* <h1 className="text-xl font-bold text-gray-900">Petrus</h1> */}
                 <p className="text-xs text-gray-600">Sistema de Gestión</p>
               </div>
             </div>

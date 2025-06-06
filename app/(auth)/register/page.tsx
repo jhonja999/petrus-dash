@@ -1,18 +1,38 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Truck, Mail, User, CreditCard, AlertCircle, CheckCircle } from "lucide-react"
-import Link from "next/link"
-import axios from "axios"
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Truck,
+  Mail,
+  User,
+  CreditCard,
+  AlertCircle,
+  CheckCircle,
+} from "lucide-react";
+import Link from "next/link";
+import axios from "axios";
+import LogoPetrus from "@/components/shared/LogoPetrus";
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -21,49 +41,56 @@ export default function RegisterPage() {
     name: "",
     lastname: "",
     role: "Operador",
-  })
-  const [error, setError] = useState("")
-  const [success, setSuccess] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const router = useRouter()
+  });
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-    setError("")
-    setSuccess("")
+    e.preventDefault();
+    setIsLoading(true);
+    setError("");
+    setSuccess("");
 
     try {
-      const response = await axios.post("/api/auth/register", formData)
+      const response = await axios.post("/api/auth/register", formData);
 
       if (response.data.success) {
-        setSuccess("Cuenta creada exitosamente. Redirigiendo al login...")
+        setSuccess("Cuenta creada exitosamente. Redirigiendo al login...");
         setTimeout(() => {
-          router.push("/login")
-        }, 2000)
+          router.push("/login");
+        }, 2000);
       }
     } catch (err: any) {
-      setError(err.response?.data?.error || "Error al crear la cuenta")
+      setError(err.response?.data?.error || "Error al crear la cuenta");
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
-  }
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <Card className="shadow-xl border-0">
           <CardHeader className="text-center space-y-4">
-            <div className="mx-auto w-16 h-16 bg-blue-600 rounded-xl flex items-center justify-center">
+            {/* <div className="mx-auto w-16 h-16 bg-blue-600 rounded-xl flex items-center justify-center">
               <Truck className="h-8 w-8 text-white" />
+            </div> */}
+            <div className="mx-auto flex items-center justify-center">
+              <LogoPetrus />
             </div>
             <div>
-              <CardTitle className="text-2xl font-bold text-gray-900">Crear Cuenta</CardTitle>
-              <CardDescription className="text-gray-600 mt-2">Registra una nueva cuenta en Petrus</CardDescription>
+              <CardTitle className="text-2xl font-bold text-gray-900">
+                Crear Cuenta
+              </CardTitle>
+              <CardDescription className="text-gray-600 mt-2">
+                Registra una nueva cuenta en Petrus
+              </CardDescription>
             </div>
           </CardHeader>
 
@@ -79,7 +106,9 @@ export default function RegisterPage() {
               {success && (
                 <Alert className="border-green-200 bg-green-50">
                   <CheckCircle className="h-4 w-4 text-green-600" />
-                  <AlertDescription className="text-green-700">{success}</AlertDescription>
+                  <AlertDescription className="text-green-700">
+                    {success}
+                  </AlertDescription>
                 </Alert>
               )}
 
@@ -92,7 +121,9 @@ export default function RegisterPage() {
                       id="name"
                       type="text"
                       value={formData.name}
-                      onChange={(e) => handleInputChange("name", e.target.value)}
+                      onChange={(e) =>
+                        handleInputChange("name", e.target.value)
+                      }
                       placeholder="Juan"
                       className="pl-10"
                       required
@@ -107,7 +138,9 @@ export default function RegisterPage() {
                     id="lastname"
                     type="text"
                     value={formData.lastname}
-                    onChange={(e) => handleInputChange("lastname", e.target.value)}
+                    onChange={(e) =>
+                      handleInputChange("lastname", e.target.value)
+                    }
                     placeholder="Pérez"
                     required
                     disabled={isLoading}
@@ -123,7 +156,12 @@ export default function RegisterPage() {
                     id="dni"
                     type="text"
                     value={formData.dni}
-                    onChange={(e) => handleInputChange("dni", e.target.value.replace(/\D/g, "").slice(0, 8))}
+                    onChange={(e) =>
+                      handleInputChange(
+                        "dni",
+                        e.target.value.replace(/\D/g, "").slice(0, 8)
+                      )
+                    }
                     placeholder="12345678"
                     className="pl-10"
                     maxLength={8}
@@ -170,7 +208,8 @@ export default function RegisterPage() {
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                 <p className="text-xs text-blue-700">
-                  <strong>Nota:</strong> La contraseña inicial será tu DNI. Podrás cambiarla después del primer login.
+                  <strong>Nota:</strong> La contraseña inicial será tu DNI.
+                  Podrás cambiarla después del primer login.
                 </p>
               </div>
 
@@ -197,18 +236,26 @@ export default function RegisterPage() {
                   <div className="w-full border-t border-gray-300" />
                 </div>
                 <div className="relative flex justify-center text-sm">
-                  <span className="bg-white px-2 text-gray-500">¿Ya tienes cuenta?</span>
+                  <span className="bg-white px-2 text-gray-500">
+                    ¿Ya tienes cuenta?
+                  </span>
                 </div>
               </div>
 
               <div className="text-center space-y-2">
-                <Link href="/login" className="text-blue-600 hover:text-blue-700 font-medium hover:underline">
+                <Link
+                  href="/login"
+                  className="text-blue-600 hover:text-blue-700 font-medium hover:underline"
+                >
                   Iniciar sesión
                 </Link>
               </div>
 
               <div className="text-center">
-                <Link href="/" className="text-sm text-gray-500 hover:text-gray-700 hover:underline">
+                <Link
+                  href="/"
+                  className="text-sm text-gray-500 hover:text-gray-700 hover:underline"
+                >
                   ← Volver al inicio
                 </Link>
               </div>
@@ -217,5 +264,5 @@ export default function RegisterPage() {
         </Card>
       </div>
     </div>
-  )
+  );
 }

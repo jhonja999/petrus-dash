@@ -81,6 +81,25 @@ interface ExtendedAssignment {
   clientAssignments?: ClientAssignment[]
 }
 
+// ✅ Función de sincronización para día actual
+const syncOperatorData = async (driverId: string) => {
+  try {
+    console.log("🔄 Iniciando sincronización de datos del operador...")
+
+    // 1. Auto-completar asignaciones antiguas
+    await axios.post("/api/assignments/auto-complete", { driverId: Number(driverId) })
+
+    // 2. Sincronizar datos del operador
+    await axios.post("/api/assignments/sync-operator", { driverId: Number(driverId) })
+
+    console.log("✅ Sincronización completada")
+    return true
+  } catch (error) {
+    console.error("❌ Error en sincronización:", error)
+    return false
+  }
+}
+
 export default function DespachoDriverPage() {
   const params = useParams()
   const router = useRouter()
@@ -94,6 +113,7 @@ export default function DespachoDriverPage() {
   const [error, setError] = useState<string | null>(null)
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split("T")[0])
+  const [isRefreshing, setIsRefreshing] = useState(false)
 
   // Estados para el modal
   const [selectedClientAssignment, setSelectedClientAssignment] = useState<ClientAssignment | null>(null)
@@ -126,6 +146,16 @@ export default function DespachoDriverPage() {
 
       console.log(`🔄 Fetching assignments for driver ${driverId} on ${targetDate}`)
       console.log(`📅 Today is: ${today}, Target date: ${targetDate}`)
+
+      // ✅ Sincronizar datos primero si estamos viendo el día actual
+      if (targetDate === today) {
+        const syncSuccess = await syncOperatorData(driverId)
+        if (syncSuccess) {
+          console.log("✅ Datos sincronizados correctamente")
+        } else {
+          console.log("⚠️ Sincronización falló, continuando con datos existentes")
+        }
+      }
 
       // ✅ Auto-completar solo si estamos viendo el día actual
       if (targetDate === today) {
@@ -194,6 +224,43 @@ export default function DespachoDriverPage() {
       setError(errorMessage)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // ✅ Función unificada de actualización/sincronización
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+    const today = new Date().toISOString().split("T")[0]
+    const isToday = selectedDate === today
+
+    try {
+      if (isToday) {
+        // Para día actual: sincronizar + actualizar datos
+        const syncSuccess = await syncOperatorData(driverId)
+        if (syncSuccess) {
+          toast({
+            title: "✅ Datos sincronizados",
+            description: "Los datos han sido sincronizados y actualizados correctamente.",
+            className: "border-green-200 bg-green-50",
+          })
+        }
+      } else {
+        // Para días históricos: solo actualizar datos
+        toast({
+          title: "🔄 Actualizando datos",
+          description: "Refrescando información histórica...",
+        })
+      }
+
+      await fetchData(selectedDate)
+    } catch (error) {
+      toast({
+        title: "❌ Error",
+        description: "No se pudieron actualizar los datos.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsRefreshing(false)
     }
   }
 
@@ -324,6 +391,16 @@ export default function DespachoDriverPage() {
 
       // Cerrar modal primero
       closeModal()
+
+      // ✅ Sincronizar datos después de completar entrega
+      const syncSuccess = await syncOperatorData(driverId)
+      if (syncSuccess) {
+        toast({
+          title: "🔄 Datos sincronizados",
+          description: "Los dashboards han sido actualizados automáticamente.",
+          className: "border-green-200 bg-green-50",
+        })
+      }
 
       // Refrescar los datos después de completar
       await fetchData(selectedDate)
@@ -480,20 +557,31 @@ export default function DespachoDriverPage() {
                 {isToday ? "Hoy" : "Histórico"}
               </Badge>
 
-              {/* ✅ Botón de refresh */}
+              {/* ✅ Botón unificado de actualización/sincronización */}
               <Button
-                onClick={() => fetchData(selectedDate)}
+                onClick={handleRefresh}
                 variant="outline"
                 size="sm"
                 className="flex items-center gap-2"
+                disabled={isRefreshing}
               >
-                <RefreshCw className="h-4 w-4" />
-                Actualizar
+                <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                {isToday ? "Sincronizar" : "Actualizar"}
               </Button>
             </div>
           </div>
         </div>
       </header>
+
+      {/* ✅ Nota explicativa del botón */}
+      {isToday && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-2">
+          <div className="text-xs text-blue-600 bg-blue-50 px-3 py-1 rounded-md">
+            💡 <strong>Sincronizar:</strong> Actualiza estados de camiones, completa asignaciones antiguas y refresca
+            datos en tiempo real
+          </div>
+        </div>
+      )}
 
       {/* ✅ Alert para fechas pasadas */}
       {!isToday && (
@@ -757,119 +845,140 @@ export default function DespachoDriverPage() {
               </Card>
             ) : (
               <div className="space-y-4">
-                {assignments.map((assignment) => (
-                  <Card key={assignment.id} className="hover:shadow-lg transition-shadow duration-300">
-                    <CardHeader className="pb-3">
-                      <div className="flex justify-between items-start">
-                        <CardTitle className="text-lg">
-                          Asignación #{assignment.id} - {assignment.truck.placa}
-                        </CardTitle>
-                        <div className="flex gap-2">
-                          <Badge
-                            className={
-                              assignment.isCompleted ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
-                            }
-                          >
-                            {assignment.isCompleted ? "Completada" : "En Progreso"}
-                          </Badge>
-                          <Badge variant="outline" className="bg-gray-50">
-                            {assignment.fuelType}
-                          </Badge>
-                          {assignment.clientAssignments && assignment.clientAssignments.length > 0 && (
-                            <Badge variant="secondary">{assignment.clientAssignments.length} entregas</Badge>
-                          )}
-                        </div>
-                      </div>
-                      <CardDescription>
-                        Creada: {new Date(assignment.createdAt).toLocaleDateString()}
-                        {assignment.completedAt && (
-                          <> • Completada: {new Date(assignment.completedAt).toLocaleDateString()}</>
-                        )}
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-3 gap-4">
-                        <div className="text-center p-3 bg-blue-50 rounded-lg">
-                          <p className="text-sm text-blue-600 font-medium">Total Cargado</p>
-                          <p className="text-xl font-bold text-blue-700">{assignment.totalLoaded.toString()} gal</p>
-                        </div>
-                        <div className="text-center p-3 bg-green-50 rounded-lg">
-                          <p className="text-sm text-green-600 font-medium">Descargado</p>
-                          <p className="text-xl font-bold text-green-700">
-                            {(Number(assignment.totalLoaded) - Number(assignment.totalRemaining)).toFixed(2)} gal
-                          </p>
-                        </div>
-                        <div className="text-center p-3 bg-orange-50 rounded-lg">
-                          <p className="text-sm text-orange-600 font-medium">Remanente</p>
-                          <p className="text-xl font-bold text-orange-700">
-                            {assignment.totalRemaining.toString()} gal
-                          </p>
-                        </div>
-                      </div>
+                {assignments.map((assignment) => {
+                  // ✅ Calcular correctamente el estado de completado
+                  const totalClientAssignments = assignment.clientAssignments?.length || 0
+                  const completedClientAssignments =
+                    assignment.clientAssignments?.filter((ca) => ca.status === "completed").length || 0
+                  const allClientsCompleted =
+                    totalClientAssignments > 0 && completedClientAssignments === totalClientAssignments
 
-                      <div>
-                        <div className="flex justify-between text-sm text-gray-600 mb-1">
-                          <span>Progreso</span>
-                          <span>
-                            {assignment.isCompleted
-                              ? "100%"
-                              : `${(((Number(assignment.totalLoaded) - Number(assignment.totalRemaining)) / Number(assignment.totalLoaded)) * 100).toFixed(1)}%`}
-                          </span>
-                        </div>
-                        <div className="bg-gray-200 rounded-full h-2">
-                          <div
-                            className={`h-2 rounded-full ${assignment.isCompleted ? "bg-green-500" : "bg-blue-500"}`}
-                            style={{
-                              width: assignment.isCompleted
-                                ? "100%"
-                                : `${((Number(assignment.totalLoaded) - Number(assignment.totalRemaining)) / Number(assignment.totalLoaded)) * 100}%`,
-                            }}
-                          ></div>
-                        </div>
-                      </div>
-
-                      {assignment.clientAssignments && assignment.clientAssignments.length > 0 ? (
-                        <div className="text-sm text-gray-600">
-                          <p className="font-medium mb-2">Entregas asignadas:</p>
-                          <div className="space-y-1">
-                            {assignment.clientAssignments.map((ca) => (
-                              <div key={ca.id} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                                <span>{ca.customer.companyname}</span>
-                                <Badge
-                                  className={
-                                    ca.status === "completed"
-                                      ? "bg-green-100 text-green-700"
-                                      : ca.status === "expired"
-                                        ? "bg-red-100 text-red-700"
-                                        : "bg-yellow-100 text-yellow-700"
-                                  }
-                                >
-                                  {ca.status === "completed"
-                                    ? "Completada"
-                                    : ca.status === "expired"
-                                      ? "Expirada"
-                                      : "Pendiente"}
-                                </Badge>
-                              </div>
-                            ))}
+                  return (
+                    <Card key={assignment.id} className="hover:shadow-lg transition-shadow duration-300">
+                      <CardHeader className="pb-3">
+                        <div className="flex justify-between items-start">
+                          <CardTitle className="text-lg">
+                            Asignación #{assignment.id} - {assignment.truck.placa}
+                          </CardTitle>
+                          <div className="flex gap-2">
+                            <Badge
+                              className={
+                                assignment.isCompleted ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"
+                              }
+                            >
+                              {assignment.isCompleted ? "Completada" : "En Progreso"}
+                            </Badge>
+                            <Badge variant="outline" className="bg-gray-50">
+                              {assignment.fuelType}
+                            </Badge>
+                            {assignment.clientAssignments && assignment.clientAssignments.length > 0 && (
+                              <Badge variant="secondary">
+                                {completedClientAssignments}/{totalClientAssignments} entregas
+                              </Badge>
+                            )}
                           </div>
                         </div>
-                      ) : (
-                        <div className="text-sm text-gray-500 text-center p-4 bg-gray-50 rounded">
-                          Sin entregas específicas asignadas
+                        <CardDescription>
+                          Creada: {new Date(assignment.createdAt).toLocaleDateString()}
+                          {assignment.completedAt && (
+                            <> • Completada: {new Date(assignment.completedAt).toLocaleDateString()}</>
+                          )}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="grid grid-cols-3 gap-4">
+                          <div className="text-center p-3 bg-blue-50 rounded-lg">
+                            <p className="text-sm text-blue-600 font-medium">Total Cargado</p>
+                            <p className="text-xl font-bold text-blue-700">{assignment.totalLoaded.toString()} gal</p>
+                          </div>
+                          <div className="text-center p-3 bg-green-50 rounded-lg">
+                            <p className="text-sm text-green-600 font-medium">Descargado</p>
+                            <p className="text-xl font-bold text-green-700">
+                              {(Number(assignment.totalLoaded) - Number(assignment.totalRemaining)).toFixed(2)} gal
+                            </p>
+                          </div>
+                          <div className="text-center p-3 bg-orange-50 rounded-lg">
+                            <p className="text-sm text-orange-600 font-medium">Remanente</p>
+                            <p className="text-xl font-bold text-orange-700">
+                              {assignment.totalRemaining.toString()} gal
+                            </p>
+                          </div>
                         </div>
-                      )}
 
-                      {assignment.notes && (
-                        <div className="bg-gray-50 p-3 rounded-lg">
-                          <p className="text-sm text-gray-700">
-                            <strong>Notas:</strong> {assignment.notes}
-                          </p>
+                        <div>
+                          <div className="flex justify-between text-sm text-gray-600 mb-1">
+                            <span>Progreso</span>
+                            <span>
+                              {assignment.isCompleted
+                                ? "100%"
+                                : `${(((Number(assignment.totalLoaded) - Number(assignment.totalRemaining)) / Number(assignment.totalLoaded)) * 100).toFixed(1)}%`}
+                            </span>
+                          </div>
+                          <div className="bg-gray-200 rounded-full h-2">
+                            <div
+                              className={`h-2 rounded-full ${assignment.isCompleted ? "bg-green-500" : "bg-blue-500"}`}
+                              style={{
+                                width: assignment.isCompleted
+                                  ? "100%"
+                                  : `${((Number(assignment.totalLoaded) - Number(assignment.totalRemaining)) / Number(assignment.totalLoaded)) * 100}%`,
+                              }}
+                            ></div>
+                          </div>
                         </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                ))}
+
+                        {assignment.clientAssignments && assignment.clientAssignments.length > 0 ? (
+                          <div className="text-sm text-gray-600">
+                            <p className="font-medium mb-2">Entregas asignadas:</p>
+                            <div className="space-y-1">
+                              {assignment.clientAssignments.map((ca) => (
+                                <div key={ca.id} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                                  <span>{ca.customer.companyname}</span>
+                                  <Badge
+                                    className={
+                                      ca.status === "completed"
+                                        ? "bg-green-100 text-green-700"
+                                        : ca.status === "expired"
+                                          ? "bg-red-100 text-red-700"
+                                          : "bg-yellow-100 text-yellow-700"
+                                    }
+                                  >
+                                    {ca.status === "completed"
+                                      ? "Completada"
+                                      : ca.status === "expired"
+                                        ? "Expirada"
+                                        : "Pendiente"}
+                                  </Badge>
+                                </div>
+                              ))}
+                            </div>
+
+                            {/* ✅ Indicador de estado de asignación */}
+                            {!assignment.isCompleted && allClientsCompleted && (
+                              <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded">
+                                <p className="text-xs text-yellow-700">
+                                  ⚠️ Todas las entregas completadas. La asignación se marcará como completada
+                                  automáticamente.
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-gray-500 text-center p-4 bg-gray-50 rounded">
+                            Sin entregas específicas asignadas
+                          </div>
+                        )}
+
+                        {assignment.notes && (
+                          <div className="bg-gray-50 p-3 rounded-lg">
+                            <p className="text-sm text-gray-700">
+                              <strong>Notas:</strong> {assignment.notes}
+                            </p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )
+                })}
               </div>
             )}
           </TabsContent>

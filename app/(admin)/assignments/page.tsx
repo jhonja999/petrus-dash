@@ -7,44 +7,29 @@ import { AssignmentForm } from "@/components/AssignmentForm"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, Truck, Users } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import axios from "axios"
-import { toast } from "sonner"
+import { RefreshCw } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 
 export default function AssignmentsPage() {
   const authData = useAuth()
   const assignmentsData = useAssignments()
   const trucksData = useTruckState()
   const [mounted, setMounted] = useState(false)
-  const [drivers, setDrivers] = useState<any[]>([])
-  const [loadingDrivers, setLoadingDrivers] = useState(true)
+  const [drivers, setDrivers] = useState([])
+  const [refreshing, setRefreshing] = useState(false)
   const router = useRouter()
+  const { toast } = useToast()
 
   const { isAdmin, isLoading } = authData
-  const { assignments: rawAssignments, loading: assignmentsLoading, setAssignments } = assignmentsData
-  const { trucks } = trucksData
+  const { assignments: rawAssignments, loading: assignmentsLoading, refreshAssignments } = assignmentsData
+  const { trucks, refreshTrucks } = trucksData
 
   // ✅ FIX: Asegurar que assignments siempre sea un array
   const assignments = Array.isArray(rawAssignments) ? rawAssignments : []
-
-  // ✅ Helper functions para contadores seguros
-  const getActiveTrucksCount = () => {
-    if (!Array.isArray(trucks)) return 0
-    return trucks.filter((truck: any) => truck?.state === 'Activo').length
-  }
-
-  const getActiveDriversCount = () => {
-    if (!Array.isArray(drivers)) return 0
-    return drivers.filter((driver: any) => driver?.state === 'Activo').length
-  }
-
-  const getActiveAssignmentsCount = () => {
-    if (!Array.isArray(assignments)) return 0
-    return assignments.filter((assignment: any) => !assignment?.isCompleted).length
-  }
 
   useEffect(() => {
     setMounted(true)
@@ -61,44 +46,69 @@ export default function AssignmentsPage() {
 
     const fetchDrivers = async () => {
       try {
-        toast.info("Cargando conductores...")
-        
         const response = await axios.get("/api/users?role=conductor")
         setDrivers(response.data)
-        
-        toast.success("✅ Datos cargados", {
-          description: `${response.data.length} conductores disponibles.`,
-        })
-        
-        // Show additional info if no drivers
-        if (response.data.length === 0) {
-          setTimeout(() => {
-            toast.warning("⚠️ Sin conductores", {
-              description: "No hay conductores registrados en el sistema.",
-            })
-          }, 1000)
-        }
       } catch (error) {
         console.error("Error al obtener conductores:", error)
-        toast.error("❌ Error al cargar", {
-          description: "No se pudieron cargar los conductores.",
-        })
-      } finally {
-        setLoadingDrivers(false)
       }
     }
     fetchDrivers()
   }, [mounted])
 
-  const handleAssignmentSuccess = () => {
-    toast.success("✅ ¡Asignación creada!", {
-      description: "Actualizando lista de asignaciones...",
-    })
-    
-    // Refrescar asignaciones
+  // Add this useEffect after the existing ones
+  useEffect(() => {
+    if (!mounted || !isAdmin) return
+
+    // Set up polling for real-time updates every 30 seconds
+    const interval = setInterval(() => {
+      console.log("🔄 Auto-refreshing assignments data...")
+      refreshAssignments()
+    }, 30000)
+
+    return () => clearInterval(interval)
+  }, [mounted, isAdmin, refreshAssignments])
+
+  const handleAssignmentSuccess = async () => {
+    // Refrescar asignaciones y camiones
+    await Promise.all([refreshTrucks(), refreshAssignments()])
+
+    // Force a refresh of the assignments list to show updated status
     setTimeout(() => {
-      window.location.reload()
-    }, 1500)
+      refreshAssignments()
+    }, 1000)
+  }
+
+  const handleManualRefresh = async () => {
+    if (refreshing) return
+
+    setRefreshing(true)
+    console.log("👤 Manual refresh initiated from assignments page")
+
+    try {
+      // First refresh truck statuses
+      const statusResponse = await axios.post("/api/trucks/refresh-status")
+
+      // Then refresh both trucks and assignments data
+      await Promise.all([refreshTrucks(), refreshAssignments()])
+
+      toast({
+        title: "Estados actualizados",
+        description: statusResponse.data.message,
+      })
+
+      console.log("✅ Manual refresh completed successfully")
+    } catch (error) {
+      console.error("Error in manual refresh:", error)
+      toast({
+        title: "Error",
+        description: "Error al actualizar estados",
+        variant: "destructive",
+      })
+    } finally {
+      setTimeout(() => {
+        setRefreshing(false)
+      }, 2000)
+    }
   }
 
   // Si aún no se ha montado, renderizar un placeholder mínimo
@@ -110,7 +120,7 @@ export default function AssignmentsPage() {
     )
   }
 
-  if (isLoading || assignmentsLoading || loadingDrivers) {
+  if (isLoading || assignmentsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -121,10 +131,7 @@ export default function AssignmentsPage() {
   if (!isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-xl font-semibold text-gray-900">Acceso denegado</h2>
-          <p className="text-gray-600">No tienes permisos para acceder a esta página.</p>
-        </div>
+        <p className="text-sm text-gray-600">Acceso No Autorizado</p>
       </div>
     )
   }
@@ -136,67 +143,32 @@ export default function AssignmentsPage() {
           <h1 className="text-2xl font-bold text-gray-900">Gestión de Asignaciones</h1>
           <p className="text-sm text-gray-600">Asignar camiones y combustible a conductores</p>
         </div>
-        <Button asChild variant="outline">
-          <Link href="/dashboard">Volver al Dashboard</Link>
+        <Button
+          onClick={handleManualRefresh}
+          disabled={refreshing}
+          variant="ghost"
+          size="sm"
+          className="flex items-center gap-2 hover:bg-gray-100 transition-colors duration-200"
+        >
+          <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+          {refreshing ? "Actualizando..." : "Actualizar"}
         </Button>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white p-4 rounded-lg shadow border">
-          <div className="flex items-center">
-            <div className="bg-blue-100 p-2 rounded-lg">
-              <Truck className="h-5 w-5 text-blue-600" />
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-gray-600">Camiones Disponibles</p>
-              <p className="text-lg font-semibold">{getActiveTrucksCount()}</p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white p-4 rounded-lg shadow border">
-          <div className="flex items-center">
-            <div className="bg-green-100 p-2 rounded-lg">
-              <Users className="h-5 w-5 text-green-600" />
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-gray-600">Conductores Activos</p>
-              <p className="text-lg font-semibold">{getActiveDriversCount()}</p>
-            </div>
-          </div>
-        </div>
-        
-        <div className="bg-white p-4 rounded-lg shadow border">
-          <div className="flex items-center">
-            <div className="bg-orange-100 p-2 rounded-lg">
-              <Plus className="h-5 w-5 text-orange-600" />
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-gray-600">Asignaciones Activas</p>
-              <p className="text-lg font-semibold">{getActiveAssignmentsCount()}</p>
-            </div>
-          </div>
-        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-1">
-          <div className="bg-white rounded-lg shadow p-6">
-            <AssignmentForm 
-              trucks={trucks || []} 
-              drivers={drivers || []} 
-              onSuccess={handleAssignmentSuccess} 
-            />
-          </div>
+          <AssignmentForm
+            trucks={trucks}
+            drivers={drivers}
+            onSuccess={handleAssignmentSuccess}
+            refreshing={refreshing}
+          />
         </div>
 
         <div className="lg:col-span-2">
           <div className="bg-white rounded-lg shadow">
             <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Asignaciones Recientes ({assignments.length})
-              </h2>
+              <h2 className="text-lg font-semibold text-gray-900">Asignaciones Recientes ({assignments.length})</h2>
             </div>
             {assignments.length > 0 ? (
               <div className="overflow-x-auto">
@@ -237,15 +209,17 @@ export default function AssignmentsPage() {
                           <TableCell className="font-semibold text-blue-600">{totalRemaining}</TableCell>
                           <TableCell>{createdAt}</TableCell>
                           <TableCell>
-                            <Badge className={assignment.isCompleted ? "bg-gray-100 text-gray-800" : "bg-green-100 text-green-800"}>
+                            <Badge
+                              className={
+                                assignment.isCompleted ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
+                              }
+                            >
                               {assignment.isCompleted ? "Completada" : "Activa"}
                             </Badge>
                           </TableCell>
                           <TableCell>
                             <Button asChild size="sm" variant="outline" disabled={assignment.isCompleted}>
-                              <Link href={`/assignments/${assignment.id}/clients`}>
-                                Gestionar Clientes
-                              </Link>
+                              <Link href={`/assignments/${assignment.id}/clients`}>Gestionar Clientes</Link>
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -256,11 +230,10 @@ export default function AssignmentsPage() {
               </div>
             ) : (
               <div className="p-8 text-center">
-                <div className="mb-4">
-                  <Truck className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500 mb-2">No hay asignaciones registradas</p>
-                  <p className="text-sm text-gray-400">Usa el formulario de la izquierda para crear la primera asignación</p>
-                </div>
+                <p className="text-gray-500 mb-4">No hay asignaciones registradas</p>
+                <Button asChild variant="outline">
+                  <Link href="/assignments/new">Crear Primera Asignación</Link>
+                </Button>
               </div>
             )}
           </div>
