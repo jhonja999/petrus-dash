@@ -3,8 +3,9 @@ import { prisma } from "@/lib/prisma"
 import { verifyToken } from "@/lib/jwt"
 import { hashPassword } from "@/lib/auth" // Assuming hashPassword is in lib/auth
 
-export async function GET(request: NextRequest, context: { params: { id: string } }) {
-  const userId = Number.parseInt(context.params.id) // Acceso correcto a params.id
+export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const params = await context.params
+  const userId = Number.parseInt(params.id)
   try {
     const token = request.cookies.get("token")?.value
     if (!token) {
@@ -46,8 +47,9 @@ export async function GET(request: NextRequest, context: { params: { id: string 
   }
 }
 
-export async function PUT(request: NextRequest, context: { params: { id: string } }) {
-  const userId = Number.parseInt(context.params.id) // Acceso correcto a params.id
+export async function PUT(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const params = await context.params
+  const userId = Number.parseInt(params.id)
   try {
     const token = request.cookies.get("token")?.value
     if (!token) {

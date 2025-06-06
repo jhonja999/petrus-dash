@@ -275,9 +275,12 @@ export async function POST(request: NextRequest) {
     })
 
     // Validate required fields
-    if (!truckId || !driverId || !fuelType || !totalLoaded || !clients || clients.length === 0) {
+    if (!truckId || !driverId || !fuelType || !totalLoaded) {
       return NextResponse.json({ error: "Todos los campos son requeridos" }, { status: 400 })
     }
+
+    // Clients are optional for initial assignment creation
+    const clientsArray = clients || []
 
     // Check if truck is available
     const truck = await prisma.truck.findUnique({
@@ -319,10 +322,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "El conductor ya tiene una asignación activa" }, { status: 400 })
     }
 
-    // Validate total allocated quantity
-    const totalAllocated = clients.reduce((sum: number, client: any) => sum + Number(client.quantity), 0)
-    if (totalAllocated > totalLoaded) {
-      return NextResponse.json({ error: "La cantidad total asignada excede la carga del camión" }, { status: 400 })
+    // Validate total allocated quantity (only if clients are provided)
+    if (clientsArray.length > 0) {
+      const totalAllocated = clientsArray.reduce((sum: number, client: any) => sum + Number(client.quantity), 0)
+      if (totalAllocated > totalLoaded) {
+        return NextResponse.json({ error: "La cantidad total asignada excede la carga del camión" }, { status: 400 })
+      }
     }
 
     // Create assignment with client assignments in a transaction
@@ -339,20 +344,23 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      // Create client assignments
-      const clientAssignments = await Promise.all(
-        clients.map((client: any) =>
-          tx.clientAssignment.create({
-            data: {
-              assignmentId: assignment.id,
-              customerId: client.customerId,
-              allocatedQuantity: Number(client.quantity),
-              deliveredQuantity: 0,
-              status: "pending",
-            },
-          }),
-        ),
-      )
+      // Create client assignments (only if clients are provided)
+      const clientAssignments =
+        clientsArray.length > 0
+          ? await Promise.all(
+              clientsArray.map((client: any) =>
+                tx.clientAssignment.create({
+                  data: {
+                    assignmentId: assignment.id,
+                    customerId: client.customerId,
+                    allocatedQuantity: Number(client.quantity),
+                    deliveredQuantity: 0,
+                    status: "pending",
+                  },
+                }),
+              ),
+            )
+          : []
 
       // Update truck status to "Asignado"
       await tx.truck.update({

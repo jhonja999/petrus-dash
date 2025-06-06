@@ -78,6 +78,7 @@ export function AssignmentForm({ trucks, drivers, onSuccess, refreshing = false 
         driverId: Number.parseInt(formData.driverId),
         totalLoaded: totalLoaded,
         fuelType: selectedTruck?.typefuel || formData.fuelType,
+        clients: [], // Add empty clients array for initial assignment
         notes: formData.notes || undefined,
       })
 
