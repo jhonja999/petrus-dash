@@ -30,6 +30,7 @@ import {
   RotateCcw,
 } from "lucide-react"
 import axios from "axios"
+import { getNextDispatchNumber } from "@/lib/dispatch-numbering" // Import the sequential number generator
 
 interface DispatchFormData {
   truckId: string
@@ -146,24 +147,21 @@ export default function NewDispatchPage() {
   const [drivers, setDrivers] = useState<Driver[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
 
-  // Load initial data
+  // Load initial data and next dispatch number
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [vehiclesRes, driversRes, customersRes] = await Promise.all([
+        const [vehiclesRes, driversRes, customersRes, nextDispatchNumRes] = await Promise.all([
           axios.get("/api/trucks"),
           axios.get("/api/users"),
           axios.get("/api/customers"),
+          getNextDispatchNumber(), // Get the sequential dispatch number
         ])
 
         setVehicles(vehiclesRes.data.filter((v: Vehicle) => v.state === "Activo"))
         setDrivers(driversRes.data.filter((d: Driver) => d.role === "Operador" && d.state === "Activo"))
         setCustomers(customersRes.data)
-
-        // Generate next dispatch number
-        const currentYear = new Date().getFullYear()
-        const randomNumber = Math.floor(Math.random() * 900000) + 100000
-        setNextDispatchNumber(`PE-${randomNumber}-${currentYear}`)
+        setNextDispatchNumber(nextDispatchNumRes) // Set the sequential dispatch number
       } catch (error) {
         console.error("Error loading data:", error)
         toast({
@@ -304,6 +302,8 @@ export default function NewDispatchPage() {
       address: "",
       method: "OFFICE_PLANNED",
     })
+    // Re-fetch the next dispatch number after reset
+    getNextDispatchNumber().then(setNextDispatchNumber)
   }
 
   const selectedVehicle = vehicles.find((v) => v.id === Number.parseInt(formData.truckId))

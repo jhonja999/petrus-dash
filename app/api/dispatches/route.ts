@@ -1,15 +1,10 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import type { DispatchStatus } from "@prisma/client"
+import { generateDispatchNumber } from "@/lib/dispatch-numbering" // Import the sequential number generator
 
 // Mapeo de valores válidos de status
-const VALID_DISPATCH_STATUSES: DispatchStatus[] = [
-  "PROGRAMADO",
-  "CARGANDO", 
-  "EN_RUTA",
-  "COMPLETADO",
-  "CANCELADO"
-]
+const VALID_DISPATCH_STATUSES: DispatchStatus[] = ["PROGRAMADO", "CARGANDO", "EN_RUTA", "COMPLETADO", "CANCELADO"]
 
 export async function GET(request: Request) {
   try {
@@ -18,8 +13,8 @@ export async function GET(request: Request) {
     const statusParam = searchParams.get("status")
     const scheduledDate = searchParams.get("scheduledDate")
     const customerId = searchParams.get("customerId")
-    const page = parseInt(searchParams.get("page") || "1")
-    const limit = parseInt(searchParams.get("limit") || "50")
+    const page = Number.parseInt(searchParams.get("page") || "1")
+    const limit = Number.parseInt(searchParams.get("limit") || "50")
 
     console.log("🔍 Fetching dispatches with params:", {
       driverId,
@@ -27,28 +22,32 @@ export async function GET(request: Request) {
       scheduledDate,
       customerId,
       page,
-      limit
+      limit,
     })
 
     if (!driverId || isNaN(Number(driverId))) {
-      return NextResponse.json({ 
-        success: false, 
-        error: "ID de conductor requerido y válido" 
-      }, { status: 400 })
+      return NextResponse.json(
+        {
+          success: false,
+          error: "ID de conductor requerido y válido",
+        },
+        { status: 400 },
+      )
     }
 
     // Base where clause
     const where: any = {
-      driverId: Number(driverId)
+      driverId: Number(driverId),
     }
 
     // ✅ Procesar status correctamente - puede venir como string concatenado
     if (statusParam && statusParam.trim()) {
       // Dividir por comas y limpiar espacios
-      const statusArray = statusParam.split(",")
-        .map(s => s.trim())
-        .filter(s => s.length > 0)
-        .filter(s => VALID_DISPATCH_STATUSES.includes(s as DispatchStatus))
+      const statusArray = statusParam
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+        .filter((s) => VALID_DISPATCH_STATUSES.includes(s as DispatchStatus))
 
       if (statusArray.length === 1) {
         // Si es un solo status
@@ -56,10 +55,10 @@ export async function GET(request: Request) {
       } else if (statusArray.length > 1) {
         // Si son múltiples status, usar el operador 'in'
         where.status = {
-          in: statusArray as DispatchStatus[]
+          in: statusArray as DispatchStatus[],
         }
       }
-      
+
       console.log("🔍 Processed status filter:", where.status)
     }
 
@@ -68,10 +67,10 @@ export async function GET(request: Request) {
       const targetDate = new Date(scheduledDate)
       const startOfDay = new Date(targetDate.setHours(0, 0, 0, 0))
       const endOfDay = new Date(targetDate.setHours(23, 59, 59, 999))
-      
+
       where.scheduledDate = {
         gte: startOfDay,
-        lte: endOfDay
+        lte: endOfDay,
       }
     }
 
@@ -98,8 +97,8 @@ export async function GET(request: Request) {
                 capacitygal: true,
                 currentLoad: true,
                 state: true,
-                typefuel: true
-              }
+                typefuel: true,
+              },
             },
             driver: {
               select: {
@@ -107,8 +106,8 @@ export async function GET(request: Request) {
                 name: true,
                 lastname: true,
                 email: true,
-                role: true
-              }
+                role: true,
+              },
             },
             customer: {
               select: {
@@ -117,20 +116,17 @@ export async function GET(request: Request) {
                 ruc: true,
                 address: true,
                 defaultLatitude: true,
-                defaultLongitude: true
-              }
-            }
+                defaultLongitude: true,
+              },
+            },
           },
-          orderBy: [
-            { scheduledDate: "asc" },
-            { createdAt: "desc" }
-          ],
+          orderBy: [{ scheduledDate: "asc" }, { createdAt: "desc" }],
           skip: offset,
-          take: limit
+          take: limit,
         }),
         prisma.dispatch.count({
-          where
-        })
+          where,
+        }),
       ])
 
       console.log(`✅ Found ${dispatches.length} dispatches (${total} total) for driver ${driverId}`)
@@ -149,44 +145,48 @@ export async function GET(request: Request) {
           total,
           totalPages,
           hasNextPage,
-          hasPrevPage
-        }
+          hasPrevPage,
+        },
       })
-
     } catch (prismaError) {
       console.error("❌ Prisma query error:", prismaError)
-      
+
       // Manejo específico de errores de Prisma
       if (prismaError instanceof Error) {
         if (prismaError.message.includes("Invalid") || prismaError.message.includes("validation")) {
-          return NextResponse.json({ 
-            success: false, 
-            error: "Parámetros de consulta inválidos",
-            details: "Verifique los filtros aplicados"
-          }, { status: 400 })
+          return NextResponse.json(
+            {
+              success: false,
+              error: "Parámetros de consulta inválidos",
+              details: "Verifique los filtros aplicados",
+            },
+            { status: 400 },
+          )
         } else if (prismaError.message.includes("connect") || prismaError.message.includes("timeout")) {
-          return NextResponse.json({ 
-            success: false, 
-            error: "Error de conexión a la base de datos",
-            details: "Intente de nuevo en unos momentos"
-          }, { status: 503 })
+          return NextResponse.json(
+            {
+              success: false,
+              error: "Error de conexión a la base de datos",
+              details: "Intente de nuevo en unos momentos",
+            },
+            { status: 503 },
+          )
         }
       }
-      
+
       throw prismaError // Re-lanzar si no es un error conocido
     }
-
   } catch (error) {
     console.error("❌ Dispatches API Error:", error)
-    
+
     let errorMessage = "Error interno del servidor"
     let errorDetails = "Error desconocido"
     let statusCode = 500
-    
+
     if (error instanceof Error) {
       errorMessage = error.message
       errorDetails = error.stack || error.message
-      
+
       // Categorizar tipos de error
       if (error.message.includes("Invalid") || error.message.includes("validation")) {
         statusCode = 400
@@ -199,12 +199,15 @@ export async function GET(request: Request) {
         errorMessage = "Servicio no disponible temporalmente"
       }
     }
-    
-    return NextResponse.json({ 
-      success: false,
-      error: errorMessage,
-      details: process.env.NODE_ENV === 'development' ? errorDetails : undefined
-    }, { status: statusCode })
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: errorMessage,
+        details: process.env.NODE_ENV === "development" ? errorDetails : undefined,
+      },
+      { status: statusCode },
+    )
   }
 }
 
@@ -212,61 +215,56 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { 
-      truckId, 
-      driverId, 
-      customerId, 
-      fuelType, 
-      quantity, 
-      deliveryAddress, 
+    const {
+      truckId,
+      driverId,
+      customerId,
+      fuelType,
+      customFuelName, // Include customFuelName
+      quantity,
+      deliveryAddress,
       deliveryLatitude,
       deliveryLongitude,
       scheduledDate,
       priority = "NORMAL",
-      notes
+      notes,
     } = body
 
     // Validaciones básicas
     if (!truckId || !driverId || !customerId || !quantity) {
-      return NextResponse.json({ 
-        success: false, 
-        error: "Campos requeridos: truckId, driverId, customerId, quantity" 
-      }, { status: 400 })
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Campos requeridos: truckId, driverId, customerId, quantity",
+        },
+        { status: 400 },
+      )
     }
 
-    // Generar número de despacho único
-    const currentYear = new Date().getFullYear()
-    
-    // Buscar o crear secuencia para el año actual
-    let sequence = await prisma.dispatchSequence.findUnique({
-      where: { year: currentYear }
-    })
-
-    if (!sequence) {
-      sequence = await prisma.dispatchSequence.create({
-        data: { year: currentYear, lastNumber: 0 }
-      })
+    // Validate custom fuel name if fuelType is PERSONALIZADO
+    if (fuelType === "PERSONALIZADO" && (!customFuelName || customFuelName.trim().length < 3)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "El nombre del combustible personalizado es requerido y debe tener al menos 3 caracteres.",
+        },
+        { status: 400 },
+      )
     }
 
-    // Incrementar y obtener siguiente número
-    const nextNumber = sequence.lastNumber + 1
-    await prisma.dispatchSequence.update({
-      where: { year: currentYear },
-      data: { lastNumber: nextNumber }
-    })
-
-    // Generar número de despacho con formato PE-000001-2025
-    const dispatchNumber = `PE-${nextNumber.toString().padStart(6, '0')}-${currentYear}`
+    // Generate unique dispatch number using the centralized function
+    const dispatchNumber = await generateDispatchNumber()
 
     // Crear el despacho
     const newDispatch = await prisma.dispatch.create({
       data: {
         dispatchNumber,
-        year: currentYear,
+        year: new Date().getFullYear(), // Year is derived from the dispatch number
         truckId: Number(truckId),
         driverId: Number(driverId),
         customerId: Number(customerId),
         fuelType,
+        customFuelName: fuelType === "PERSONALIZADO" ? customFuelName : null, // Store custom fuel name
         quantity: Number(quantity),
         deliveryAddress,
         deliveryLatitude: deliveryLatitude ? Number(deliveryLatitude) : null,
@@ -274,13 +272,13 @@ export async function POST(request: Request) {
         scheduledDate: new Date(scheduledDate),
         priority,
         status: "PROGRAMADO",
-        notes
+        notes,
       },
       include: {
         truck: true,
         driver: true,
-        customer: true
-      }
+        customer: true,
+      },
     })
 
     console.log("✅ New dispatch created:", newDispatch.dispatchNumber)
@@ -288,16 +286,18 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       data: newDispatch,
-      message: `Despacho ${dispatchNumber} creado exitosamente`
+      message: `Despacho ${dispatchNumber} creado exitosamente`,
     })
-
   } catch (error) {
     console.error("❌ Create Dispatch Error:", error)
-    return NextResponse.json({ 
-      success: false,
-      error: "Error al crear el despacho",
-      details: error instanceof Error ? error.message : "Error desconocido"
-    }, { status: 500 })
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Error al crear el despacho",
+        details: error instanceof Error ? error.message : "Error desconocido",
+      },
+      { status: 500 },
+    )
   }
 }
 
@@ -308,10 +308,13 @@ export async function PUT(request: Request) {
     const { id, ...updateData } = body
 
     if (!id) {
-      return NextResponse.json({ 
-        success: false, 
-        error: "ID del despacho requerido" 
-      }, { status: 400 })
+      return NextResponse.json(
+        {
+          success: false,
+          error: "ID del despacho requerido",
+        },
+        { status: 400 },
+      )
     }
 
     // Actualizar timestamps según el status
@@ -336,8 +339,8 @@ export async function PUT(request: Request) {
       include: {
         truck: true,
         driver: true,
-        customer: true
-      }
+        customer: true,
+      },
     })
 
     console.log("✅ Dispatch updated:", updatedDispatch.dispatchNumber)
@@ -345,15 +348,17 @@ export async function PUT(request: Request) {
     return NextResponse.json({
       success: true,
       data: updatedDispatch,
-      message: "Despacho actualizado exitosamente"
+      message: "Despacho actualizado exitosamente",
     })
-
   } catch (error) {
     console.error("❌ Update Dispatch Error:", error)
-    return NextResponse.json({ 
-      success: false,
-      error: "Error al actualizar el despacho",
-      details: error instanceof Error ? error.message : "Error desconocido"
-    }, { status: 500 })
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Error al actualizar el despacho",
+        details: error instanceof Error ? error.message : "Error desconocido",
+      },
+      { status: 500 },
+    )
   }
 }

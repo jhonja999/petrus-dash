@@ -251,6 +251,8 @@ export function DispatchForm({ trucks, drivers, customers }: DispatchFormProps) 
     })
     setErrors({})
     setSelectedTruck(null)
+    // Re-fetch the next dispatch number after reset
+    getNextDispatchNumber().then(setNextDispatchNumber)
   }
 
   const selectedDriver = drivers.find((d) => d.id === formData.driverId)
