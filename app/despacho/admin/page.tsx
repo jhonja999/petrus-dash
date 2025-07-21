@@ -23,7 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, Users, Calendar, Search, Filter } from "lucide-react";
 import Link from "next/link";
 import axios from "axios";
-import type { Discharge, Assignment, User } from "@/types/globals.d";
+import type { Discharge, Assignment, User } from "@/types/globals";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function DespachoAdminPage() {
