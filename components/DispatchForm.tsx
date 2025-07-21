@@ -16,9 +16,7 @@ import { useToast } from "@/components/ui/use-toast"
 import { CalendarIcon, MapPin, User, Fuel, AlertCircle, Save, RotateCcw } from "lucide-react"
 import { format } from "date-fns"
 import type { Truck as TruckType, User as UserType, Customer, FuelType, DispatchFormData } from "@/types/globals"
-import { FUEL_TYPE_LABELS } from "@/types/globals"
-import { CapacityBar } from "@/components/ui/capacity-bar"
-import { calculateCapacityInfo, validateCapacityAssignment } from "@/lib/capacity-utils"
+import { validateCapacityAssignment } from "@/lib/capacity-utils"
 import { getNextDispatchNumber } from "@/lib/dispatch-numbering"
 
 interface DispatchFormProps {
@@ -39,7 +37,7 @@ const FUEL_TYPES: { value: FuelType; label: string }[] = [
   { value: "GASOHOL_84", label: "Gasohol 84" },
   { value: "GASOHOL_90", label: "Gasohol 90" },
   { value: "GASOHOL_95", label: "Gasohol 95" },
-  { value: "SOLVENTE", label: "Solvente" },
+  { value: "SOLVENTE", label: "Solvente Industrial" },
   { value: "GASOL", label: "Gasol" },
   { value: "PERSONALIZADO", label: "Personalizado" },
 ]
@@ -59,7 +57,7 @@ export function DispatchForm({ trucks, drivers, customers }: DispatchFormProps) 
     truckId: 0,
     driverId: 0,
     customerId: 0,
-    fuelType: "DIESEL_B5",
+    fuelType: "DIESEL_B5", // Default fuel type
     customFuelName: "",
     quantity: 0,
     locationGPS: "",
@@ -142,6 +140,15 @@ export function DispatchForm({ trucks, drivers, customers }: DispatchFormProps) 
     )
   }
 
+  // Convertir Truck a TruckCapacity para validación
+  const convertTruckToCapacity = (truck: TruckType) => ({
+    id: truck.id,
+    capacitygal: Number(truck.capacitygal),
+    currentLoad: Number(truck.currentLoad || 0),
+    minCapacity: truck.minCapacity ? Number(truck.minCapacity) : null,
+    maxCapacity: truck.maxCapacity ? Number(truck.maxCapacity) : null,
+  })
+
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {}
 
@@ -165,7 +172,8 @@ export function DispatchForm({ trucks, drivers, customers }: DispatchFormProps) 
 
     // Validar capacidad del camión
     if (selectedTruck && formData.quantity > 0) {
-      const validation = validateCapacityAssignment(selectedTruck, formData.quantity)
+      const truckCapacity = convertTruckToCapacity(selectedTruck)
+      const validation = validateCapacityAssignment(truckCapacity, formData.quantity)
       if (!validation.isValid) {
         newErrors.quantity = validation.message || "Cantidad inválida"
       }
@@ -249,6 +257,22 @@ export function DispatchForm({ trucks, drivers, customers }: DispatchFormProps) 
   const selectedCustomer = customers.find((c) => c.id === formData.customerId)
   const selectedPriority = PRIORITY_OPTIONS.find((p) => p.value === formData.priority)
 
+  // Calcular información de capacidad para mostrar
+  const getCapacityInfo = (truck: TruckType) => {
+    const totalCapacity = Number(truck.capacitygal)
+    const currentLoad = Number(truck.currentLoad || 0)
+    const availableCapacity = Math.max(totalCapacity - currentLoad, 0)
+    const utilizationPercentage = totalCapacity > 0 ? (currentLoad / totalCapacity) * 100 : 0
+
+    return {
+      totalCapacity,
+      currentLoad,
+      availableCapacity,
+      utilizationPercentage,
+      isOverCapacity: currentLoad > totalCapacity,
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header con número de despacho */}
@@ -292,7 +316,7 @@ export function DispatchForm({ trucks, drivers, customers }: DispatchFormProps) 
                         <div className="flex items-center justify-between w-full">
                           <span>{truck.placa}</span>
                           <Badge variant="secondary" className="ml-2">
-                            {FUEL_TYPE_LABELS[truck.typefuel]}
+                            {Number(truck.capacitygal).toLocaleString()} gal
                           </Badge>
                         </div>
                       </SelectItem>
@@ -300,6 +324,9 @@ export function DispatchForm({ trucks, drivers, customers }: DispatchFormProps) 
                   </SelectContent>
                 </Select>
                 {errors.truckId && <p className="text-sm text-red-500">{errors.truckId}</p>}
+                <p className="text-xs text-gray-600">
+                  Nota: Cualquier camión puede transportar cualquier tipo de combustible
+                </p>
               </div>
 
               {/* Selección de Conductor */}
@@ -344,7 +371,59 @@ export function DispatchForm({ trucks, drivers, customers }: DispatchFormProps) 
         </Card>
 
         {/* Capacidad del Tanque */}
-        {selectedTruck && <CapacityBar capacityInfo={calculateCapacityInfo(selectedTruck)} showDetails={true} />}
+        {selectedTruck && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Fuel className="h-5 w-5" />
+                Capacidad del Tanque
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <span className="font-medium">Capacidad Total:</span>
+                    <p className="text-lg font-bold text-blue-600">
+                      {Number(selectedTruck.capacitygal).toLocaleString()} gal
+                    </p>
+                  </div>
+                  <div>
+                    <span className="font-medium">Carga Actual:</span>
+                    <p className="text-lg font-bold text-orange-600">
+                      {Number(selectedTruck.currentLoad || 0).toLocaleString()} gal
+                    </p>
+                  </div>
+                  <div>
+                    <span className="font-medium">Disponible:</span>
+                    <p className="text-lg font-bold text-green-600">
+                      {(Number(selectedTruck.capacitygal) - Number(selectedTruck.currentLoad || 0)).toLocaleString()}{" "}
+                      gal
+                    </p>
+                  </div>
+                </div>
+
+                {/* Barra de progreso visual */}
+                <div className="w-full bg-gray-200 rounded-full h-4">
+                  <div
+                    className="bg-blue-600 h-4 rounded-full transition-all duration-300"
+                    style={{
+                      width: `${Math.min(
+                        (Number(selectedTruck.currentLoad || 0) / Number(selectedTruck.capacitygal)) * 100,
+                        100,
+                      )}%`,
+                    }}
+                  />
+                </div>
+
+                <p className="text-xs text-gray-600">
+                  Utilización actual:{" "}
+                  {((Number(selectedTruck.currentLoad || 0) / Number(selectedTruck.capacitygal)) * 100).toFixed(1)}%
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Tipo y Cantidad de Combustible */}
         <Card>
@@ -397,7 +476,9 @@ export function DispatchForm({ trucks, drivers, customers }: DispatchFormProps) 
                 {errors.quantity && <p className="text-sm text-red-500">{errors.quantity}</p>}
                 {selectedTruck && formData.quantity > 0 && (
                   <p className="text-xs text-gray-600">
-                    Disponible: {Number(selectedTruck.capacitygal) - Number(selectedTruck.currentLoad)} galones
+                    Disponible:{" "}
+                    {(Number(selectedTruck.capacitygal) - Number(selectedTruck.currentLoad || 0)).toLocaleString()}{" "}
+                    galones
                   </p>
                 )}
               </div>

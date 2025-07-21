@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { placa, typefuel, capacitygal, lastRemaining, state } = body
+    const { placa, typefuel, capacitygal, lastRemaining, state, customFuelName } = body
 
     // Manual validation
     if (!placa?.trim() || !typefuel || isNaN(Number(capacitygal)) || Number(capacitygal) <= 0) {
@@ -45,9 +45,33 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate typefuel against FuelType enum
-    const validFuelTypes = ["DIESEL_B5", "GASOLINA_90", "GASOLINA_95", "GLP", "ELECTRICA"]
+    const validFuelTypes = [
+      "DIESEL_B5",
+      "DIESEL_B500",
+      "GASOLINA_PREMIUM_95",
+      "GASOLINA_REGULAR_90",
+      "GASOHOL_84",
+      "GASOHOL_90",
+      "GASOHOL_95",
+      "SOLVENTE",
+      "GASOL",
+      "PERSONALIZADO",
+    ]
     if (!validFuelTypes.includes(typefuel)) {
       return NextResponse.json({ error: "Tipo de combustible inválido" }, { status: 400 })
+    }
+
+    // Validate custom fuel name if PERSONALIZADO is selected
+    if (typefuel === "PERSONALIZADO") {
+      if (!customFuelName?.trim()) {
+        return NextResponse.json({ error: "El nombre del combustible personalizado es requerido" }, { status: 400 })
+      }
+      if (customFuelName.trim().length < 3) {
+        return NextResponse.json(
+          { error: "El nombre del combustible personalizado debe tener al menos 3 caracteres" },
+          { status: 400 },
+        )
+      }
     }
 
     // Validate state against TruckState enum
@@ -72,6 +96,7 @@ export async function POST(request: NextRequest) {
         capacitygal: Number.parseFloat(capacitygal),
         lastRemaining: lastRemaining !== undefined ? Number.parseFloat(lastRemaining) : 0.0,
         state: state || "Activo",
+        customFuelType: typefuel === "PERSONALIZADO" ? customFuelName.trim() : null,
       },
     })
 

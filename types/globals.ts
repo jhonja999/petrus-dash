@@ -30,9 +30,28 @@ export const FUEL_TYPE_LABELS: Record<FuelType, string> = {
   GASOHOL_84: "Gasohol 84",
   GASOHOL_90: "Gasohol 90",
   GASOHOL_95: "Gasohol 95",
-  SOLVENTE: "Solvente",
+  SOLVENTE: "Solvente Industrial",
   GASOL: "Gasol",
   PERSONALIZADO: "Personalizado",
+}
+
+// Capacity constants
+export const TRUCK_CAPACITY_LIMITS = {
+  MIN: 1500,
+  MAX: 15000,
+  STANDARD_OPTIONS: [1500, 2000, 3000, 5000, 6500, 7500, 9000, 10000, 15000],
+} as const
+
+export const CAPACITY_LABELS: Record<number, string> = {
+  1500: "1,500 galones",
+  2000: "2,000 galones",
+  3000: "3,000 galones",
+  5000: "5,000 galones",
+  6500: "6,500 galones",
+  7500: "7,500 galones",
+  9000: "9,000 galones",
+  10000: "10,000 galones",
+  15000: "15,000 galones (Máximo)",
 }
 
 // Main User interface - consistent with Prisma and AuthContext
@@ -53,14 +72,14 @@ export interface Truck {
   id: number
   placa: string
   typefuel: FuelType
+  customFuelType?: string | null // Added custom fuel type field
   capacitygal: Decimal
   lastRemaining: Decimal
   state: TruckState // Using the 'TruckState' enum from Prisma
   // Nuevos campos para gestión de capacidades
-  minCapacity: Decimal
-  maxCapacity: Decimal
+  minCapacity?: Decimal | null
+  maxCapacity?: Decimal | null
   currentLoad: Decimal
-  customFuelType?: string | null
   createdAt: Date
   updatedAt: Date
 }

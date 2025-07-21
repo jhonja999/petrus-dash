@@ -16,18 +16,18 @@ export interface CapacityValidation {
 export class CapacityUtils {
   // Validar si se puede asignar una cantidad a un camión
   static validateCapacityAssignment(truck: TruckCapacity, requestedQuantity: number): CapacityValidation {
-    const maxCapacity = Number(truck.maxCapacity || truck.capacitygal)
+    const totalCapacity = Number(truck.capacitygal)
     const currentLoad = Number(truck.currentLoad || 0)
-    const availableCapacity = maxCapacity - currentLoad
+    const availableCapacity = totalCapacity - currentLoad
     const newLoad = currentLoad + requestedQuantity
-    const utilizationPercentage = (newLoad / maxCapacity) * 100
+    const utilizationPercentage = (newLoad / totalCapacity) * 100
 
     if (requestedQuantity <= 0) {
       return {
         isValid: false,
         message: "La cantidad debe ser mayor a 0",
         availableCapacity,
-        utilizationPercentage: (currentLoad / maxCapacity) * 100,
+        utilizationPercentage: (currentLoad / totalCapacity) * 100,
       }
     }
 
@@ -43,7 +43,7 @@ export class CapacityUtils {
     if (utilizationPercentage > 100) {
       return {
         isValid: false,
-        message: `La asignación excede la capacidad máxima del camión (${maxCapacity.toLocaleString()} gal)`,
+        message: `La asignación excede la capacidad máxima del camión (${totalCapacity.toLocaleString()} gal)`,
         availableCapacity,
         utilizationPercentage,
       }
@@ -137,5 +137,83 @@ export class CapacityUtils {
 
 // Función de conveniencia para validación rápida
 export function validateCapacityAssignment(truck: TruckCapacity, quantity: number): CapacityValidation {
-  return CapacityUtils.validateCapacityAssignment(truck, quantity)
+  const totalCapacity = Number(truck.capacitygal)
+  const currentLoad = Number(truck.currentLoad || 0)
+  const availableCapacity = totalCapacity - currentLoad
+  const newLoad = currentLoad + quantity
+  const utilizationPercentage = (newLoad / totalCapacity) * 100
+
+  if (quantity <= 0) {
+    return {
+      isValid: false,
+      message: "La cantidad debe ser mayor a 0",
+      availableCapacity,
+      utilizationPercentage: (currentLoad / totalCapacity) * 100,
+    }
+  }
+
+  if (quantity > availableCapacity) {
+    return {
+      isValid: false,
+      message: `Capacidad insuficiente. Disponible: ${availableCapacity.toLocaleString()} gal, Solicitado: ${quantity.toLocaleString()} gal`,
+      availableCapacity,
+      utilizationPercentage,
+    }
+  }
+
+  if (utilizationPercentage > 100) {
+    return {
+      isValid: false,
+      message: `La asignación excede la capacidad máxima del camión (${totalCapacity.toLocaleString()} gal)`,
+      availableCapacity,
+      utilizationPercentage,
+    }
+  }
+
+  // Advertencia si se supera el 90%
+  if (utilizationPercentage > 90) {
+    return {
+      isValid: true,
+      message: `Advertencia: Se utilizará el ${utilizationPercentage.toFixed(1)}% de la capacidad`,
+      availableCapacity: availableCapacity - quantity,
+      utilizationPercentage,
+    }
+  }
+
+  return {
+    isValid: true,
+    message: `Asignación válida. Capacidad restante: ${(availableCapacity - quantity).toLocaleString()} gal`,
+    availableCapacity: availableCapacity - quantity,
+    utilizationPercentage,
+  }
+}
+
+export function calculateCapacityInfo(truck: TruckCapacity): {
+  totalCapacity: number
+  currentLoad: number
+  availableCapacity: number
+  utilizationPercentage: number
+  status: "empty" | "low" | "medium" | "high" | "full"
+  isOverCapacity: boolean
+} {
+  const totalCapacity = Number(truck.capacitygal)
+  const currentLoad = Number(truck.currentLoad || 0)
+  const availableCapacity = Math.max(totalCapacity - currentLoad, 0)
+  const utilizationPercentage = totalCapacity > 0 ? (currentLoad / totalCapacity) * 100 : 0
+
+  let status: "empty" | "low" | "medium" | "high" | "full"
+  if (utilizationPercentage >= 100) status = "full"
+  else if (utilizationPercentage >= 90) status = "high"
+  else if (utilizationPercentage >= 70) status = "medium"
+  else if (utilizationPercentage >= 30) status = "low"
+  else status = "empty"
+
+  return {
+    totalCapacity,
+    currentLoad,
+    availableCapacity,
+    utilizationPercentage,
+    status,
+    isOverCapacity: currentLoad > totalCapacity,
+  }
 }

@@ -156,6 +156,7 @@ model Truck {
   id                  Int       @id @default(autoincrement())
   placa               String    @unique
   typefuel            FuelType  @default(DIESEL_B5)
+  customFuelType      String?   // Nombre del combustible personalizado
   capacitygal         Int
   lastRemaining       Decimal   @default(0.00) @db.Decimal(10, 2)
   state               TruckState @default(Activo) // Changed from String to TruckState enum
