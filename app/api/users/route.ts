@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import {prisma} from "@/lib/prisma"
+import { prisma } from "@/lib/prisma"
 import { getUserFromToken } from "@/lib/jwt"
 import { hashPassword } from "@/lib/auth"
 
@@ -26,9 +26,9 @@ export async function GET(request: NextRequest) {
 
     // Filtrar por rol si se especifica
     if (role) {
-      // Mapear "conductor" a "Operador" para compatibilidad con frontend
+      // Mapear "conductor" a "OPERADOR" para compatibilidad con frontend
       if (role.toLowerCase() === "conductor") {
-        whereClause.role = "Operador"
+        whereClause.role = "OPERADOR"
       } else {
         whereClause.role = role
       }
@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
         email,
         dni,
         password: hashedPassword,
-        role: role || "Operador", // Default a Operador si no se especifica
+        role: role || "OPERADOR", // Default a OPERADOR si no se especifica
         state: state || "Activo", // Default a Activo si no se especifica
       },
       select: {
