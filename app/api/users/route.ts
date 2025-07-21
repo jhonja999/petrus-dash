@@ -1,142 +1,97 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { getUserFromToken } from "@/lib/jwt"
-import { hashPassword } from "@/lib/auth"
+import { Role } from "@prisma/client" // Import Prisma Role enum
 
-// GET /api/users - Obtener todos los usuarios
-export async function GET(request: NextRequest) {
+export async function GET(request: Request) {
   try {
-    // Verificar autenticación y permisos
-    const user = await getUserFromToken()
-    if (!user) {
-      return NextResponse.json({ error: "No autenticado" }, { status: 401 })
-    }
+    const { searchParams } = new URL(request.url)
+    const role = searchParams.get("role")
+    const state = searchParams.get("state")
+    const search = searchParams.get("search")
 
-    // Solo Admin y S_A pueden listar usuarios
-    if (user.role !== "Admin" && user.role !== "S_A") {
-      return NextResponse.json({ error: "No autorizado" }, { status: 403 })
-    }
-
-    // Obtener parámetros de consulta
-    const url = new URL(request.url)
-    const role = url.searchParams.get("role")
-
-    // Construir la consulta
     const whereClause: any = {}
 
-    // Filtrar por rol si se especifica
     if (role) {
-      // Mapear "conductor" a "OPERADOR" para compatibilidad con frontend
-      if (role.toLowerCase() === "conductor") {
-        whereClause.role = "OPERADOR"
+      const upperCaseRole = (role as string).toUpperCase()
+      // Ensure the role from query is a valid enum value
+      const validRoles = Object.values(Role)
+      if (validRoles.includes(upperCaseRole as Role)) {
+        whereClause.role = upperCaseRole as Role
       } else {
-        whereClause.role = role
+        console.warn(`Invalid role query parameter: ${role}`)
+        // Optionally, return an error or ignore the invalid filter
+        return NextResponse.json({ error: "Invalid role filter" }, { status: 400 })
       }
     }
+    if (state) {
+      whereClause.state = state
+    }
+    if (search) {
+      whereClause.OR = [
+        { name: { contains: search, mode: "insensitive" } },
+        { lastname: { contains: search, mode: "insensitive" } },
+        { email: { contains: search, mode: "insensitive" } },
+        { dni: { contains: search, mode: "insensitive" } },
+      ]
+    }
 
-    // Obtener usuarios
     const users = await prisma.user.findMany({
       where: whereClause,
       select: {
         id: true,
-        dni: true,
         name: true,
         lastname: true,
         email: true,
+        dni: true,
         role: true,
         state: true,
-        createdAt: true,
-      },
-      orderBy: {
-        name: "asc",
       },
     })
-
     return NextResponse.json(users)
   } catch (error) {
     console.error("Error fetching users:", error)
-    return NextResponse.json({ error: "Error al obtener usuarios" }, { status: 500 })
+    return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 })
   }
 }
 
-// POST /api/users - Crear un nuevo usuario
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
-    // Verificar autenticación y permisos
-    const currentUser = await getUserFromToken()
-    if (!currentUser) {
-      return NextResponse.json({ error: "No autenticado" }, { status: 401 })
+    const { name, lastname, email, dni, role, password, state } = await request.json()
+
+    if (!name || !lastname || !email || !dni || !role || !password || !state) {
+      return NextResponse.json({ error: "All fields are required" }, { status: 400 })
     }
 
-    // Solo Admin y S_A pueden crear usuarios
-    if (currentUser.role !== "Admin" && currentUser.role !== "S_A") {
-      return NextResponse.json({ error: "No autorizado" }, { status: 403 })
+    // Ensure role is a valid enum value and convert to uppercase
+    const finalRole = (role as string).toUpperCase() as Role
+    const validRoles = Object.values(Role)
+    if (!validRoles.includes(finalRole)) {
+      return NextResponse.json({ error: `Invalid role: ${role}` }, { status: 400 })
     }
 
-    // Obtener datos del cuerpo de la solicitud
-    const body = await request.json()
-    const { name, lastname, email, dni, password, role, state } = body
-
-    // Validaciones básicas
-    if (!name || !lastname || !email || !dni || !password) {
-      return NextResponse.json({ error: "Todos los campos son obligatorios" }, { status: 400 })
-    }
-
-    // Validar que solo S_A puede crear otros S_A
-    if (role === "S_A" && currentUser.role !== "S_A") {
-      return NextResponse.json(
-        { error: "Solo Super Administradores pueden crear otros Super Administradores" },
-        { status: 403 },
-      )
-    }
-
-    // Verificar si el email ya existe
     const existingUser = await prisma.user.findUnique({
       where: { email },
     })
 
     if (existingUser) {
-      return NextResponse.json({ error: "El correo electrónico ya está registrado" }, { status: 400 })
+      return NextResponse.json({ error: "User with this email already exists" }, { status: 409 })
     }
 
-    // Verificar si el DNI ya existe
-    const existingDni = await prisma.user.findFirst({
-      where: { dni },
-    })
-
-    if (existingDni) {
-      return NextResponse.json({ error: "El DNI ya está registrado" }, { status: 400 })
-    }
-
-    // Hashear la contraseña
-    const hashedPassword = await hashPassword(password)
-
-    // Crear el usuario
     const newUser = await prisma.user.create({
       data: {
         name,
         lastname,
         email,
         dni,
-        password: hashedPassword,
-        role: role || "OPERADOR", // Default a OPERADOR si no se especifica
-        state: state || "Activo", // Default a Activo si no se especifica
-      },
-      select: {
-        id: true,
-        name: true,
-        lastname: true,
-        email: true,
-        dni: true,
-        role: true,
-        state: true,
-        createdAt: true,
+        role: finalRole, // Use the validated and uppercased role
+        password, // In a real app, hash this password!
+        state,
       },
     })
 
     return NextResponse.json(newUser, { status: 201 })
   } catch (error) {
     console.error("Error creating user:", error)
-    return NextResponse.json({ error: "Error al crear usuario" }, { status: 500 })
+    return NextResponse.json({ error: "Failed to create user" }, { status: 500 })
   }
 }

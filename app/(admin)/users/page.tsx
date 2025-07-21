@@ -42,7 +42,7 @@ export default function UsersPage() {
     email: "",
     dni: "",
     password: "",
-    role: "Operador",
+    role: "OPERADOR", // Changed from "Operador" to "OPERADOR"
     state: "Activo",
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -94,7 +94,7 @@ export default function UsersPage() {
       // Validación básica
       if (!formData.name || !formData.lastname || !formData.email || !formData.dni || !formData.password) {
         toast.error("Error de validación", {
-          description: "Todos los campos son obligatorios."
+          description: "Todos los campos son obligatorios.",
         })
         return
       }
@@ -102,7 +102,7 @@ export default function UsersPage() {
       // Validar formato de DNI
       if (!/^\d{8}$/.test(formData.dni)) {
         toast.error("DNI inválido", {
-          description: "El DNI debe tener exactamente 8 dígitos numéricos."
+          description: "El DNI debe tener exactamente 8 dígitos numéricos.",
         })
         return
       }
@@ -110,7 +110,7 @@ export default function UsersPage() {
       // Validar formato de email
       if (!/\S+@\S+\.\S+/.test(formData.email)) {
         toast.error("Email inválido", {
-          description: "Por favor ingresa un formato de email válido."
+          description: "Por favor ingresa un formato de email válido.",
         })
         return
       }
@@ -118,7 +118,7 @@ export default function UsersPage() {
       // Validar que solo S_A puede crear otros S_A
       if (formData.role === "S_A" && !isSuperAdmin) {
         toast.error("Permiso denegado", {
-          description: "Solo Super Administradores pueden crear otros Super Administradores."
+          description: "Solo Super Administradores pueden crear otros Super Administradores.",
         })
         return
       }
@@ -135,7 +135,7 @@ export default function UsersPage() {
         email: "",
         dni: "",
         password: "",
-        role: "Operador",
+        role: "OPERADOR", // Changed from "Operador" to "OPERADOR"
         state: "Activo",
       })
 
@@ -147,7 +147,7 @@ export default function UsersPage() {
     } catch (err: any) {
       console.error("Error creating user:", err)
       toast.error("Error al crear usuario", {
-        description: err.response?.data?.error || err.message || "Hubo un problema al crear el usuario."
+        description: err.response?.data?.error || err.message || "Hubo un problema al crear el usuario.",
       })
     } finally {
       setIsSubmitting(false)
@@ -161,7 +161,7 @@ export default function UsersPage() {
         return "bg-purple-100 text-purple-800"
       case "Admin":
         return "bg-blue-100 text-blue-800"
-      case "Operador":
+      case "OPERADOR": // Changed from "Operador" to "OPERADOR"
         return "bg-green-100 text-green-800"
       default:
         return "bg-gray-100 text-gray-800"
@@ -303,7 +303,8 @@ export default function UsersPage() {
                       <SelectValue placeholder="Seleccionar rol" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Operador">Operador (Conductor)</SelectItem>
+                      <SelectItem value="OPERADOR">Operador (Conductor)</SelectItem>{" "}
+                      {/* Changed from "Operador" to "OPERADOR" */}
                       <SelectItem value="Admin">Administrador</SelectItem>
                       {isSuperAdmin && <SelectItem value="S_A">Super Administrador</SelectItem>}
                     </SelectContent>
@@ -380,7 +381,7 @@ export default function UsersPage() {
                               <Button size="sm" variant="outline" asChild>
                                 <Link href={`/users/${user.id}/edit`}>Editar</Link>
                               </Button>
-                              {user.role === "Operador" && (
+                              {user.role === "OPERADOR" && ( // Changed from "Operador" to "OPERADOR"
                                 <Button size="sm" variant="outline" asChild>
                                   <Link href={`/despacho/${user.id}`}>Ver Despacho</Link>
                                 </Button>
