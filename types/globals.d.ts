@@ -1,10 +1,40 @@
 import type React from "react"
-// types/globals.d.ts
 import type { Decimal } from "@prisma/client/runtime/library"
-import type { UserRole, UserState, FuelType, TruckState, DischargeStatus } from "@prisma/client"
+import type { UserRole, UserState, FuelType, TruckState, DischargeStatus, DispatchStatus, Role } from "@prisma/client" // Import Role enum from Prisma client
 
 // Re-export Prisma types for easier access
-export type { UserRole, UserState, FuelType, TruckState, DischargeStatus } from "@prisma/client"
+export type {
+  UserRole,
+  UserState,
+  FuelType,
+  TruckState,
+  DischargeStatus,
+  DispatchStatus,
+  Role,
+} from "@prisma/client"
+
+// Fuel type labels for UI
+export const FUEL_TYPE_LABELS: Record<FuelType, string> = {
+  DIESEL_B5: "Diésel B5",
+  DIESEL_B500: "Diésel B500",
+  GASOLINA_PREMIUM_95: "Gasolina Premium 95",
+  GASOLINA_REGULAR_90: "Gasolina Regular 90",
+  GASOHOL_84: "Gasohol 84",
+  GASOHOL_90: "Gasohol 90",
+  GASOHOL_95: "Gasohol 95",
+  SOLVENTE: "Solvente",
+  GASOL: "Gasol",
+  PERSONALIZADO: "Personalizado",
+}
+
+// Dispatch status labels
+export const DISPATCH_STATUS_LABELS: Record<DispatchStatus, string> = {
+  PROGRAMADO: "Programado",
+  CARGANDO: "Cargando",
+  EN_RUTA: "En Ruta",
+  COMPLETADO: "Completado",
+  CANCELADO: "Cancelado",
+}
 
 // Main User interface - consistent with Prisma and AuthContext
 export interface User {
@@ -23,12 +53,17 @@ export interface User {
 export interface Truck {
   id: number
   placa: string
-  typefuel: FuelType // "DIESEL_B5" | "GASOLINA_90" | "GASOLINA_95" | "GLP" | "ELECTRICA"
+  typefuel: FuelType
   capacitygal: Decimal
   lastRemaining: Decimal
-  state: TruckState // "Activo" | "Inactivo" | "Mantenimiento" | "Transito" | "Descarga" | "Asignado"
-  createdAt?: Date // Added for consistency
-  updatedAt?: Date // Added for consistency
+  state: TruckState
+  // Nuevos campos para gestión de capacidades
+  minCapacity: Decimal
+  maxCapacity: Decimal
+  currentLoad: Decimal
+  customFuelType?: string | null
+  createdAt: Date
+  updatedAt: Date
 }
 
 export interface Customer {
@@ -36,8 +71,8 @@ export interface Customer {
   companyname: string
   ruc: string
   address: string
-  createdAt?: Date // Added for consistency
-  updatedAt?: Date // Added for consistency
+  createdAt: Date
+  updatedAt: Date
 }
 
 export interface Assignment {
@@ -47,12 +82,42 @@ export interface Assignment {
   totalLoaded: Decimal
   totalRemaining: Decimal
   fuelType: FuelType
+  customFuelName?: string | null
   isCompleted: boolean
-  completedAt?: Date | null // Nueva columna para fecha de finalización
+  completedAt?: Date | null
   notes?: string | null
   truck: Truck
   driver: User
   discharges: Discharge[]
+  createdAt: Date
+  updatedAt: Date
+}
+
+// Nuevo interface para Dispatch
+export interface Dispatch {
+  id: number
+  dispatchNumber: string // PE-000001-2025
+  year: number
+  sequenceNumber: number
+  truckId: number
+  driverId: number
+  customerId: number
+  fuelType: FuelType
+  customFuelName?: string | null
+  quantity: Decimal
+  locationGPS?: string | null
+  locationManual?: string | null
+  address: string
+  status: DispatchStatus
+  scheduledDate: Date
+  startedAt?: Date | null
+  enRouteAt?: Date | null
+  completedAt?: Date | null
+  notes?: string | null
+  priority: number
+  truck: Truck
+  driver: User
+  customer: Customer
   createdAt: Date
   updatedAt: Date
 }
@@ -62,12 +127,12 @@ export interface Discharge {
   assignmentId: number
   customerId: number
   totalDischarged: Decimal
-  status: DischargeStatus // Cambiado a enum: "pendiente" | "en_proceso" | "finalizado" | "cancelado"
+  status: DischargeStatus
   marcadorInicial?: Decimal | null
   marcadorFinal?: Decimal | null
   cantidadReal?: Decimal | null
-  startTime?: Date | null // Nueva columna para hora de inicio
-  endTime?: Date | null // Nueva columna para hora de finalización
+  startTime?: Date | null
+  endTime?: Date | null
   assignment: Assignment
   customer: Customer
   createdAt: Date
@@ -134,7 +199,23 @@ export interface AssignmentFormData {
   driverId: number
   totalLoaded: number
   fuelType: FuelType
+  customFuelName?: string
   notes?: string
+}
+
+export interface DispatchFormData {
+  truckId: number
+  driverId: number
+  customerId: number
+  fuelType: FuelType
+  customFuelName?: string
+  quantity: number
+  locationGPS?: string
+  locationManual?: string
+  address: string
+  scheduledDate: Date
+  notes?: string
+  priority: number
 }
 
 export interface DischargeFormData {
@@ -143,6 +224,15 @@ export interface DischargeFormData {
   totalDischarged: number
   marcadorInicial?: number
   marcadorFinal?: number
+}
+
+// Capacity management types
+export interface TruckCapacityInfo {
+  truck: Truck
+  usedPercentage: number
+  availableCapacity: number
+  isOverCapacity: boolean
+  capacityStatus: "low" | "medium" | "high" | "full" | "over"
 }
 
 // Error types
@@ -155,4 +245,14 @@ export interface ApiError {
   message: string
   code?: string
   details?: ValidationError[]
+}
+
+declare module "jsonwebtoken" {
+  export interface JwtPayload {
+    id: number
+    email: string
+    role: Role // Use the imported Role enum for type safety
+    name: string
+    lastname: string
+  }
 }

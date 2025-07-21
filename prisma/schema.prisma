@@ -1,3 +1,9 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -32,10 +38,15 @@ enum TruckState {
 
 enum FuelType {
   DIESEL_B5
-  GASOLINA_90
-  GASOLINA_95
-  GLP
-  ELECTRICA
+  DIESEL_B500
+  GASOLINA_PREMIUM_95
+  GASOLINA_REGULAR_90
+  GASOHOL_84
+  GASOHOL_90
+  GASOHOL_95
+  SOLVENTE
+  GASOL
+  PERSONALIZADO
 }
 
 enum DischargeStatus {
@@ -45,42 +56,143 @@ enum DischargeStatus {
   cancelado
 }
 
+enum DispatchStatus {
+  PROGRAMADO
+  CARGANDO
+  EN_RUTA
+  COMPLETADO
+  CANCELADO
+}
+
+enum LocationCaptureMethod {
+  GPS_AUTO
+  GPS_MANUAL
+  MANUAL_INPUT
+  OFFICE_PLANNED
+}
+
+enum Role {
+  ADMIN
+  OPERADOR
+  S_A
+}
+
+enum AssignmentStatus {
+  PROGRAMADO
+  CARGANDO
+  EN_RUTA
+  COMPLETADO
+}
+
+enum DispatchPriority {
+  NORMAL
+  ALTA
+  URGENTE
+}
+
+enum LocationMethod {
+  GPS_AUTO
+  GPS_MANUAL
+  MANUAL_INPUT
+  OFFICE_PLANNED
+}
+
+// Nuevos enums para el sistema de historial
+enum HistoryEventType {
+  DISPATCH_CREATED
+  DISPATCH_UPDATED
+  DISPATCH_STARTED
+  DISPATCH_COMPLETED
+  DISPATCH_CANCELLED
+  ASSIGNMENT_CREATED
+  ASSIGNMENT_UPDATED
+  ASSIGNMENT_COMPLETED
+  DISCHARGE_STARTED
+  DISCHARGE_COMPLETED
+  TRUCK_LOCATION_UPDATE
+  TRUCK_MAINTENANCE
+  TRUCK_STATE_CHANGE
+  USER_LOGIN
+  USER_LOGOUT
+  SYSTEM_EVENT
+}
+
+enum HistoryEntityType {
+  USER
+  TRUCK
+  CUSTOMER
+  DISPATCH
+  ASSIGNMENT
+  DISCHARGE
+  SYSTEM
+}
+
 model User {
-  id         Int          @id @default(autoincrement())
-  dni        String       @unique
-  name       String
-  lastname   String
-  email      String       @unique
-  password   String       @default("peru2025++")
-  role       UserRole     @default(Operador)
-  state      UserState    @default(Activo)
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
-  deletedAt  DateTime?
-  Assignment Assignment[]
+  id        Int      @id @default(autoincrement())
+  dni       String   @unique
+  name      String
+  lastname  String
+  email     String   @unique
+  password  String   @default("peru2025++")
+  role      Role     @default(OPERADOR)
+  state     UserState @default(Activo)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  // Relaciones
+  assignments Assignment[]
+  dispatches  Dispatch[]
+  historyRecords HistoryRecord[]
+  driverStats DriverStats[]
 
   @@map("users")
 }
 
 model Truck {
-  id            Int          @id @default(autoincrement())
-  placa         String       @unique
-  typefuel      FuelType
-  capacitygal   Decimal
-  lastRemaining Decimal      @default(0.00)
-  state         TruckState   @default(Activo)
-  Assignment    Assignment[]
+  id                  Int       @id @default(autoincrement())
+  placa               String    @unique
+  typefuel            FuelType  @default(DIESEL_B5)
+  capacitygal         Int
+  lastRemaining       Decimal   @default(0.00) @db.Decimal(10, 2)
+  state               String    @default("ACTIVO")
+  minCapacity         Int?      // Capacidad mínima (1,500 gal)
+  maxCapacity         Int?      // Capacidad máxima (15,000 gal)
+  currentLoad         Int       @default(0) // Carga actual en galones
+  currentLatitude     Float?    // Ubicación GPS actual
+  currentLongitude    Float?    // Ubicación GPS actual
+  lastLocationUpdate  DateTime? // Última actualización de ubicación
+  lastMaintenanceDate DateTime? // Fecha del último mantenimiento
+  nextMaintenanceDate DateTime? // Fecha del próximo mantenimiento
+  totalKilometers     Int       @default(0) // Kilómetros totales recorridos
+  totalGallonsDelivered Decimal @default(0.00) @db.Decimal(12, 2) // Total de galones entregados
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  // Relaciones
+  assignments Assignment[]
+  dispatches  Dispatch[]
+  truckLocations TruckLocation[]
+  truckStats TruckStats[]
 
   @@map("trucks")
 }
 
 model Customer {
-  id          Int         @id @default(autoincrement())
-  companyname String      @unique
-  ruc         String      @unique
-  address     String
-  Discharge   Discharge[]
-  ClientAssignment ClientAssignment[]
+  id          Int      @id @default(autoincrement())
+  companyname String
+  ruc         String?
+  address     String?
+  // Ubicación predeterminada del cliente
+  defaultLatitude  Decimal? @db.Decimal(10, 8)
+  defaultLongitude Decimal? @db.Decimal(10, 8)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relaciones
+  discharges       Discharge[]
+  clientAssignments ClientAssignment[]
+  dispatches      Dispatch[]
 
   @@map("customers")
 }
@@ -89,10 +201,11 @@ model Assignment {
   id             Int       @id @default(autoincrement())
   truckId        Int
   driverId       Int
-  totalLoaded    Decimal
-  totalRemaining Decimal
-  fuelType       FuelType
-  isCompleted    Boolean   @default(false)
+  totalLoaded    Decimal   @db.Decimal(10, 2)
+  totalRemaining Decimal   @db.Decimal(10, 2)
+  fuelType       FuelType  @default(DIESEL_B5)
+  customFuelName String?   // Para combustibles personalizados
+  status         AssignmentStatus @default(PROGRAMADO)
   completedAt    DateTime?
   notes          String?
 
@@ -109,20 +222,118 @@ model Assignment {
   @@index([truckId])
   @@index([createdAt])
   @@index([fuelType])
-  @@index([isCompleted])
+  @@index([status])
+}
+
+// Modelo mejorado para el sistema de despachos con ubicaciones específicas
+model Dispatch {
+  id                Int             @id @default(autoincrement())
+  dispatchNumber    String          @unique // PE-000001-2025
+  year              Int             // Año del despacho
+  truckId           Int
+  driverId          Int
+  customerId        Int
+  fuelType          FuelType
+  customFuelName    String?         // Para combustibles personalizados
+  quantity          Int             // Cantidad en galones
+  status            DispatchStatus  @default(PROGRAMADO)
+  priority          DispatchPriority @default(NORMAL)
+  
+  // Ubicaciones
+  pickupAddress     String?         // Dirección de carga
+  pickupLatitude    Float?          // Coordenadas de carga
+  pickupLongitude   Float?          // Coordenadas de carga
+  deliveryAddress   String          // Dirección de entrega
+  deliveryLatitude  Float?          // Coordenadas de entrega
+  deliveryLongitude Float?          // Coordenadas de entrega
+  locationMethod    LocationMethod? // Método de captura
+  
+  // Fechas y tiempos
+  scheduledDate     DateTime        // Fecha programada
+  startedAt         DateTime?       // Inicio de carga
+  loadedAt          DateTime?       // Terminó carga
+  arrivedAt         DateTime?       // Llegó a destino
+  completedAt       DateTime?       // Completó entrega
+  
+  // Metadatos
+  notes             String?         // Observaciones
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  // Relaciones
+  truck    Truck    @relation(fields: [truckId], references: [id])
+  driver   User     @relation(fields: [driverId], references: [id])
+  customer Customer @relation(fields: [customerId], references: [id])
+  locations DispatchLocation[]
+  partialDeliveries PartialDelivery[]
+
+  @@map("dispatches")
+  @@index([dispatchNumber])
+  @@index([year])
+  @@index([status])
+  @@index([scheduledDate])
+  @@index([truckId])
+  @@index([driverId])
+  @@index([customerId])
+  @@index([deliveryLatitude, deliveryLongitude])
+}
+
+// Historial de ubicaciones por despacho (para seguimiento en tiempo real)
+model DispatchLocation {
+  id          Int      @id @default(autoincrement())
+  dispatchId  Int
+  latitude    Decimal  @db.Decimal(10, 8)
+  longitude   Decimal  @db.Decimal(10, 8)
+  accuracy    Float?   // Precisión en metros
+  speed       Float?   // Velocidad en km/h
+  heading     Float?   // Dirección en grados
+  altitude    Float?   // Altitud en metros
+  captureMethod LocationCaptureMethod
+  notes       String?  // Notas sobre esta ubicación
+  
+  dispatch    Dispatch @relation(fields: [dispatchId], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@map("dispatch_locations")
+  @@index([dispatchId])
+  @@index([createdAt])
+  @@index([latitude, longitude])
+}
+
+// Historial de ubicaciones de camiones (para seguimiento general)
+model TruckLocation {
+  id          Int      @id @default(autoincrement())
+  truckId     Int
+  latitude    Decimal  @db.Decimal(10, 8)
+  longitude   Decimal  @db.Decimal(10, 8)
+  accuracy    Float?   // Precisión en metros
+  speed       Float?   // Velocidad en km/h
+  heading     Float?   // Dirección en grados
+  altitude    Float?   // Altitud en metros
+  batteryLevel Int?    // Nivel de batería del dispositivo
+  isMoving    Boolean  @default(false)
+  address     String?  // Dirección geocodificada
+  
+  truck       Truck    @relation(fields: [truckId], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@map("truck_locations")
+  @@index([truckId])
+  @@index([createdAt])
+  @@index([latitude, longitude])
 }
 
 model Discharge {
   id              Int             @id @default(autoincrement())
   assignmentId    Int
   customerId      Int
-  totalDischarged Decimal
-  status          DischargeStatus @default(pendiente) // Cambio a enum
-  marcadorInicial Decimal?
-  marcadorFinal   Decimal?
-  cantidadReal    Decimal?
-  startTime       DateTime?       // Nueva columna para hora de inicio
-  endTime         DateTime?       // Nueva columna para hora de finalización
+  totalDischarged Decimal         @db.Decimal(10, 2)
+  status          DischargeStatus @default(pendiente)
+  marcadorInicial Decimal?        @db.Decimal(10, 2)
+  marcadorFinal   Decimal?        @db.Decimal(10, 2)
+  cantidadReal    Decimal?        @db.Decimal(10, 2)
+  startTime       DateTime?
+  endTime         DateTime?
 
   assignment Assignment @relation(fields: [assignmentId], references: [id])
   customer   Customer   @relation(fields: [customerId], references: [id])
@@ -143,18 +354,187 @@ model ClientAssignment {
   customerId        Int
   allocatedQuantity Decimal   @db.Decimal(10, 2)
   deliveredQuantity Decimal   @default(0) @db.Decimal(10, 2)
-  remainingQuantity Decimal   @default(0) @db.Decimal(10, 2)
-  status            String    @default("pending") // "pending", "completed", "expired"
+  remainingQuantity Decimal   @db.Decimal(10, 2)
+  status            String    @default("pending")
   marcadorInicial   Decimal?  @db.Decimal(10, 2)
   marcadorFinal     Decimal?  @db.Decimal(10, 2)
   completedAt       DateTime?
+  
+  // Ubicación específica de esta entrega
+  deliveryLatitude  Decimal?  @db.Decimal(10, 8)
+  deliveryLongitude Decimal?  @db.Decimal(10, 8)
+  deliveryAddress   String?   // Dirección específica de entrega
+  locationMethod    LocationCaptureMethod?
+  locationAccuracy  Float?    // Precisión del GPS
+  arrivedAt         DateTime? // Cuándo llegó a esta ubicación
+  
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
   assignment Assignment @relation(fields: [assignmentId], references: [id])
   customer   Customer   @relation(fields: [customerId], references: [id])
+  partialDeliveries PartialDelivery[]
 
   @@index([assignmentId])
   @@index([customerId])
   @@index([status])
+  @@index([deliveryLatitude, deliveryLongitude])
+}
+
+// Tabla para controlar la numeración secuencial
+model DispatchSequence {
+  id         Int @id @default(autoincrement())
+  year       Int @unique
+  lastNumber Int @default(0)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("dispatch_sequences")
+}
+
+// NUEVAS TABLAS PARA HISTORIAL Y TRAZABILIDAD
+
+// Tabla principal de historial de eventos
+model HistoryRecord {
+  id          Int               @id @default(autoincrement())
+  eventType   HistoryEventType  // Tipo de evento
+  entityType  HistoryEntityType // Tipo de entidad afectada
+  entityId    Int               // ID de la entidad afectada
+  action      String            // Descripción corta de la acción
+  description String            // Descripción detallada
+  metadata    Json?             // Datos adicionales en formato JSON
+  
+  // Ubicación (opcional)
+  latitude    Float?
+  longitude   Float?
+  address     String?
+  
+  // Usuario que realizó la acción
+  userId      Int
+  user        User              @relation(fields: [userId], references: [id])
+  
+  // Timestamps
+  createdAt   DateTime          @default(now())
+
+  @@map("history_records")
+  @@index([eventType])
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// Estadísticas agregadas por camión
+model TruckStats {
+  id                    Int      @id @default(autoincrement())
+  truckId               Int
+  date                  DateTime @db.Date // Fecha del registro
+  
+  // Estadísticas del día
+  totalDispatches       Int      @default(0)
+  totalGallonsDelivered Decimal  @default(0.00) @db.Decimal(10, 2)
+  totalKilometers       Decimal  @default(0.00) @db.Decimal(8, 2)
+  averageSpeed          Decimal? @db.Decimal(5, 2)
+  fuelEfficiency        Decimal? @db.Decimal(5, 2) // km/gal
+  
+  // Estado operativo
+  hoursActive           Decimal? @db.Decimal(4, 2)
+  hoursIdle             Decimal? @db.Decimal(4, 2)
+  
+  truck                 Truck    @relation(fields: [truckId], references: [id])
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([truckId, date])
+  @@map("truck_stats")
+  @@index([truckId])
+  @@index([date])
+}
+
+// Estadísticas agregadas por conductor
+model DriverStats {
+  id                    Int      @id @default(autoincrement())
+  driverId              Int
+  date                  DateTime @db.Date // Fecha del registro
+  
+  // Estadísticas del día
+  totalDispatches       Int      @default(0)
+  totalGallonsDelivered Decimal  @default(0.00) @db.Decimal(10, 2)
+  totalKilometers       Decimal  @default(0.00) @db.Decimal(8, 2)
+  completionRate        Decimal  @default(0.00) @db.Decimal(5, 2) // Porcentaje
+  averageRating         Decimal? @db.Decimal(3, 2) // 1-5 estrellas
+  
+  // Tiempos
+  hoursWorked           Decimal? @db.Decimal(4, 2)
+  onTimeDeliveries      Int      @default(0)
+  lateDeliveries        Int      @default(0)
+  
+  driver                User     @relation(fields: [driverId], references: [id])
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([driverId, date])
+  @@map("driver_stats")
+  @@index([driverId])
+  @@index([date])
+}
+
+// Entregas parciales para trazabilidad completa
+model PartialDelivery {
+  id                Int      @id @default(autoincrement())
+  dispatchId        Int
+  clientAssignmentId Int?    // Opcional, para vincular con asignación específica
+  
+  quantity          Decimal  @db.Decimal(10, 2)
+  remainingBalance  Decimal  @db.Decimal(10, 2)
+  
+  // Ubicación de la entrega parcial
+  latitude          Float?
+  longitude         Float?
+  address           String?
+  locationMethod    LocationCaptureMethod?
+  
+  // Marcadores del medidor
+  marcadorInicial   Decimal? @db.Decimal(10, 2)
+  marcadorFinal     Decimal? @db.Decimal(10, 2)
+  
+  // Timestamps
+  deliveredAt       DateTime
+  createdAt         DateTime @default(now())
+  
+  // Relaciones
+  dispatch          Dispatch @relation(fields: [dispatchId], references: [id])
+  clientAssignment  ClientAssignment? @relation(fields: [clientAssignmentId], references: [id])
+
+  @@map("partial_deliveries")
+  @@index([dispatchId])
+  @@index([deliveredAt])
+}
+
+// Alertas del sistema
+model SystemAlert {
+  id          Int      @id @default(autoincrement())
+  type        String   // "maintenance", "fuel_low", "delay", "emergency"
+  severity    String   // "low", "medium", "high", "critical"
+  title       String
+  message     String
+  
+  // Entidad relacionada
+  entityType  String?  // "truck", "driver", "dispatch"
+  entityId    Int?
+  
+  // Estado
+  isActive    Boolean  @default(true)
+  isRead      Boolean  @default(false)
+  resolvedAt  DateTime?
+  resolvedBy  Int?     // Usuario que resolvió la alerta
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_alerts")
+  @@index([type])
+  @@index([severity])
+  @@index([isActive])
+  @@index([createdAt])
 }
