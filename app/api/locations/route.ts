@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
       type,
       truckId,
       dispatchId,
-      driverId, // Nuevo campo para driverId
+      driverId,
       latitude,
       longitude,
       accuracy,
@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Nuevo tipo de ubicación: driver_location
+    // Tipo de ubicación: driver_location
     if (type === "driver_location" && driverId) {
       // Verificar que el conductor existe
       const driver = await prisma.user.findUnique({
@@ -183,7 +183,8 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get("type")
     const truckId = searchParams.get("truckId")
     const dispatchId = searchParams.get("dispatchId")
-    const driverId = searchParams.get("driverId") // Nuevo campo para driverId
+    const driverId = searchParams.get("driverId")
+    const date = searchParams.get("date")
     const limit = Number.parseInt(searchParams.get("limit") || "50")
 
     if (type === "truck_locations" && truckId) {
@@ -215,7 +216,7 @@ export async function GET(request: NextRequest) {
     if (type === "active_trucks") {
       const trucks = await prisma.truck.findMany({
         where: {
-          state: "ACTIVO",
+          state: "Activo", // ✅ FIX: Cambié "ACTIVO" por "Activo"
           currentLatitude: { not: null },
           currentLongitude: { not: null },
         },
@@ -235,7 +236,7 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Nuevo tipo de GET: driver_location
+    // Obtener ubicación actual del conductor
     if (type === "driver_location" && driverId) {
       const driver = await prisma.user.findUnique({
         where: { id: Number.parseInt(driverId) },
@@ -256,6 +257,91 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         success: true,
         data: driver,
+      })
+    }
+
+    // Nuevo: Obtener historial de ubicaciones del conductor para cálculos de ruta
+    if (type === "driver_route_history" && driverId) {
+      let dateFilter = {}
+      if (date) {
+        const startDate = new Date(date)
+        startDate.setHours(0, 0, 0, 0)
+        const endDate = new Date(date)
+        endDate.setHours(23, 59, 59, 999)
+
+        dateFilter = {
+          lastLocationUpdate: {
+            gte: startDate,
+            lte: endDate,
+          },
+        }
+      }
+
+      // Obtener historial de ubicaciones del conductor desde las actualizaciones de ubicación
+      // Como no tenemos una tabla específica de historial, usaremos las ubicaciones de los camiones asignados
+      const driverAssignments = await prisma.assignment.findMany({
+        where: {
+          driverId: Number.parseInt(driverId),
+          createdAt: date
+            ? {
+                gte: new Date(date),
+                lt: new Date(new Date(date).getTime() + 24 * 60 * 60 * 1000),
+              }
+            : {
+                gte: new Date(new Date().toDateString()), // Hoy
+              },
+        },
+        include: {
+          truck: {
+            select: {
+              id: true,
+              placa: true,
+            },
+          },
+        },
+      })
+
+      // Obtener ubicaciones de los camiones asignados al conductor
+      const truckIds = driverAssignments.map((a) => a.truckId).filter(Boolean)
+
+      let locations: any[] = []
+      if (truckIds.length > 0) {
+        const truckLocations = await prisma.truckLocation.findMany({
+          where: {
+            truckId: { in: truckIds },
+            createdAt: date
+              ? {
+                  gte: new Date(date),
+                  lt: new Date(new Date(date).getTime() + 24 * 60 * 60 * 1000),
+                }
+              : {
+                  gte: new Date(new Date().toDateString()),
+                },
+          },
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            latitude: true,
+            longitude: true,
+            createdAt: true,
+            speed: true,
+            accuracy: true,
+          },
+        })
+
+        locations = truckLocations.map((loc) => ({
+          id: loc.id,
+          latitude: loc.latitude,
+          longitude: loc.longitude,
+          timestamp: loc.createdAt,
+          speed: loc.speed,
+          accuracy: loc.accuracy,
+        }))
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: locations,
       })
     }
 

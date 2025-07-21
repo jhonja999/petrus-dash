@@ -13,13 +13,14 @@ import { useEffect, useState } from "react"
 import axios from "axios"
 import { RefreshCw } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import type { User } from "@/types/globals"
 
 export default function AssignmentsPage() {
   const authData = useAuth()
   const assignmentsData = useAssignments()
   const trucksData = useTruckState()
   const [mounted, setMounted] = useState(false)
-  const [drivers, setDrivers] = useState([])
+  const [drivers, setDrivers] = useState<User[]>([])
   const [refreshing, setRefreshing] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
@@ -46,10 +47,24 @@ export default function AssignmentsPage() {
 
     const fetchDrivers = async () => {
       try {
-        const response = await axios.get("/api/users?role=conductor")
-        setDrivers(response.data)
+        // ✅ FIX: Cambiar el endpoint para obtener conductores
+        const response = await axios.get("/api/users", {
+          params: { role: "OPERADOR" },
+        })
+        setDrivers(response.data as User[])
       } catch (error) {
         console.error("Error al obtener conductores:", error)
+        // ✅ FIX: Fallback si falla la petición
+        try {
+          // Intentar obtener todos los usuarios y filtrar por rol
+          const allUsersResponse = await axios.get("/api/users")
+          const allUsers = allUsersResponse.data as User[]
+          const conductores = Array.isArray(allUsers) ? allUsers.filter((user) => user.role === "OPERADOR") : []
+          setDrivers(conductores)
+        } catch (fallbackError) {
+          console.error("Error en fallback para obtener conductores:", fallbackError)
+          setDrivers([])
+        }
       }
     }
     fetchDrivers()
@@ -198,6 +213,9 @@ export default function AssignmentsPage() {
                         ? new Date(assignment.createdAt).toLocaleDateString()
                         : "N/A"
 
+                      // ✅ FIX: Usar completedAt en lugar de isCompleted
+                      const isCompleted = assignment.completedAt !== null
+
                       return (
                         <TableRow key={assignment.id}>
                           <TableCell className="font-medium">{truckPlaca}</TableCell>
@@ -210,15 +228,13 @@ export default function AssignmentsPage() {
                           <TableCell>{createdAt}</TableCell>
                           <TableCell>
                             <Badge
-                              className={
-                                assignment.isCompleted ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
-                              }
+                              className={isCompleted ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}
                             >
-                              {assignment.isCompleted ? "Completada" : "Activa"}
+                              {isCompleted ? "Completada" : "Activa"}
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <Button asChild size="sm" variant="outline" disabled={assignment.isCompleted}>
+                            <Button asChild size="sm" variant="outline" disabled={isCompleted}>
                               <Link href={`/assignments/${assignment.id}/clients`}>Gestionar Clientes</Link>
                             </Button>
                           </TableCell>
