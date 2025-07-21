@@ -128,17 +128,20 @@ enum HistoryEntityType {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  dni       String   @unique
-  name      String
-  lastname  String
-  email     String   @unique
-  password  String   @default("peru2025++")
-  role      Role     @default(OPERADOR)
-  state     UserState @default(Activo)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  deletedAt DateTime?
+  id                  Int      @id @default(autoincrement())
+  dni                 String   @unique
+  name                String
+  lastname            String
+  email               String   @unique
+  password            String   @default("peru2025++")
+  role                Role     @default(OPERADOR)
+  state               UserState @default(Activo)
+  currentLatitude     Float?    // Última ubicación GPS del conductor
+  currentLongitude    Float?    // Última ubicación GPS del conductor
+  lastLocationUpdate  DateTime? // Última actualización de ubicación del conductor
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  deletedAt           DateTime?
 
   // Relaciones
   assignments Assignment[]
@@ -155,7 +158,7 @@ model Truck {
   typefuel            FuelType  @default(DIESEL_B5)
   capacitygal         Int
   lastRemaining       Decimal   @default(0.00) @db.Decimal(10, 2)
-  state               String    @default("ACTIVO")
+  state               TruckState @default(Activo) // Changed from String to TruckState enum
   minCapacity         Int?      // Capacidad mínima (1,500 gal)
   maxCapacity         Int?      // Capacidad máxima (15,000 gal)
   currentLoad         Int       @default(0) // Carga actual en galones
@@ -238,7 +241,7 @@ model Dispatch {
   quantity          Int             // Cantidad en galones
   status            DispatchStatus  @default(PROGRAMADO)
   priority          DispatchPriority @default(NORMAL)
-  
+
   // Ubicaciones
   pickupAddress     String?         // Dirección de carga
   pickupLatitude    Float?          // Coordenadas de carga
@@ -247,14 +250,14 @@ model Dispatch {
   deliveryLatitude  Float?          // Coordenadas de entrega
   deliveryLongitude Float?          // Coordenadas de entrega
   locationMethod    LocationMethod? // Método de captura
-  
+
   // Fechas y tiempos
   scheduledDate     DateTime        // Fecha programada
   startedAt         DateTime?       // Inicio de carga
   loadedAt          DateTime?       // Terminó carga
   arrivedAt         DateTime?       // Llegó a destino
   completedAt       DateTime?       // Completó entrega
-  
+
   // Metadatos
   notes             String?         // Observaciones
   createdAt         DateTime        @default(now())
@@ -290,7 +293,7 @@ model DispatchLocation {
   altitude    Float?   // Altitud en metros
   captureMethod LocationCaptureMethod
   notes       String?  // Notas sobre esta ubicación
-  
+
   dispatch    Dispatch @relation(fields: [dispatchId], references: [id])
   createdAt   DateTime @default(now())
 
@@ -313,7 +316,7 @@ model TruckLocation {
   batteryLevel Int?    // Nivel de batería del dispositivo
   isMoving    Boolean  @default(false)
   address     String?  // Dirección geocodificada
-  
+
   truck       Truck    @relation(fields: [truckId], references: [id])
   createdAt   DateTime @default(now())
 
@@ -359,7 +362,7 @@ model ClientAssignment {
   marcadorInicial   Decimal?  @db.Decimal(10, 2)
   marcadorFinal     Decimal?  @db.Decimal(10, 2)
   completedAt       DateTime?
-  
+
   // Ubicación específica de esta entrega
   deliveryLatitude  Decimal?  @db.Decimal(10, 8)
   deliveryLongitude Decimal?  @db.Decimal(10, 8)
@@ -367,7 +370,7 @@ model ClientAssignment {
   locationMethod    LocationCaptureMethod?
   locationAccuracy  Float?    // Precisión del GPS
   arrivedAt         DateTime? // Cuándo llegó a esta ubicación
-  
+
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
@@ -386,7 +389,7 @@ model DispatchSequence {
   id         Int @id @default(autoincrement())
   year       Int @unique
   lastNumber Int @default(0)
-  
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -404,16 +407,16 @@ model HistoryRecord {
   action      String            // Descripción corta de la acción
   description String            // Descripción detallada
   metadata    Json?             // Datos adicionales en formato JSON
-  
+
   // Ubicación (opcional)
   latitude    Float?
   longitude   Float?
   address     String?
-  
+
   // Usuario que realizó la acción
   userId      Int
   user        User              @relation(fields: [userId], references: [id])
-  
+
   // Timestamps
   createdAt   DateTime          @default(now())
 
@@ -429,18 +432,18 @@ model TruckStats {
   id                    Int      @id @default(autoincrement())
   truckId               Int
   date                  DateTime @db.Date // Fecha del registro
-  
+
   // Estadísticas del día
   totalDispatches       Int      @default(0)
   totalGallonsDelivered Decimal  @default(0.00) @db.Decimal(10, 2)
   totalKilometers       Decimal  @default(0.00) @db.Decimal(8, 2)
   averageSpeed          Decimal? @db.Decimal(5, 2)
   fuelEfficiency        Decimal? @db.Decimal(5, 2) // km/gal
-  
+
   // Estado operativo
   hoursActive           Decimal? @db.Decimal(4, 2)
   hoursIdle             Decimal? @db.Decimal(4, 2)
-  
+
   truck                 Truck    @relation(fields: [truckId], references: [id])
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
@@ -456,19 +459,19 @@ model DriverStats {
   id                    Int      @id @default(autoincrement())
   driverId              Int
   date                  DateTime @db.Date // Fecha del registro
-  
+
   // Estadísticas del día
   totalDispatches       Int      @default(0)
   totalGallonsDelivered Decimal  @default(0.00) @db.Decimal(10, 2)
   totalKilometers       Decimal  @default(0.00) @db.Decimal(8, 2)
   completionRate        Decimal  @default(0.00) @db.Decimal(5, 2) // Porcentaje
   averageRating         Decimal? @db.Decimal(3, 2) // 1-5 estrellas
-  
+
   // Tiempos
   hoursWorked           Decimal? @db.Decimal(4, 2)
   onTimeDeliveries      Int      @default(0)
   lateDeliveries        Int      @default(0)
-  
+
   driver                User     @relation(fields: [driverId], references: [id])
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
@@ -484,24 +487,24 @@ model PartialDelivery {
   id                Int      @id @default(autoincrement())
   dispatchId        Int
   clientAssignmentId Int?    // Opcional, para vincular con asignación específica
-  
+
   quantity          Decimal  @db.Decimal(10, 2)
   remainingBalance  Decimal  @db.Decimal(10, 2)
-  
+
   // Ubicación de la entrega parcial
   latitude          Float?
   longitude         Float?
   address           String?
   locationMethod    LocationCaptureMethod?
-  
+
   // Marcadores del medidor
   marcadorInicial   Decimal? @db.Decimal(10, 2)
   marcadorFinal     Decimal? @db.Decimal(10, 2)
-  
+
   // Timestamps
   deliveredAt       DateTime
   createdAt         DateTime @default(now())
-  
+
   // Relaciones
   dispatch          Dispatch @relation(fields: [dispatchId], references: [id])
   clientAssignment  ClientAssignment? @relation(fields: [clientAssignmentId], references: [id])
@@ -518,17 +521,17 @@ model SystemAlert {
   severity    String   // "low", "medium", "high", "critical"
   title       String
   message     String
-  
+
   // Entidad relacionada
   entityType  String?  // "truck", "driver", "dispatch"
   entityId    Int?
-  
+
   // Estado
   isActive    Boolean  @default(true)
   isRead      Boolean  @default(false)
   resolvedAt  DateTime?
   resolvedBy  Int?     // Usuario que resolvió la alerta
-  
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

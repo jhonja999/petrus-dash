@@ -1,16 +1,22 @@
 import type React from "react"
 import type { Decimal } from "@prisma/client/runtime/library"
-import type { UserRole, UserState, FuelType, TruckState, DischargeStatus, DispatchStatus, Role } from "@prisma/client" // Import Role enum from Prisma client
-
-// Re-export Prisma types for easier access
-export type {
-  UserRole,
+import type {
   UserState,
   FuelType,
-  TruckState,
   DischargeStatus,
   DispatchStatus,
   Role,
+  TruckState, // Now correctly exported by Prisma Client
+} from "@prisma/client"
+
+// Re-export Prisma types for easier access
+export {
+  UserState,
+  FuelType,
+  DischargeStatus,
+  DispatchStatus,
+  Role,
+  TruckState,
 } from "@prisma/client"
 
 // Fuel type labels for UI
@@ -27,22 +33,13 @@ export const FUEL_TYPE_LABELS: Record<FuelType, string> = {
   PERSONALIZADO: "Personalizado",
 }
 
-// Dispatch status labels
-export const DISPATCH_STATUS_LABELS: Record<DispatchStatus, string> = {
-  PROGRAMADO: "Programado",
-  CARGANDO: "Cargando",
-  EN_RUTA: "En Ruta",
-  COMPLETADO: "Completado",
-  CANCELADO: "Cancelado",
-}
-
 // Main User interface - consistent with Prisma and AuthContext
 export interface User {
   id: number
   email: string
   name: string
   lastname: string
-  role: UserRole // "Admin" | "Operador" | "S_A"
+  role: Role // "Admin" | "Operador" | "S_A" - Using the 'Role' enum from Prisma
   state: UserState // "Activo" | "Inactivo" | "Suspendido" | "Eliminado" | "Asignado"
   dni: string
   createdAt: Date
@@ -56,7 +53,7 @@ export interface Truck {
   typefuel: FuelType
   capacitygal: Decimal
   lastRemaining: Decimal
-  state: TruckState
+  state: TruckState // Using the 'TruckState' enum from Prisma
   // Nuevos campos para gestión de capacidades
   minCapacity: Decimal
   maxCapacity: Decimal
@@ -160,7 +157,7 @@ export interface RegisterData {
   dni: string
   name: string
   lastname: string
-  role: UserRole
+  role: Role // Using the 'Role' enum from Prisma
 }
 
 export interface AuthResponse {

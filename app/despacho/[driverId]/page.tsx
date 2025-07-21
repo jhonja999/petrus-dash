@@ -45,33 +45,33 @@ import { useAuth } from "@/contexts/AuthContext"
 import { useToast } from "@/hooks/use-toast"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
-import type { Dispatch, FuelType } from "@/types/globals"
-import { FUEL_TYPE_LABELS } from "@/types/globals"
+import type { FuelType } from "@/types/globals" // Now imports from globals.ts
+import { FUEL_TYPE_LABELS } from "@/types/globals" // Now imports from globals.ts
 
 // Estilos para animaciones
 const styles = `
-  @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-  
-  .animate-fadeIn {
-    animation: fadeIn 0.3s ease-out;
-  }
-  @keyframes pulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.05); }
-    100% { transform: scale(1); }
-  }
-  .animate-pulse-once {
-    animation: pulse 0.5s ease-in-out;
-  }
-  .header-bg {
-    background: linear-gradient(to right, #2c3e50, #4a69bd); /* Dark blue to slightly lighter blue */
-  }
-  .header-text {
-    color: #ecf0f1; /* Light gray for text */
-  }
+@keyframes fadeIn {
+from { opacity: 0; }
+to { opacity: 1; }
+}
+
+.animate-fadeIn {
+animation: fadeIn 0.3s ease-out;
+}
+@keyframes pulse {
+0% { transform: scale(1); }
+50% { transform: scale(1.05); }
+100% { transform: scale(1); }
+}
+.animate-pulse-once {
+animation: pulse 0.5s ease-in-out;
+}
+.header-bg {
+background: linear-gradient(to right, #2c3e50, #4a69bd); /* Dark blue to slightly lighter blue */
+}
+.header-text {
+color: #ecf0f1; /* Light gray for text */
+}
 `
 
 interface ClientAssignment {
@@ -229,9 +229,9 @@ export default function DespachoDriverPage() {
   const [isProcessingDelivery, setIsProcessingDelivery] = useState(false)
 
   // Emergency Modal States
-  const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState(false)
+  const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState<boolean>(false)
   const [emergencyNotes, setEmergencyNotes] = useState<string>("")
-  const [isSendingEmergency, setIsSendingEmergency] = useState(false)
+  const [isSendingEmergency, setIsSendingEmergency] = useState<boolean>(false)
 
   // Photo Documentation States
   const [photos, setPhotos] = useState<PhotoRecord[]>([
@@ -282,11 +282,33 @@ export default function DespachoDriverPage() {
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const { latitude, longitude, altitude, accuracy } = position.coords
-        // In a real app, you'd reverse geocode these coordinates to get an address
-        // For now, a placeholder or simple display
         const fetchedAddress = `Lat: ${latitude.toFixed(4)}°, Lng: ${longitude.toFixed(4)}°` // Placeholder
         setCurrentLocation({ lat: latitude, lng: longitude, altitude, accuracy, address: fetchedAddress })
         setIsGettingLocation(false)
+
+        // ✅ Enviar ubicación al backend
+        if (user?.id) {
+          try {
+            await axios.post("/api/locations", {
+              type: "driver_location",
+              driverId: user.id,
+              latitude,
+              longitude,
+              accuracy,
+              altitude,
+              speed: position.coords.speed,
+              heading: position.coords.heading,
+            })
+            console.log("✅ Ubicación del conductor enviada al backend.")
+          } catch (apiError) {
+            console.error("❌ Error al enviar ubicación del conductor:", apiError)
+            toast({
+              title: "Error de Ubicación",
+              description: "No se pudo registrar la ubicación en el servidor.",
+              variant: "destructive",
+            })
+          }
+        }
       },
       (error) => {
         console.error("Geolocation error:", error)
@@ -299,7 +321,7 @@ export default function DespachoDriverPage() {
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }, // maxAge: 0 for real-time
     )
-  }, [toast])
+  }, [toast, user?.id]) // Dependencia user?.id para enviar la ubicación
 
   useEffect(() => {
     // Get initial location
@@ -1138,7 +1160,7 @@ export default function DespachoDriverPage() {
                         {getStatusBadge(dispatch.status)}
                       </div>
                       <CardDescription className="text-sm text-blue-700">
-                        {dispatch.customer?.companyname || 'Cliente no especificado'} -{" "}
+                        {dispatch.customer?.companyname || "Cliente no especificado"} -{" "}
                         {dispatch.fuelType === "PERSONALIZADO"
                           ? dispatch.customFuelName
                           : FUEL_TYPE_LABELS[dispatch.fuelType as FuelType]}
@@ -1149,17 +1171,23 @@ export default function DespachoDriverPage() {
                         <div className="flex items-center gap-2 text-gray-700">
                           <Fuel className="h-4 w-4 text-orange-500" />
                           <span>
-                            Cantidad: <span className="font-semibold">{Number(dispatch.quantity || dispatch.totalLoaded).toFixed(0)} gal</span>
+                            Cantidad:{" "}
+                            <span className="font-semibold">
+                              {Number(dispatch.quantity || dispatch.totalLoaded).toFixed(0)} gal
+                            </span>
                           </span>
                         </div>
                         <div className="flex items-center gap-2 text-gray-700">
                           <MapPin className="h-4 w-4 text-green-500" />
-                          <span className="truncate">{dispatch.address || 'Sin dirección'}</span>
+                          <span className="truncate">{dispatch.address || "Sin dirección"}</span>
                         </div>
                         <div className="flex items-center gap-2 text-gray-700">
                           <Clock className="h-4 w-4 text-purple-500" />
                           <span>
-                            Programado: {dispatch.scheduledDate ? format(new Date(dispatch.scheduledDate), "HH:mm", { locale: es }) : 'No programado'}
+                            Programado:{" "}
+                            {dispatch.scheduledDate
+                              ? format(new Date(dispatch.scheduledDate), "HH:mm", { locale: es })
+                              : "No programado"}
                           </span>
                         </div>
                         {dispatch.deliveredQuantity && (
@@ -1196,7 +1224,7 @@ export default function DespachoDriverPage() {
                                 await axios.put(`/api/dispatches/${dispatch.id}`, { status: "CARGANDO" })
                                 fetchData2()
                               } catch (error) {
-                                console.error('Error updating status:', error)
+                                console.error("Error updating status:", error)
                               }
                             }}
                           >
@@ -1216,7 +1244,7 @@ export default function DespachoDriverPage() {
                                 await axios.put(`/api/dispatches/${dispatch.id}`, { status: "EN_RUTA" })
                                 fetchData2()
                               } catch (error) {
-                                console.error('Error updating status:', error)
+                                console.error("Error updating status:", error)
                               }
                             }}
                           >
@@ -1438,8 +1466,10 @@ export default function DespachoDriverPage() {
             <DialogHeader>
               <DialogTitle className="text-xl">Completar Entrega</DialogTitle>
               <DialogDescription>
-                <span className="font-semibold">{selectedDispatchForCompletion.customer?.companyname || 'Cliente no especificado'}</span> -{" "}
-                {selectedDispatchForCompletion.dispatchNumber || `Asignación #${selectedDispatchForCompletion.id}`}
+                <span className="font-semibold">
+                  {selectedDispatchForCompletion.customer?.companyname || "Cliente no especificado"}
+                </span>{" "}
+                - {selectedDispatchForCompletion.dispatchNumber || `Asignación #${selectedDispatchForCompletion.id}`}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
@@ -1447,7 +1477,10 @@ export default function DespachoDriverPage() {
                 <p className="text-sm text-blue-700 font-medium">
                   Cantidad asignada:
                   <span className="font-bold ml-1">
-                    {Number(selectedDispatchForCompletion.quantity || selectedDispatchForCompletion.totalLoaded).toFixed(2)} gal
+                    {Number(
+                      selectedDispatchForCompletion.quantity || selectedDispatchForCompletion.totalLoaded,
+                    ).toFixed(2)}{" "}
+                    gal
                   </span>
                 </p>
                 <p className="text-xs text-blue-600 mt-1">
@@ -1506,7 +1539,9 @@ export default function DespachoDriverPage() {
                     <div className="mt-2 space-y-1">
                       <p className="text-xs text-green-600">
                         Diferencia con lo asignado: {(() => {
-                          const assignedQty = Number(selectedDispatchForCompletion.quantity || selectedDispatchForCompletion.totalLoaded)
+                          const assignedQty = Number(
+                            selectedDispatchForCompletion.quantity || selectedDispatchForCompletion.totalLoaded,
+                          )
                           const difference = Math.abs(calculateDeliveredAmount2() - assignedQty)
                           if (difference < 0.01) {
                             return "0.00 gal (cantidad exacta)"

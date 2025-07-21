@@ -23,9 +23,13 @@ import {
   Filter,
   Search,
   Bell,
+  MapPin,
+  User,
 } from "lucide-react"
 import { useAuth } from "@/hooks/useAuth"
 import { toast } from "sonner"
+import { formatDistanceToNow } from "date-fns"
+import { es } from "date-fns/locale"
 
 interface Metrics {
   fleet: {
@@ -90,10 +94,20 @@ interface AlertData {
   icon: string
 }
 
+interface DriverLocationData {
+  id: number
+  name: string
+  lastname: string
+  currentLatitude: number | null
+  currentLongitude: number | null
+  lastLocationUpdate: string | null
+}
+
 export default function RealTimeDashboard() {
   const { user } = useAuth()
   const [metrics, setMetrics] = useState<Metrics | null>(null)
   const [alerts, setAlerts] = useState<AlertData[]>([])
+  const [driversLocation, setDriversLocation] = useState<DriverLocationData[]>([]) // Nuevo estado para ubicaciones de conductores
   const [loading, setLoading] = useState(true)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [refreshInterval, setRefreshInterval] = useState(30) // segundos
@@ -139,6 +153,26 @@ export default function RealTimeDashboard() {
     }
   }
 
+  // Función para obtener ubicaciones de conductores
+  const fetchDriversLocation = async () => {
+    try {
+      // Asumiendo que /api/users puede filtrar por rol y devolver ubicación
+      const response = await fetch("/api/users?role=OPERADOR")
+
+      if (!response.ok) {
+        throw new Error("Error al obtener ubicaciones de conductores")
+      }
+
+      const result = await response.json()
+      if (result.success) {
+        setDriversLocation(result.data.filter((driver: any) => driver.currentLatitude && driver.currentLongitude))
+      }
+    } catch (error) {
+      console.error("Error fetching drivers location:", error)
+      toast.error("No se pudieron cargar las ubicaciones de los conductores")
+    }
+  }
+
   // Función para manejar acciones de alertas
   const handleAlertAction = async (alertId: string, action: string) => {
     try {
@@ -168,7 +202,7 @@ export default function RealTimeDashboard() {
   useEffect(() => {
     const loadData = async () => {
       setLoading(true)
-      await Promise.all([fetchMetrics(), fetchAlerts()])
+      await Promise.all([fetchMetrics(), fetchAlerts(), fetchDriversLocation()]) // Incluir fetchDriversLocation
       setLoading(false)
     }
 
@@ -182,6 +216,7 @@ export default function RealTimeDashboard() {
     const interval = setInterval(() => {
       fetchMetrics()
       fetchAlerts()
+      fetchDriversLocation() // Auto-refresh drivers location
     }, refreshInterval * 1000)
 
     return () => clearInterval(interval)
@@ -273,6 +308,7 @@ export default function RealTimeDashboard() {
             onClick={() => {
               fetchMetrics()
               fetchAlerts()
+              fetchDriversLocation() // Manual refresh drivers location
             }}
           >
             <RefreshCw className="h-4 w-4 mr-2" />
@@ -291,6 +327,7 @@ export default function RealTimeDashboard() {
           <TabsTrigger value="overview">Resumen</TabsTrigger>
           <TabsTrigger value="fleet">Flota</TabsTrigger>
           <TabsTrigger value="dispatches">Despachos</TabsTrigger>
+          <TabsTrigger value="drivers">Conductores</TabsTrigger> {/* Nuevo tab */}
           <TabsTrigger value="alerts">Alertas</TabsTrigger>
         </TabsList>
 
@@ -475,6 +512,68 @@ export default function RealTimeDashboard() {
                   </div>
                 ))}
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Nuevo Tab: Conductores */}
+        <TabsContent value="drivers" className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <User className="h-5 w-5" />
+                Ubicación de Conductores en Tiempo Real
+              </CardTitle>
+              <CardDescription>Última ubicación conocida de los conductores activos.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {driversLocation.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">No hay conductores con ubicación activa.</div>
+              ) : (
+                <div className="space-y-4">
+                  {driversLocation.map((driver) => (
+                    <div key={driver.id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div className="flex items-center space-x-3">
+                        <User className="h-5 w-5 text-blue-500" />
+                        <div>
+                          <p className="font-medium">
+                            {driver.name} {driver.lastname}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            Lat: {driver.currentLatitude?.toFixed(4)}°, Lng: {driver.currentLongitude?.toFixed(4)}°
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        {driver.lastLocationUpdate && (
+                          <p className="text-xs text-muted-foreground">
+                            Actualizado:{" "}
+                            {formatDistanceToNow(new Date(driver.lastLocationUpdate), { addSuffix: true, locale: es })}
+                          </p>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-2 bg-transparent"
+                          onClick={() => {
+                            if (driver.currentLatitude && driver.currentLongitude) {
+                              window.open(
+                                `https://www.google.com/maps?q=${driver.currentLatitude},${driver.currentLongitude}`,
+                                "_blank",
+                              )
+                            } else {
+                              toast.info("Ubicación no disponible para este conductor.")
+                            }
+                          }}
+                        >
+                          <MapPin className="h-4 w-4 mr-1" />
+                          Ver en Mapa
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

@@ -22,6 +22,7 @@ export async function POST(request: NextRequest) {
       type,
       truckId,
       dispatchId,
+      driverId, // Nuevo campo para driverId
       latitude,
       longitude,
       accuracy,
@@ -121,6 +122,41 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // Nuevo tipo de ubicación: driver_location
+    if (type === "driver_location" && driverId) {
+      // Verificar que el conductor existe
+      const driver = await prisma.user.findUnique({
+        where: { id: driverId },
+        select: {
+          id: true,
+          name: true,
+          lastname: true,
+          currentLatitude: true,
+          currentLongitude: true,
+        },
+      })
+
+      if (!driver) {
+        return NextResponse.json({ error: "Driver not found" }, { status: 404 })
+      }
+
+      // Actualizar ubicación actual del conductor
+      await prisma.user.update({
+        where: { id: driverId },
+        data: {
+          currentLatitude: latitude,
+          currentLongitude: longitude,
+          lastLocationUpdate: new Date(),
+        },
+      })
+
+      return NextResponse.json({
+        success: true,
+        data: { driverId, latitude, longitude },
+        message: "Driver location updated successfully",
+      })
+    }
+
     // Tipo de ubicación no válido
     return NextResponse.json({ error: "Invalid location type" }, { status: 400 })
   } catch (error) {
@@ -147,6 +183,7 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get("type")
     const truckId = searchParams.get("truckId")
     const dispatchId = searchParams.get("dispatchId")
+    const driverId = searchParams.get("driverId") // Nuevo campo para driverId
     const limit = Number.parseInt(searchParams.get("limit") || "50")
 
     if (type === "truck_locations" && truckId) {
@@ -195,6 +232,30 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         success: true,
         data: trucks,
+      })
+    }
+
+    // Nuevo tipo de GET: driver_location
+    if (type === "driver_location" && driverId) {
+      const driver = await prisma.user.findUnique({
+        where: { id: Number.parseInt(driverId) },
+        select: {
+          id: true,
+          name: true,
+          lastname: true,
+          currentLatitude: true,
+          currentLongitude: true,
+          lastLocationUpdate: true,
+        },
+      })
+
+      if (!driver) {
+        return NextResponse.json({ error: "Driver not found" }, { status: 404 })
+      }
+
+      return NextResponse.json({
+        success: true,
+        data: driver,
       })
     }
 

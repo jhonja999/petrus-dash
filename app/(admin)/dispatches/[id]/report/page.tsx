@@ -29,7 +29,7 @@ import {
   Truck,
   DollarSign,
   FileJson,
-  FilePenLineIcon as Signature,
+  PenLineIcon as Signature,
   Eye,
   Upload,
   Check,
