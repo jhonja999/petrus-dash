@@ -16,8 +16,11 @@ export async function GET() {
     }
 
     const payload = await verifyToken(token)
+    // The verifyToken function now throws an error if the token is invalid,
+    // so this check for null payload might be redundant if it always throws.
+    // Keeping it for robustness in case verifyToken is modified to return null.
     if (!payload) {
-      console.log(`❌ API /auth/me: Invalid token`)
+      console.log(`❌ API /auth/me: Invalid token (payload null)`)
       return NextResponse.json({ error: "Invalid token" }, { status: 401 })
     }
 
@@ -70,6 +73,16 @@ export async function GET() {
     })
   } catch (error: any) {
     console.error("❌ API /auth/me: Error:", error)
+
+    // Handle specific token errors as 401
+    if (
+      error.message.includes("Invalid token") ||
+      error.message.includes("Token expired") ||
+      error.message.includes("Invalid token signature")
+    ) {
+      return NextResponse.json({ error: error.message }, { status: 401 })
+    }
+
     return NextResponse.json(
       {
         error: "Internal server error",

@@ -1,4 +1,4 @@
-import { SignJWT, jwtVerify } from "jose"
+import { SignJWT, jwtVerify, errors } from "jose" // Import errors from jose
 import { cookies } from "next/headers"
 
 const secret = new TextEncoder().encode(process.env.JWT_SECRET || "tu_secreto_super_seguro")
@@ -27,26 +27,38 @@ export async function verifyToken(token: string): Promise<AuthPayload> {
   try {
     const { payload } = await jwtVerify(token, secret)
 
-    // Convert to unknown first, then to our custom type
+    // Ensure payload has the expected structure
+        // Convert to unknown first, then to our custom type
     const unknownPayload = payload as unknown
     const authPayload = unknownPayload as AuthPayload
 
-    // Type guard to ensure payload has required properties
+
     if (
-      typeof authPayload.id === "number" &&
-      typeof authPayload.email === "string" &&
-      typeof authPayload.name === "string" &&
-      typeof authPayload.lastname === "string" &&
-      typeof authPayload.role === "string" &&
-      typeof authPayload.dni === "string" &&
-      typeof authPayload.state === "string"
+      typeof authPayload.id !== "number" ||
+      typeof authPayload.email !== "string" ||
+      typeof authPayload.name !== "string" ||
+      typeof authPayload.lastname !== "string" ||
+      typeof authPayload.role !== "string" ||
+      typeof authPayload.dni !== "string" ||
+      typeof authPayload.state !== "string"
     ) {
-      return authPayload
+      throw new Error("Token payload structure is invalid or incomplete.")
     }
 
-    throw new Error("Invalid token payload structure")
+    return authPayload
   } catch (error) {
-    throw new Error("Invalid token")
+    // Re-throw specific JOSE errors or a generic "Invalid token" error
+    if (error instanceof errors.JWTExpired) {
+      throw new Error("Token expired.")
+    }
+    if (error instanceof errors.JWSSignatureVerificationFailed) {
+      throw new Error("Invalid token signature.")
+    }
+    // Catch other JOSE errors or general errors during verification
+    if (error instanceof Error) {
+      throw new Error(`Invalid token: ${error.message}`)
+    }
+    throw new Error("Invalid token") // Fallback for unknown errors
   }
 }
 
