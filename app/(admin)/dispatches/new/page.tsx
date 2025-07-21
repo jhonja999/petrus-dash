@@ -28,6 +28,7 @@ import {
   Send,
   CheckCircle,
   RotateCcw,
+  Factory,
 } from "lucide-react"
 import axios from "axios"
 import { getNextDispatchNumber } from "@/lib/dispatch-numbering" // Import the sequential number generator
@@ -202,7 +203,7 @@ export default function NewDispatchPage() {
       address: location.address,
       latitude: location.lat,
       longitude: location.lng,
-      method: "GPS_MANUAL",
+      method: "SEARCH_SELECTED",
       timestamp: new Date(),
     }
     handleLocationChange(newLocationData)
@@ -248,7 +249,7 @@ export default function NewDispatchPage() {
                 longitude: locationData.longitude,
               }
             : undefined,
-        locationManual: locationData.method === "GPS_MANUAL",
+        locationManual: locationData.method === "SEARCH_SELECTED",
         notes: formData.observations,
         photos: formData.photos.map((file) => ({
           public_id: file.public_id,
@@ -322,6 +323,21 @@ export default function NewDispatchPage() {
     formData.fuelType &&
     formData.quantity > 0 &&
     locationData.address
+
+  const calculateDistanceFromLima = (lat: number, lng: number): number => {
+    const R = 6371 // Radio de la Tierra en km
+    const limaLat = -12.0464
+    const limaLng = -77.0428
+    const dLat = toRadians(lat - limaLat)
+    const dLng = toRadians(lng - limaLng)
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(toRadians(limaLat)) * Math.cos(toRadians(lat)) * Math.sin(dLng / 2) * Math.sin(dLng / 2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    return R * c
+  }
+
+  const toRadians = (degrees: number): number => degrees * (Math.PI / 180)
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -624,21 +640,108 @@ export default function NewDispatchPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
                     <MapPin className="h-5 w-5" />
-                    <span>Ubicación de Descarga</span>
+                    <span>Planificación de Ruta</span>
                   </CardTitle>
-                  <CardDescription>Configure la ubicación donde se realizará el despacho</CardDescription>
+                  <CardDescription>Configure los puntos de carga y descarga para el despacho</CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <LocationPicker
-                    value={locationData}
-                    onChange={handleLocationChange}
-                    onLocationSelect={handleLocationSelect}
-                    label="Ubicación de Entrega"
-                    placeholder="Ingrese la dirección de entrega"
-                    required={true}
-                    showMap={true}
-                    initialAddress={formData.deliveryAddress}
-                  />
+                <CardContent className="space-y-6">
+                  {/* Punto de Carga */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Factory className="h-5 w-5 text-blue-600" />
+                      <h3 className="text-lg font-medium">Punto de Carga</h3>
+                      <Badge variant="outline">Origen</Badge>
+                    </div>
+
+                    <LocationPicker
+                      value={{
+                        address: "Planta Petrus - Av. Industrial 123, Lima, Perú",
+                        latitude: -12.0464,
+                        longitude: -77.0428,
+                        method: "OFFICE_PLANNED",
+                        locationType: "carga",
+                        timestamp: new Date(),
+                      }}
+                      onChange={(location) => {
+                        // Manejar cambio de punto de carga si es necesario
+                        console.log("Punto de carga:", location)
+                      }}
+                      label="Ubicación de Carga"
+                      locationType="carga"
+                      isOfficeMode={true}
+                      showMap={true}
+                      placeholder="Buscar planta o terminal de carga..."
+                    />
+                  </div>
+
+                  <Separator />
+
+                  {/* Punto de Descarga */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-5 w-5 text-green-600" />
+                      <h3 className="text-lg font-medium">Punto de Descarga</h3>
+                      <Badge variant="outline">Destino</Badge>
+                    </div>
+
+                    <LocationPicker
+                      value={locationData}
+                      onChange={handleLocationChange}
+                      onLocationSelect={handleLocationSelect}
+                      label="Ubicación de Entrega"
+                      placeholder="Buscar dirección de entrega en Perú..."
+                      required={true}
+                      showMap={true}
+                      locationType="descarga"
+                      isOfficeMode={true}
+                      initialAddress={formData.deliveryAddress}
+                    />
+                  </div>
+
+                  {/* Información de Ruta */}
+                  {locationData.latitude && locationData.longitude && (
+                    <div className="mt-6 p-4 bg-green-50 rounded-lg border border-green-200">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Route className="h-5 w-5 text-green-600" />
+                        <h4 className="font-medium text-green-800">Información de Ruta</h4>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                        <div className="text-center p-3 bg-white rounded border">
+                          <div className="text-lg font-bold text-blue-600">
+                            {Math.round(calculateDistanceFromLima(locationData.latitude, locationData.longitude))} km
+                          </div>
+                          <div className="text-gray-600">Distancia desde Lima</div>
+                        </div>
+
+                        <div className="text-center p-3 bg-white rounded border">
+                          <div className="text-lg font-bold text-green-600">
+                            {Math.round(calculateDistanceFromLima(locationData.latitude, locationData.longitude) / 60)}{" "}
+                            hrs
+                          </div>
+                          <div className="text-gray-600">Tiempo estimado</div>
+                        </div>
+
+                        <div className="text-center p-3 bg-white rounded border">
+                          <div className="text-lg font-bold text-purple-600">
+                            {selectedVehicle ? Math.round(formData.quantity / 100) : 0} L
+                          </div>
+                          <div className="text-gray-600">Consumo estimado</div>
+                        </div>
+                      </div>
+
+                      {locationData.department && locationData.department !== "Lima" && (
+                        <Alert className="mt-4">
+                          <AlertTriangle className="h-4 w-4" />
+                          <AlertDescription>
+                            <strong>Ruta interdepartamental:</strong> Lima → {locationData.department}
+                            <br />
+                            Considere tiempos adicionales para controles y peajes.
+                          </AlertDescription>
+                        </Alert>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>

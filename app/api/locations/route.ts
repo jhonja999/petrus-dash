@@ -3,6 +3,292 @@ import { prisma } from "@/lib/prisma"
 import { verifyToken } from "@/lib/jwt"
 import { cookies } from "next/headers"
 
+// Endpoint para búsqueda inteligente de ubicaciones
+export async function PUT(request: NextRequest) {
+  try {
+    const cookieStore = await cookies()
+    const token = cookieStore.get("token")?.value
+
+    if (!token) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const payload = await verifyToken(token)
+    if (!payload) {
+      return NextResponse.json({ error: "Invalid token" }, { status: 401 })
+    }
+
+    const body = await request.json()
+    const { action, query, coordinates } = body
+
+    if (action === "search") {
+      // Búsqueda inteligente usando Nominatim
+      if (!query || query.length < 3) {
+        return NextResponse.json(
+          {
+            error: "Query must be at least 3 characters long",
+          },
+          { status: 400 },
+        )
+      }
+
+      try {
+        const searchQuery = query.includes("Perú") || query.includes("Peru") ? query : `${query}, Perú`
+
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?` +
+            `format=json&` +
+            `q=${encodeURIComponent(searchQuery)}&` +
+            `limit=8&` +
+            `countrycodes=pe&` +
+            `addressdetails=1&` +
+            `extratags=1&` +
+            `namedetails=1&` +
+            `viewbox=-81.33,-18.35,-68.65,-0.012&` +
+            `bounded=1`,
+          {
+            headers: {
+              "User-Agent": "PetrusDash/1.0 (Fuel Distribution System)",
+            },
+          },
+        )
+
+        if (response.ok) {
+          const data = await response.json()
+
+          // Procesar resultados
+          const processedResults = data.map((result: any) => {
+            const lat = Number.parseFloat(result.lat)
+            const lng = Number.parseFloat(result.lon)
+
+            return {
+              ...result,
+              distance: calculateDistanceFromLima(lat, lng),
+              type: classifyLocationType(result),
+              relevanceScore: calculateRelevanceScore(result, lat, lng),
+            }
+          })
+
+          // Ordenar por relevancia
+          processedResults.sort((a: any, b: any) => b.relevanceScore - a.relevanceScore)
+
+          return NextResponse.json({
+            success: true,
+            data: processedResults,
+            query: searchQuery,
+          })
+        } else {
+          throw new Error("Nominatim API error")
+        }
+      } catch (error) {
+        console.error("Search error:", error)
+        return NextResponse.json(
+          {
+            error: "Search service temporarily unavailable",
+          },
+          { status: 503 },
+        )
+      }
+    }
+
+    if (action === "validate") {
+      // Validar coordenadas
+      if (!coordinates || !coordinates.latitude || !coordinates.longitude) {
+        return NextResponse.json(
+          {
+            error: "Missing coordinates",
+          },
+          { status: 400 },
+        )
+      }
+
+      const { latitude, longitude } = coordinates
+
+      // Validar que esté dentro de Perú
+      const isValid = isWithinPeru(latitude, longitude)
+      const distanceFromLima = calculateDistanceFromLima(latitude, longitude)
+
+      return NextResponse.json({
+        success: true,
+        data: {
+          isValid,
+          withinPeru: isValid,
+          distanceFromLima,
+          coordinates: { latitude, longitude },
+          warnings: generateLocationWarnings(latitude, longitude, distanceFromLima),
+        },
+      })
+    }
+
+    if (action === "geocode") {
+      // Geocodificar dirección
+      const { address } = body
+      if (!address) {
+        return NextResponse.json(
+          {
+            error: "Address is required",
+          },
+          { status: 400 },
+        )
+      }
+
+      try {
+        const fullAddress = address.includes("Perú") ? address : `${address}, Perú`
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+            fullAddress,
+          )}&limit=1&countrycodes=pe&addressdetails=1`,
+          {
+            headers: {
+              "User-Agent": "PetrusDash/1.0",
+            },
+          },
+        )
+
+        if (response.ok) {
+          const data = await response.json()
+          if (data.length > 0) {
+            const result = data[0]
+            return NextResponse.json({
+              success: true,
+              data: {
+                latitude: Number.parseFloat(result.lat),
+                longitude: Number.parseFloat(result.lon),
+                address: result.display_name,
+                components: result.address,
+              },
+            })
+          } else {
+            return NextResponse.json({
+              success: false,
+              error: "Address not found",
+            })
+          }
+        } else {
+          throw new Error("Geocoding service error")
+        }
+      } catch (error) {
+        console.error("Geocoding error:", error)
+        return NextResponse.json(
+          {
+            error: "Geocoding service temporarily unavailable",
+          },
+          { status: 503 },
+        )
+      }
+    }
+
+    return NextResponse.json({ error: "Invalid action" }, { status: 400 })
+  } catch (error) {
+    console.error("Error in location API:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+
+// Funciones auxiliares
+function calculateDistanceFromLima(lat: number, lng: number): number {
+  const R = 6371 // Radio de la Tierra en km
+  const limaLat = -12.0464
+  const limaLng = -77.0428
+  const dLat = toRadians(lat - limaLat)
+  const dLng = toRadians(lng - limaLng)
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRadians(limaLat)) * Math.cos(toRadians(lat)) * Math.sin(dLng / 2) * Math.sin(dLng / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
+}
+
+function toRadians(degrees: number): number {
+  return degrees * (Math.PI / 180)
+}
+
+function classifyLocationType(result: any): string {
+  const name = result.display_name.toLowerCase()
+  const type = result.type?.toLowerCase() || ""
+
+  if (name.includes("terminal") || name.includes("puerto") || name.includes("aeropuerto")) return "terminal"
+  if (name.includes("grifo") || name.includes("estación") || name.includes("combustible")) return "fuel_station"
+  if (name.includes("almacén") || name.includes("depósito")) return "warehouse"
+  if (name.includes("fábrica") || name.includes("industria")) return "factory"
+  if (name.includes("hospital") || name.includes("clínica")) return "hospital"
+  if (name.includes("mina")) return "mine"
+  if (name.includes("peaje")) return "toll_booth"
+  if (name.includes("aduana")) return "customs"
+  if (name.includes("hotel") || name.includes("hospedaje")) return "hotel"
+  if (name.includes("restaurante") || name.includes("comida")) return "restaurant"
+  if (name.includes("mercado") || name.includes("tienda")) return "market"
+  if (name.includes("oficina")) return "office"
+  if (name.includes("universidad") || name.includes("colegio") || name.includes("escuela")) return "school"
+  if (name.includes("iglesia") || name.includes("templo")) return "church"
+  if (name.includes("parque") || name.includes("plaza")) return "park"
+
+  return "other"
+}
+
+function isWithinPeru(latitude: number, longitude: number): boolean {
+  // Definir límites geográficos de Perú
+  const minLat = -18.35
+  const maxLat = -0.012
+  const minLng = -81.33
+  const maxLng = -68.65
+
+  return latitude >= minLat && latitude <= maxLat && longitude >= minLng && longitude <= maxLng
+}
+
+function calculateRelevanceScore(result: any, lat: number, lng: number): number {
+  let score = 0
+
+  // Distancia a Lima (más cerca = más relevante)
+  const distance = calculateDistanceFromLima(lat, lng)
+  score += 100 / (distance + 1) // Evitar división por cero
+
+  // Importancia del tipo de lugar
+  const locationType = classifyLocationType(result)
+  switch (locationType) {
+    case "terminal":
+      score += 50
+      break
+    case "fuel_station":
+      score += 40
+      break
+    case "warehouse":
+      score += 30
+      break
+    case "factory":
+      score += 25
+      break
+    default:
+      score += 10
+  }
+
+  // Población (si está disponible)
+  if (result.importance) {
+    score += result.importance * 50
+  }
+
+  // Nombres que coinciden con la búsqueda
+  if (result.display_name.toLowerCase().includes(result.query?.toLowerCase())) {
+    score += 30
+  }
+
+  return score
+}
+
+function generateLocationWarnings(latitude: number, longitude: number, distanceFromLima: number): string[] {
+  const warnings: string[] = []
+
+  if (distanceFromLima > 800) {
+    warnings.push("La ubicación está bastante lejos de Lima.")
+  }
+
+  if (!isWithinPeru(latitude, longitude)) {
+    warnings.push("La ubicación parece estar fuera de Perú.")
+  }
+
+  return warnings
+}
+
 export async function POST(request: NextRequest) {
   try {
     const cookieStore = await cookies()
@@ -185,13 +471,13 @@ export async function GET(request: NextRequest) {
     const dispatchId = searchParams.get("dispatchId")
     const driverId = searchParams.get("driverId")
     const date = searchParams.get("date")
-    const limit = Number.parseInt(searchParams.get("limit") || "50")
+    const limitParam = Number.parseInt(searchParams.get("limit") || "50")
 
     if (type === "truck_locations" && truckId) {
       const locations = await prisma.truckLocation.findMany({
         where: { truckId: Number.parseInt(truckId) },
         orderBy: { createdAt: "desc" },
-        take: limit,
+        take: limitParam,
       })
 
       return NextResponse.json({
@@ -204,7 +490,7 @@ export async function GET(request: NextRequest) {
       const locations = await prisma.dispatchLocation.findMany({
         where: { dispatchId: Number.parseInt(dispatchId) },
         orderBy: { createdAt: "desc" },
-        take: limit,
+        take: limitParam,
       })
 
       return NextResponse.json({
@@ -345,7 +631,60 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    return NextResponse.json({ error: "Invalid request parameters" }, { status: 400 })
+    // Búsqueda en ubicaciones guardadas
+    const query = searchParams.get("q")
+    const limit = Number.parseInt(searchParams.get("limit") || "10")
+
+    let frequentLocations = []
+
+    if (query) {
+      frequentLocations = (await prisma.$queryRaw`
+        SELECT 
+          id,
+          address,
+          latitude,
+          longitude,
+          district,
+          province,
+          department,
+          location_type as locationType,
+          usage_count as usageCount,
+          last_used as lastUsed
+        FROM frequent_locations 
+        WHERE (
+          LOWER(address) LIKE LOWER(${`%${query}%`}) OR
+          LOWER(district) LIKE LOWER(${`%${query}%`}) OR
+          LOWER(province) LIKE LOWER(${`%${query}%`})
+        )
+        ${type ? `AND location_type = ${type}` : ""}
+        ORDER BY usage_count DESC, last_used DESC
+        LIMIT ${limit}
+      `) as any[]
+    } else {
+      // Obtener todas las ubicaciones frecuentes
+      frequentLocations = (await prisma.$queryRaw`
+        SELECT 
+          id,
+          address,
+          latitude,
+          longitude,
+          district,
+          province,
+          department,
+          location_type as locationType,
+          usage_count as usageCount,
+          last_used as lastUsed
+        FROM frequent_locations 
+        ${type ? `WHERE location_type = ${type}` : ""}
+        ORDER BY usage_count DESC, last_used DESC
+        LIMIT ${limit}
+      `) as any[]
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: frequentLocations,
+    })
   } catch (error) {
     console.error("Error fetching locations:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
