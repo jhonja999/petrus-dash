@@ -1,43 +1,10 @@
 import type React from "react"
 // types/globals.d.ts
 import type { Decimal } from "@prisma/client/runtime/library"
-import type { UserRole, UserState, TruckState, DischargeStatus } from "@prisma/client"
+import type { UserRole, UserState, FuelType, TruckState, DischargeStatus } from "@prisma/client"
 
-// Re-export Prisma types for easier access  
-export type { UserRole, UserState, TruckState, DischargeStatus } from "@prisma/client"
-
-// Extended fuel types for Petrus system
-export type FuelType = 
-  | "DIESEL_B5"
-  | "DIESEL_B500" 
-  | "GASOLINA_PREMIUM_95"
-  | "GASOLINA_REGULAR_90"
-  | "GASOHOL_84"
-  | "GASOHOL_90"
-  | "GASOHOL_95"
-  | "SOLVENTE"
-  | "GASOL"
-  | "CUSTOM"
-
-// Dispatch status for Petrus system
-export type DispatchStatus = 
-  | "PROGRAMADO"
-  | "CARGANDO" 
-  | "EN_RUTA"
-  | "COMPLETADO"
-  | "CANCELADO"
-
-// Location capture modes
-export type LocationMode = "GPS_AUTO" | "MANUAL_INPUT"
-
-// Photo types for documentation
-export type PhotoType = 
-  | "INICIO_CARGA"
-  | "TERMINO_CARGA" 
-  | "ENTREGA"
-  | "CONFORMIDAD_CLIENTE"
-  | "ODOMETRO"
-  | "INCIDENCIA"
+// Re-export Prisma types for easier access
+export type { UserRole, UserState, FuelType, TruckState, DischargeStatus } from "@prisma/client"
 
 // Main User interface - consistent with Prisma and AuthContext
 export interface User {

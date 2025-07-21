@@ -32,19 +32,10 @@ enum TruckState {
 
 enum FuelType {
   DIESEL_B5
-  DIESEL_B500
   GASOLINA_90
   GASOLINA_95
-  GASOLINA_PREMIUM_95
-  GASOLINA_REGULAR_90
-  GASOHOL_84
-  GASOHOL_90
-  GASOHOL_95
-  SOLVENTE
-  GASOL
   GLP
   ELECTRICA
-  CUSTOM
 }
 
 enum DischargeStatus {
@@ -54,43 +45,19 @@ enum DischargeStatus {
   cancelado
 }
 
-enum DispatchStatus {
-  PROGRAMADO
-  CARGANDO
-  EN_RUTA
-  COMPLETADO
-  CANCELADO
-}
-
-enum LocationMode {
-  GPS_AUTO
-  MANUAL_INPUT
-}
-
-enum PhotoType {
-  INICIO_CARGA
-  TERMINO_CARGA
-  ENTREGA
-  CONFORMIDAD_CLIENTE
-  ODOMETRO
-  INCIDENCIA
-}
-
 model User {
   id         Int          @id @default(autoincrement())
   dni        String       @unique
   name       String
   lastname   String
-  email      String       @unique // Corporate emails @petrus.com
+  email      String       @unique
   password   String       @default("peru2025++")
   role       UserRole     @default(Operador)
   state      UserState    @default(Activo)
-  corporateEmail String?   // @petrus.com email for reports
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
   deletedAt  DateTime?
   Assignment Assignment[]
-  Dispatch   Dispatch[]
 
   @@map("users")
 }
@@ -98,18 +65,11 @@ model User {
 model Truck {
   id            Int          @id @default(autoincrement())
   placa         String       @unique
-  typefuel      FuelType     // Primary fuel type
-  capacitygal   Decimal      // Variable capacity 1,500 to 15,000 gallons
+  typefuel      FuelType
+  capacitygal   Decimal
   lastRemaining Decimal      @default(0.00)
   state         TruckState   @default(Activo)
-  maxCapacity   Decimal      @default(15000) // Maximum capacity limit
-  currentLoad   Decimal      @default(0.00)  // Current fuel load
-  customFuelType String?     // For CUSTOM fuel type
   Assignment    Assignment[]
-  Dispatch      Dispatch[]
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
   @@map("trucks")
 }
@@ -119,164 +79,12 @@ model Customer {
   companyname String      @unique
   ruc         String      @unique
   address     String
-  contactName String?     // Contact person name
-  contactPhone String?    // Contact phone
-  contactEmail String?    // Contact email
   Discharge   Discharge[]
   ClientAssignment ClientAssignment[]
-  Dispatch    Dispatch[]
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 
   @@map("customers")
 }
 
-// New Dispatch model for Petrus system
-model Dispatch {
-  id              String          @id @default(cuid()) // PE-000001-2025 format
-  dispatchNumber  String          @unique // Auto-generated correlative number
-  year            Int             @default(2025)
-  status          DispatchStatus  @default(PROGRAMADO)
-  
-  // Vehicle and driver
-  truckId         Int
-  driverId        Int
-  
-  // Fuel information
-  fuelType        FuelType
-  customFuelType  String?         // For CUSTOM fuel type
-  totalQuantity   Decimal         @db.Decimal(10, 2)
-  remainingQuantity Decimal       @db.Decimal(10, 2)
-  
-  // Customer information
-  customerId      Int
-  
-  // Location information
-  locationMode    LocationMode    @default(GPS_AUTO)
-  gpsLatitude     Decimal?        @db.Decimal(10, 8)
-  gpsLongitude    Decimal?        @db.Decimal(10, 8)
-  manualLocation  String?         // Manual location description
-  
-  // Timing
-  scheduledDate   DateTime
-  startTime       DateTime?
-  endTime         DateTime?
-  
-  // Financial
-  pricePerGallon  Decimal?        @db.Decimal(10, 4)
-  subtotal        Decimal?        @db.Decimal(10, 2)
-  igv             Decimal?        @db.Decimal(10, 2) // 18% IGV
-  total           Decimal?        @db.Decimal(10, 2)
-  
-  // Odometer
-  initialKm       Decimal?        @db.Decimal(10, 2)
-  finalKm         Decimal?        @db.Decimal(10, 2)
-  
-  // Notes and observations
-  notes           String?
-  observations    String?
-  
-  // Relations
-  truck           Truck           @relation(fields: [truckId], references: [id])
-  driver          User            @relation(fields: [driverId], references: [id])
-  customer        Customer        @relation(fields: [customerId], references: [id])
-  deliveries      Delivery[]
-  photos          DispatchPhoto[]
-  
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  
-  @@map("dispatches")
-  @@index([dispatchNumber])
-  @@index([status])
-  @@index([scheduledDate])
-  @@index([truckId])
-  @@index([driverId])
-  @@index([customerId])
-}
-
-// Individual deliveries within a dispatch
-model Delivery {
-  id              Int             @id @default(autoincrement())
-  dispatchId      String
-  
-  // Location specific to this delivery
-  locationMode    LocationMode    @default(GPS_AUTO)
-  gpsLatitude     Decimal?        @db.Decimal(10, 8)
-  gpsLongitude    Decimal?        @db.Decimal(10, 8)
-  manualLocation  String?
-  
-  // Delivery details
-  quantity        Decimal         @db.Decimal(10, 2)
-  deliveryTime    DateTime?
-  clientPlate     String?         // Cliente's vehicle plate
-  unitType        String?         // Type of client unit
-  
-  // Status
-  status          String          @default("PENDIENTE") // PENDIENTE, COMPLETADO
-  
-  // Relations
-  dispatch        Dispatch        @relation(fields: [dispatchId], references: [id])
-  photos          DeliveryPhoto[]
-  
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  
-  @@map("deliveries")
-  @@index([dispatchId])
-  @@index([status])
-}
-
-// Photos for dispatches
-model DispatchPhoto {
-  id          Int         @id @default(autoincrement())
-  dispatchId  String
-  photoType   PhotoType
-  filename    String      // Original filename
-  url         String      // Storage URL (ImageKit.io or local)
-  size        Int         // File size in bytes
-  mimeType    String      // image/jpeg, image/png, application/pdf
-  
-  // Metadata
-  capturedAt  DateTime    @default(now())
-  gpsLatitude Decimal?    @db.Decimal(10, 8)
-  gpsLongitude Decimal?   @db.Decimal(10, 8)
-  
-  // Relations
-  dispatch    Dispatch    @relation(fields: [dispatchId], references: [id])
-  
-  createdAt   DateTime    @default(now())
-  
-  @@map("dispatch_photos")
-  @@index([dispatchId])
-  @@index([photoType])
-}
-
-// Photos for individual deliveries
-model DeliveryPhoto {
-  id          Int         @id @default(autoincrement())
-  deliveryId  Int
-  photoType   PhotoType
-  filename    String
-  url         String
-  size        Int
-  mimeType    String
-  
-  // Metadata
-  capturedAt  DateTime    @default(now())
-  gpsLatitude Decimal?    @db.Decimal(10, 8)
-  gpsLongitude Decimal?   @db.Decimal(10, 8)
-  
-  // Relations
-  delivery    Delivery    @relation(fields: [deliveryId], references: [id])
-  
-  createdAt   DateTime    @default(now())
-  
-  @@map("delivery_photos")
-  @@index([deliveryId])
-  @@index([photoType])
-}
 model Assignment {
   id             Int       @id @default(autoincrement())
   truckId        Int
