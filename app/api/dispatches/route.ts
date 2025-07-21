@@ -1,216 +1,359 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { verifyToken } from "@/lib/jwt"
-import { generateDispatchNumber } from "@/lib/dispatch-numbering"
-import { cookies } from "next/headers"
+import type { DispatchStatus } from "@prisma/client"
 
-export async function GET(request: NextRequest) {
+// Mapeo de valores válidos de status
+const VALID_DISPATCH_STATUSES: DispatchStatus[] = [
+  "PROGRAMADO",
+  "CARGANDO", 
+  "EN_RUTA",
+  "COMPLETADO",
+  "CANCELADO"
+]
+
+export async function GET(request: Request) {
   try {
-    const cookieStore = await cookies()
-    const token = cookieStore.get("token")?.value
-
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const payload = await verifyToken(token)
-    if (!payload) {
-      return NextResponse.json({ error: "Invalid token" }, { status: 401 })
-    }
-
-    // Obtener parámetros de consulta
     const { searchParams } = new URL(request.url)
-    const status = searchParams.get("status")
     const driverId = searchParams.get("driverId")
-    const truckId = searchParams.get("truckId")
+    const statusParam = searchParams.get("status")
+    const scheduledDate = searchParams.get("scheduledDate")
     const customerId = searchParams.get("customerId")
-    const page = Number.parseInt(searchParams.get("page") || "1")
-    const limit = Number.parseInt(searchParams.get("limit") || "10")
+    const page = parseInt(searchParams.get("page") || "1")
+    const limit = parseInt(searchParams.get("limit") || "50")
 
-    // Construir filtros
-    const where: any = {}
-    if (status) where.status = status
-    if (driverId) where.driverId = Number.parseInt(driverId)
-    if (truckId) where.truckId = Number.parseInt(truckId)
-    if (customerId) where.customerId = Number.parseInt(customerId)
-
-    // Obtener despachos con paginación
-    const [dispatches, total] = await Promise.all([
-      prisma.dispatch.findMany({
-        where,
-        include: {
-          truck: true,
-          driver: true,
-          customer: true,
-        },
-        orderBy: { createdAt: "desc" },
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      prisma.dispatch.count({ where }),
-    ])
-
-    return NextResponse.json({
-      success: true,
-      data: dispatches,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+    console.log("🔍 Fetching dispatches with params:", {
+      driverId,
+      statusParam,
+      scheduledDate,
+      customerId,
+      page,
+      limit
     })
+
+    if (!driverId || isNaN(Number(driverId))) {
+      return NextResponse.json({ 
+        success: false, 
+        error: "ID de conductor requerido y válido" 
+      }, { status: 400 })
+    }
+
+    // Base where clause
+    const where: any = {
+      driverId: Number(driverId)
+    }
+
+    // ✅ Procesar status correctamente - puede venir como string concatenado
+    if (statusParam && statusParam.trim()) {
+      // Dividir por comas y limpiar espacios
+      const statusArray = statusParam.split(",")
+        .map(s => s.trim())
+        .filter(s => s.length > 0)
+        .filter(s => VALID_DISPATCH_STATUSES.includes(s as DispatchStatus))
+
+      if (statusArray.length === 1) {
+        // Si es un solo status
+        where.status = statusArray[0] as DispatchStatus
+      } else if (statusArray.length > 1) {
+        // Si son múltiples status, usar el operador 'in'
+        where.status = {
+          in: statusArray as DispatchStatus[]
+        }
+      }
+      
+      console.log("🔍 Processed status filter:", where.status)
+    }
+
+    // Filtrar por fecha si se proporciona
+    if (scheduledDate) {
+      const targetDate = new Date(scheduledDate)
+      const startOfDay = new Date(targetDate.setHours(0, 0, 0, 0))
+      const endOfDay = new Date(targetDate.setHours(23, 59, 59, 999))
+      
+      where.scheduledDate = {
+        gte: startOfDay,
+        lte: endOfDay
+      }
+    }
+
+    // Filtrar por cliente si se proporciona
+    if (customerId && !isNaN(Number(customerId))) {
+      where.customerId = Number(customerId)
+    }
+
+    console.log("🔍 Final where clause:", JSON.stringify(where, null, 2))
+
+    // Calcular offset para paginación
+    const offset = (page - 1) * limit
+
+    try {
+      // Obtener despachos y total con manejo de errores mejorado
+      const [dispatches, total] = await Promise.all([
+        prisma.dispatch.findMany({
+          where,
+          include: {
+            truck: {
+              select: {
+                id: true,
+                placa: true,
+                capacitygal: true,
+                currentLoad: true,
+                state: true,
+                typefuel: true
+              }
+            },
+            driver: {
+              select: {
+                id: true,
+                name: true,
+                lastname: true,
+                email: true,
+                role: true
+              }
+            },
+            customer: {
+              select: {
+                id: true,
+                companyname: true,
+                ruc: true,
+                address: true,
+                defaultLatitude: true,
+                defaultLongitude: true
+              }
+            }
+          },
+          orderBy: [
+            { scheduledDate: "asc" },
+            { createdAt: "desc" }
+          ],
+          skip: offset,
+          take: limit
+        }),
+        prisma.dispatch.count({
+          where
+        })
+      ])
+
+      console.log(`✅ Found ${dispatches.length} dispatches (${total} total) for driver ${driverId}`)
+
+      // Calcular información de paginación
+      const totalPages = Math.ceil(total / limit)
+      const hasNextPage = page < totalPages
+      const hasPrevPage = page > 1
+
+      return NextResponse.json({
+        success: true,
+        data: dispatches,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages,
+          hasNextPage,
+          hasPrevPage
+        }
+      })
+
+    } catch (prismaError) {
+      console.error("❌ Prisma query error:", prismaError)
+      
+      // Manejo específico de errores de Prisma
+      if (prismaError instanceof Error) {
+        if (prismaError.message.includes("Invalid") || prismaError.message.includes("validation")) {
+          return NextResponse.json({ 
+            success: false, 
+            error: "Parámetros de consulta inválidos",
+            details: "Verifique los filtros aplicados"
+          }, { status: 400 })
+        } else if (prismaError.message.includes("connect") || prismaError.message.includes("timeout")) {
+          return NextResponse.json({ 
+            success: false, 
+            error: "Error de conexión a la base de datos",
+            details: "Intente de nuevo en unos momentos"
+          }, { status: 503 })
+        }
+      }
+      
+      throw prismaError // Re-lanzar si no es un error conocido
+    }
+
   } catch (error) {
-    console.error("Error fetching dispatches:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.error("❌ Dispatches API Error:", error)
+    
+    let errorMessage = "Error interno del servidor"
+    let errorDetails = "Error desconocido"
+    let statusCode = 500
+    
+    if (error instanceof Error) {
+      errorMessage = error.message
+      errorDetails = error.stack || error.message
+      
+      // Categorizar tipos de error
+      if (error.message.includes("Invalid") || error.message.includes("validation")) {
+        statusCode = 400
+        errorMessage = "Error de validación en los parámetros"
+      } else if (error.message.includes("not found") || error.message.includes("NotFound")) {
+        statusCode = 404
+        errorMessage = "Recurso no encontrado"
+      } else if (error.message.includes("connect") || error.message.includes("timeout")) {
+        statusCode = 503
+        errorMessage = "Servicio no disponible temporalmente"
+      }
+    }
+    
+    return NextResponse.json({ 
+      success: false,
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? errorDetails : undefined
+    }, { status: statusCode })
   }
 }
 
-export async function POST(request: NextRequest) {
+// ✅ Agregar método POST para crear nuevos dispatches
+export async function POST(request: Request) {
   try {
-    const cookieStore = await cookies()
-    const token = cookieStore.get("token")?.value
-
-    if (!token) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    const payload = await verifyToken(token)
-    if (!payload || (payload.role !== "Admin" && payload.role !== "S_A")) {
-      return NextResponse.json(
-        { error: "Acceso denegado. Solo administradores pueden crear despachos." },
-        { status: 403 },
-      )
-    }
-
     const body = await request.json()
-    const {
-      truckId,
-      driverId,
-      customerId,
-      fuelType,
-      customFuelName,
-      quantity,
-      locationGPS,
-      locationManual,
-      address,
+    const { 
+      truckId, 
+      driverId, 
+      customerId, 
+      fuelType, 
+      quantity, 
+      deliveryAddress, 
+      deliveryLatitude,
+      deliveryLongitude,
       scheduledDate,
-      notes,
       priority = "NORMAL",
+      notes
     } = body
 
     // Validaciones básicas
-    if (!truckId || !driverId || !customerId || !fuelType || !quantity || !address || !scheduledDate) {
-      return NextResponse.json({ error: "Todos los campos obligatorios deben ser completados" }, { status: 400 })
+    if (!truckId || !driverId || !customerId || !quantity) {
+      return NextResponse.json({ 
+        success: false, 
+        error: "Campos requeridos: truckId, driverId, customerId, quantity" 
+      }, { status: 400 })
     }
 
-    if (quantity <= 0) {
-      return NextResponse.json({ error: "La cantidad debe ser mayor a 0" }, { status: 400 })
-    }
-
-    // Verificar que el camión existe y obtener su información
-    const truckFromDB = await prisma.truck.findUnique({
-      where: { id: Number.parseInt(truckId) },
-    })
-
-    if (!truckFromDB) {
-      return NextResponse.json({ error: "Camión no encontrado" }, { status: 404 })
-    }
-
-    // Validar capacidad del camión - manejar campos opcionales
-    const requestedQuantity = Number.parseFloat(quantity)
-    const currentLoad = Number(truckFromDB.currentLoad) || 0
-    const maxCapacity = Number(truckFromDB.maxCapacity || truckFromDB.capacitygal)
-
-    // Validación manual de capacidad
-    const totalAfterAssignment = currentLoad + requestedQuantity
-    if (totalAfterAssignment > maxCapacity) {
-      return NextResponse.json(
-        {
-          error: `La cantidad solicitada (${requestedQuantity} gal) excede la capacidad disponible. Capacidad máxima: ${maxCapacity} gal, Carga actual: ${currentLoad} gal, Disponible: ${maxCapacity - currentLoad} gal`,
-        },
-        { status: 400 },
-      )
-    }
-
-    // Verificar que el conductor existe
-    const driver = await prisma.user.findUnique({
-      where: { id: Number.parseInt(driverId) },
-    })
-
-    if (!driver) {
-      return NextResponse.json({ error: "Conductor no encontrado" }, { status: 404 })
-    }
-
-    // Verificar que el cliente existe
-    const customer = await prisma.customer.findUnique({
-      where: { id: Number.parseInt(customerId) },
-    })
-
-    if (!customer) {
-      return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 })
-    }
-
-    // Generar número de despacho
-    const dispatchNumber = await generateDispatchNumber()
+    // Generar número de despacho único
     const currentYear = new Date().getFullYear()
+    
+    // Buscar o crear secuencia para el año actual
+    let sequence = await prisma.dispatchSequence.findUnique({
+      where: { year: currentYear }
+    })
 
-    // Preparar datos de ubicación
-    const deliveryLatitude = locationGPS?.latitude ? Number.parseFloat(locationGPS.latitude) : null
-    const deliveryLongitude = locationGPS?.longitude ? Number.parseFloat(locationGPS.longitude) : null
-    const locationMethod = locationGPS?.latitude ? "GPS_AUTO" : locationManual ? "GPS_MANUAL" : "OFFICE_PLANNED"
+    if (!sequence) {
+      sequence = await prisma.dispatchSequence.create({
+        data: { year: currentYear, lastNumber: 0 }
+      })
+    }
 
-    // Validar el enum de prioridad
-    const validPriorities = ["NORMAL", "ALTA", "URGENTE"]
-    const dispatchPriority = validPriorities.includes(priority) ? priority : "NORMAL"
+    // Incrementar y obtener siguiente número
+    const nextNumber = sequence.lastNumber + 1
+    await prisma.dispatchSequence.update({
+      where: { year: currentYear },
+      data: { lastNumber: nextNumber }
+    })
+
+    // Generar número de despacho con formato PE-000001-2025
+    const dispatchNumber = `PE-${nextNumber.toString().padStart(6, '0')}-${currentYear}`
 
     // Crear el despacho
-    const dispatch = await prisma.dispatch.create({
+    const newDispatch = await prisma.dispatch.create({
       data: {
         dispatchNumber,
         year: currentYear,
-        truckId: Number.parseInt(truckId),
-        driverId: Number.parseInt(driverId),
-        customerId: Number.parseInt(customerId),
+        truckId: Number(truckId),
+        driverId: Number(driverId),
+        customerId: Number(customerId),
         fuelType,
-        customFuelName: fuelType === "PERSONALIZADO" ? customFuelName : null,
-        quantity: requestedQuantity,
-        deliveryLatitude,
-        deliveryLongitude,
-        deliveryAddress: address,
-        locationMethod,
+        quantity: Number(quantity),
+        deliveryAddress,
+        deliveryLatitude: deliveryLatitude ? Number(deliveryLatitude) : null,
+        deliveryLongitude: deliveryLongitude ? Number(deliveryLongitude) : null,
         scheduledDate: new Date(scheduledDate),
-        notes,
-        priority: dispatchPriority,
+        priority,
         status: "PROGRAMADO",
+        notes
       },
       include: {
         truck: true,
         driver: true,
-        customer: true,
-      },
+        customer: true
+      }
     })
 
-    // Actualizar la carga actual del camión
-    await prisma.truck.update({
-      where: { id: Number.parseInt(truckId) },
-      data: {
-        currentLoad: {
-          increment: requestedQuantity,
-        },
-      },
+    console.log("✅ New dispatch created:", newDispatch.dispatchNumber)
+
+    return NextResponse.json({
+      success: true,
+      data: newDispatch,
+      message: `Despacho ${dispatchNumber} creado exitosamente`
     })
 
-    return NextResponse.json(
-      {
-        success: true,
-        data: dispatch,
-        message: `Despacho ${dispatchNumber} creado exitosamente`,
-      },
-      { status: 201 },
-    )
   } catch (error) {
-    console.error("Error creating dispatch:", error)
-    return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
+    console.error("❌ Create Dispatch Error:", error)
+    return NextResponse.json({ 
+      success: false,
+      error: "Error al crear el despacho",
+      details: error instanceof Error ? error.message : "Error desconocido"
+    }, { status: 500 })
+  }
+}
+
+// ✅ Método PUT para actualizar dispatches
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json()
+    const { id, ...updateData } = body
+
+    if (!id) {
+      return NextResponse.json({ 
+        success: false, 
+        error: "ID del despacho requerido" 
+      }, { status: 400 })
+    }
+
+    // Actualizar timestamps según el status
+    if (updateData.status) {
+      const now = new Date()
+      switch (updateData.status) {
+        case "CARGANDO":
+          updateData.startedAt = now
+          break
+        case "EN_RUTA":
+          updateData.loadedAt = now
+          break
+        case "COMPLETADO":
+          updateData.completedAt = now
+          break
+      }
+    }
+
+    const updatedDispatch = await prisma.dispatch.update({
+      where: { id: Number(id) },
+      data: updateData,
+      include: {
+        truck: true,
+        driver: true,
+        customer: true
+      }
+    })
+
+    console.log("✅ Dispatch updated:", updatedDispatch.dispatchNumber)
+
+    return NextResponse.json({
+      success: true,
+      data: updatedDispatch,
+      message: "Despacho actualizado exitosamente"
+    })
+
+  } catch (error) {
+    console.error("❌ Update Dispatch Error:", error)
+    return NextResponse.json({ 
+      success: false,
+      error: "Error al actualizar el despacho",
+      details: error instanceof Error ? error.message : "Error desconocido"
+    }, { status: 500 })
   }
 }

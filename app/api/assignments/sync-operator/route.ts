@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     const completedAssignments = await prisma.assignment.findMany({
       where: {
         driverId: Number(driverId),
-        isCompleted: true,
+        status: "COMPLETADO", // Changed from isCompleted: true
       },
       include: {
         truck: true,
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
     const activeAssignments = await prisma.assignment.findMany({
       where: {
         driverId: Number(driverId),
-        isCompleted: false,
+        status: { not: "COMPLETADO" }, // Changed from isCompleted: false
       },
       include: {
         clientAssignments: true,
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
         await prisma.assignment.update({
           where: { id: assignment.id },
           data: {
-            isCompleted: true,
+            status: "COMPLETADO", // Changed from isCompleted: true
             completedAt: new Date(),
           },
         })

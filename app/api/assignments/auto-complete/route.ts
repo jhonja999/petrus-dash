@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     const oldIncompleteAssignments = await prisma.assignment.findMany({
       where: {
         driverId: Number.parseInt(driverId),
-        isCompleted: false,
+        status: { not: "COMPLETADO" }, // Changed from isCompleted: false
         createdAt: {
           lt: today, // Asignaciones creadas antes de hoy
         },
@@ -100,7 +100,7 @@ export async function POST(request: Request) {
       const updatedAssignment = await prisma.assignment.update({
         where: { id: assignment.id },
         data: {
-          isCompleted: true,
+          status: "COMPLETADO", // Changed from isCompleted: true
           completedAt: new Date(),
           notes: assignment.notes
             ? `${assignment.notes} | Auto-completado el ${new Date().toLocaleDateString()}`

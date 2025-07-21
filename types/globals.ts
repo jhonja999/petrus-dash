@@ -7,6 +7,7 @@ import type {
   DispatchStatus,
   Role,
   TruckState, // Now correctly exported by Prisma Client
+  AssignmentStatus, // Import AssignmentStatus enum
 } from "@prisma/client"
 
 // Re-export Prisma types for easier access
@@ -17,6 +18,7 @@ export {
   DispatchStatus,
   Role,
   TruckState,
+  AssignmentStatus, // Re-export AssignmentStatus
 } from "@prisma/client"
 
 // Fuel type labels for UI
@@ -80,7 +82,7 @@ export interface Assignment {
   totalRemaining: Decimal
   fuelType: FuelType
   customFuelName?: string | null
-  isCompleted: boolean
+  status: AssignmentStatus // Changed from isCompleted: boolean
   completedAt?: Date | null
   notes?: string | null
   truck: Truck

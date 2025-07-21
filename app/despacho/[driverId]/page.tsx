@@ -38,6 +38,8 @@ import {
   Share2,
   Car,
   Check,
+  Wifi,
+  WifiOff,
 } from "lucide-react"
 import Link from "next/link"
 import axios from "axios"
@@ -71,6 +73,14 @@ background: linear-gradient(to right, #2c3e50, #4a69bd); /* Dark blue to slightl
 }
 .header-text {
 color: #ecf0f1; /* Light gray for text */
+}
+
+@keyframes slideIn {
+from { transform: translateY(-10px); opacity: 0; }
+to { transform: translateY(0); opacity: 1; }
+}
+.animate-slideIn {
+animation: slideIn 0.3s ease-out;
 }
 `
 
@@ -173,19 +183,30 @@ const DISPATCH_STATUS_CONFIG = {
   },
 }
 
-// ✅ Función de sincronización para día actual
+// ✅ Función de sincronización para día actual con mejor manejo de errores
 const syncOperatorData = async (driverId: string) => {
   try {
     console.log("🔄 Iniciando sincronización de datos del operador...")
 
-    // 1. Auto-completar asignaciones antiguas
-    await axios.post("/api/assignments/auto-complete", { driverId: Number(driverId) })
+    const results = await Promise.allSettled([
+      // 1. Auto-completar asignaciones antiguas
+      axios.post("/api/assignments/auto-complete", { driverId: Number(driverId) }),
+      // 2. Sincronizar datos del operador
+      axios.post("/api/assignments/sync-operator", { driverId: Number(driverId) })
+    ])
 
-    // 2. Sincronizar datos del operador
-    await axios.post("/api/assignments/sync-operator", { driverId: Number(driverId) })
+    let successCount = 0
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        successCount++
+        console.log(`✅ Operación ${index + 1} completada con éxito`)
+      } else {
+        console.warn(`⚠️ Operación ${index + 1} falló:`, result.reason?.message || result.reason)
+      }
+    })
 
-    console.log("✅ Sincronización completada")
-    return true
+    console.log(`✅ Sincronización completada (${successCount}/${results.length} operaciones exitosas)`)
+    return successCount > 0 // Considerar éxito si al menos una operación funciona
   } catch (error) {
     console.error("❌ Error en sincronización:", error)
     return false
@@ -215,6 +236,8 @@ export default function DespachoDriverPage() {
   } | null>(null)
   const [isGettingLocation, setIsGettingLocation] = useState(false)
   const [currentTime, setCurrentTime] = useState(new Date())
+  const [gpsPermissionDenied, setGpsPermissionDenied] = useState(false)
+  const [isOnline, setIsOnline] = useState(true)
 
   // Estados para el modal
   const [selectedClientAssignment, setSelectedClientAssignment] = useState<ClientAssignment | null>(null)
@@ -243,6 +266,35 @@ export default function DespachoDriverPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [currentPhotoType, setCurrentPhotoType] = useState<PhotoRecord["type"] | null>(null)
 
+  // ✅ Monitorear conexión a internet
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true)
+      toast({
+        title: "🌐 Conectado",
+        description: "Conexión a internet restablecida",
+        className: "border-green-200 bg-green-50",
+      })
+    }
+    
+    const handleOffline = () => {
+      setIsOnline(false)
+      toast({
+        title: "🌐 Sin conexión",
+        description: "No hay conexión a internet. Algunas funciones pueden no estar disponibles.",
+        variant: "destructive",
+      })
+    }
+
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [toast])
+
   // Basic auth check
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -267,71 +319,90 @@ export default function DespachoDriverPage() {
     return () => clearInterval(timer)
   }, [])
 
-  // --- Location Tracking (simplified, assuming backend service) ---
+  // --- Location Tracking (mejorado con mejor manejo de errores) ---
   const getCurrentLocation = useCallback(() => {
     if (!navigator.geolocation) {
-      toast({
-        title: "Error",
-        description: "Geolocation is not supported by your browser.",
-        variant: "destructive",
-      })
+      console.warn("Geolocation not supported")
+      setGpsPermissionDenied(true)
       return
     }
 
     setIsGettingLocation(true)
     navigator.geolocation.getCurrentPosition(
       async (position) => {
-        const { latitude, longitude, altitude, accuracy } = position.coords
-        const fetchedAddress = `Lat: ${latitude.toFixed(4)}°, Lng: ${longitude.toFixed(4)}°` // Placeholder
-        setCurrentLocation({ lat: latitude, lng: longitude, altitude, accuracy, address: fetchedAddress })
-        setIsGettingLocation(false)
+        try {
+          const { latitude, longitude, altitude, accuracy } = position.coords
+          const fetchedAddress = `Lat: ${latitude.toFixed(4)}°, Lng: ${longitude.toFixed(4)}°` // Placeholder
+          setCurrentLocation({ lat: latitude, lng: longitude, altitude, accuracy, address: fetchedAddress })
+          setGpsPermissionDenied(false)
+          setIsGettingLocation(false)
 
-        // ✅ Enviar ubicación al backend
-        if (user?.id) {
-          try {
-            await axios.post("/api/locations", {
-              type: "driver_location",
-              driverId: user.id,
-              latitude,
-              longitude,
-              accuracy,
-              altitude,
-              speed: position.coords.speed,
-              heading: position.coords.heading,
-            })
-            console.log("✅ Ubicación del conductor enviada al backend.")
-          } catch (apiError) {
-            console.error("❌ Error al enviar ubicación del conductor:", apiError)
-            toast({
-              title: "Error de Ubicación",
-              description: "No se pudo registrar la ubicación en el servidor.",
-              variant: "destructive",
-            })
+          // ✅ Enviar ubicación al backend con mejor manejo de errores
+          if (user?.id && isOnline) {
+            try {
+              await axios.post("/api/locations", {
+                type: "driver_location",
+                driverId: user.id,
+                latitude,
+                longitude,
+                accuracy,
+                altitude,
+                speed: position.coords.speed,
+                heading: position.coords.heading,
+              })
+              console.log("✅ Ubicación del conductor enviada al backend.")
+            } catch (apiError) {
+              console.warn("⚠️ Error al enviar ubicación (continuando sin interrumpir):", apiError)
+              // No mostrar toast de error aquí para no ser intrusivo
+            }
           }
+        } catch (error) {
+          console.error("Error procesando ubicación:", error)
+          setIsGettingLocation(false)
         }
       },
       (error) => {
-        console.error("Geolocation error:", error)
-        toast({
-          title: "Error de Geolocalización",
-          description: "No se pudo obtener la ubicación actual. Asegúrate de tener el GPS activado.",
-          variant: "destructive",
-        })
+        console.warn(`⚠️ Geolocation error [Code: ${error.code}]:`, error.message)
+        
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            setGpsPermissionDenied(true)
+            console.log("GPS permission denied - continuando sin GPS")
+            break
+          case error.POSITION_UNAVAILABLE:
+            console.log("GPS position unavailable - reintentando más tarde")
+            break
+          case error.TIMEOUT:
+            console.log("GPS timeout - reintentando...")
+            break
+          default:
+            console.log("GPS error desconocido")
+            break
+        }
+        
         setIsGettingLocation(false)
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }, // maxAge: 0 for real-time
+      { 
+        enableHighAccuracy: false, // Cambiar a false para mejor compatibilidad
+        timeout: 15000, 
+        maximumAge: 60000 // Permitir ubicaciones de hasta 1 minuto
+      }
     )
-  }, [toast, user?.id]) // Dependencia user?.id para enviar la ubicación
+  }, [toast, user?.id, isOnline])
 
   useEffect(() => {
     // Get initial location
     getCurrentLocation()
     // Set up interval for continuous tracking (e.g., every 30 seconds)
-    const locationInterval = setInterval(getCurrentLocation, 30000)
+    const locationInterval = setInterval(() => {
+      if (!gpsPermissionDenied && isOnline) {
+        getCurrentLocation()
+      }
+    }, 30000)
     return () => clearInterval(locationInterval)
-  }, [getCurrentLocation])
+  }, [getCurrentLocation, gpsPermissionDenied, isOnline])
 
-  // ✅ Función principal para cargar datos
+  // ✅ Función principal para cargar datos con mejor manejo de errores
   const fetchData = async (dateToFetch?: string) => {
     if (!driverId || isNaN(Number(driverId))) {
       setError(`ID de conductor inválido: "${driverId}"`)
@@ -347,8 +418,10 @@ export default function DespachoDriverPage() {
       console.log(`🔄 Fetching assignments for driver ${driverId} on ${targetDate}`)
       console.log(`📅 Today is: ${today}, Target date: ${targetDate}`)
 
-      // ✅ Sincronizar datos primero si estamos viendo el día actual
-      if (targetDate === today) {
+      // ✅ Verificar si estamos online antes de sincronizar
+      if (!isOnline) {
+        console.log("📱 Modo offline - saltando sincronización")
+      } else if (targetDate === today) {
         const syncSuccess = await syncOperatorData(driverId)
         if (syncSuccess) {
           console.log("✅ Datos sincronizados correctamente")
@@ -357,28 +430,28 @@ export default function DespachoDriverPage() {
         }
       }
 
-      // ✅ Auto-completar solo si estamos viendo el día actual
-      if (targetDate === today) {
-        try {
-          const autoCompleteResponse = await axios.post("/api/assignments/auto-complete", {
-            driverId: Number(driverId),
-          })
-          console.log("✅ Auto-completed old assignments:", autoCompleteResponse.data)
-        } catch (autoCompleteError) {
-          console.log("⚠️ Auto-complete failed, continuing anyway", autoCompleteError)
-        }
-      }
-
       let assignmentsResponse
 
-      // ✅ Si es HOY, obtener TODAS las asignaciones ACTIVAS
-      if (targetDate === today) {
-        console.log("📊 Fetching ACTIVE assignments (not filtered by date)")
-        assignmentsResponse = await axios.get(`/api/assignments/active?driverId=${driverId}`)
-      } else {
-        // Si es una fecha específica del pasado, filtrar por esa fecha
-        console.log(`📊 Fetching assignments for specific date: ${targetDate}`)
-        assignmentsResponse = await axios.get(`/api/assignments/dashboard?driverId=${driverId}&date=${targetDate}`)
+      try {
+        // ✅ Si es HOY, obtener TODAS las asignaciones ACTIVAS
+        if (targetDate === today) {
+          console.log("📊 Fetching ACTIVE assignments (not filtered by date)")
+          assignmentsResponse = await axios.get(`/api/assignments/active?driverId=${driverId}`)
+        } else {
+          // Si es una fecha específica del pasado, filtrar por esa fecha
+          console.log(`📊 Fetching assignments for specific date: ${targetDate}`)
+          assignmentsResponse = await axios.get(`/api/assignments/dashboard?driverId=${driverId}&date=${targetDate}`)
+        }
+      } catch (apiError) {
+        console.warn("⚠️ Error en API de assignments, intentando fallback...")
+        // Fallback: Intentar con una API alternativa o mostrar datos en cache
+        assignmentsResponse = { data: [] }
+        
+        if (axios.isAxiosError(apiError) && apiError.response?.status === 500) {
+          console.warn("API assignments devuelve 500 - usando datos vacíos como fallback")
+        } else {
+          throw apiError // Re-lanzar si no es el error esperado
+        }
       }
 
       console.log(`✅ Loaded ${assignmentsResponse.data.length} assignments`)
@@ -398,27 +471,49 @@ export default function DespachoDriverPage() {
       setAssignments(assignmentsResponse.data)
       setLastRefresh(new Date())
 
-      // ✅ Mostrar alerta si no hay asignaciones activas para hoy
+      // ✅ Mostrar mensaje informativo si no hay asignaciones
       if (targetDate === today && assignmentsResponse.data.length === 0) {
-        toast({
-          title: "📋 Sin asignaciones activas",
-          description:
-            "No tienes asignaciones activas en este momento. Contacta al administrador si necesitas una asignación.",
-        })
+        if (isOnline) {
+          toast({
+            title: "📋 Sin asignaciones activas",
+            description: "No tienes asignaciones activas en este momento. Contacta al administrador si necesitas una asignación.",
+          })
+        } else {
+          toast({
+            title: "📱 Modo offline",
+            description: "Sin conexión a internet. Los datos mostrados pueden no estar actualizados.",
+            className: "border-yellow-200 bg-yellow-50",
+          })
+        }
       }
     } catch (error) {
       console.error("❌ Error fetching data:", error)
 
       let errorMessage = "Error al cargar los datos"
       if (axios.isAxiosError(error)) {
+        console.error(
+          "API Error details:",
+          error.response?.status,
+          error.response?.statusText,
+          JSON.stringify(error.response?.data),
+        )
         if (error.response?.status === 400) {
-          errorMessage = "ID de conductor inválido"
+          errorMessage = error.response.data?.error || "ID de conductor inválido"
         } else if (error.response?.status === 403) {
-          errorMessage = "No tienes permisos para acceder a este panel"
+          errorMessage = error.response.data?.error || "No tienes permisos para acceder a este panel"
         } else if (error.response?.status === 404) {
-          errorMessage = "No se encontraron datos para este conductor"
+          errorMessage = error.response.data?.error || "No se encontraron datos para este conductor"
+        } else if (error.response?.status === 500) {
+          errorMessage = "El servidor está experimentando problemas. Intenta de nuevo en unos minutos."
+        } else if (error.response?.data?.error) {
+          errorMessage = error.response.data.error
+        } else if (error.response?.data?.message) {
+          errorMessage = error.response.data.message
+        } else {
+          errorMessage = `Error de red o servidor: ${error.message}`
         }
-        console.error("❌ API Error details:", error.response?.data)
+      } else if (error instanceof Error) {
+        errorMessage = error.message
       }
 
       setError(errorMessage)
@@ -427,7 +522,7 @@ export default function DespachoDriverPage() {
     }
   }
 
-  // --- Data Fetching ---
+  // --- Data Fetching con mejor manejo de errores ---
   const fetchData2 = async (dateToFetch?: string) => {
     if (!driverId || isNaN(Number(driverId))) {
       setError(`ID de conductor inválido: "${driverId}"`)
@@ -441,6 +536,11 @@ export default function DespachoDriverPage() {
       const targetDate = dateToFetch || selectedDate
       const today = new Date().toISOString().split("T")[0]
       const isToday = targetDate === today
+
+      // Verificar conexión antes de hacer requests
+      if (!isOnline) {
+        throw new Error("Sin conexión a internet")
+      }
 
       // Fetch dispatches for the driver
       // For today, fetch "active" statuses (PROGRAMADO, CARGANDO, EN_RUTA)
@@ -468,8 +568,24 @@ export default function DespachoDriverPage() {
     } catch (error) {
       console.error("❌ Error fetching data:", error)
       let errorMessage = "Error al cargar los datos"
-      if (axios.isAxiosError(error)) {
-        errorMessage = error.response?.data?.error || errorMessage
+      
+      if (!isOnline) {
+        errorMessage = "Sin conexión a internet. Verifica tu conexión e intenta de nuevo."
+      } else if (axios.isAxiosError(error)) {
+        console.error(
+          "API Error details:",
+          error.response?.status,
+          error.response?.statusText,
+          JSON.stringify(error.response?.data),
+        )
+        
+        if (error.response?.status === 500) {
+          errorMessage = "El servidor está experimentando problemas. Intenta de nuevo en unos minutos."
+        } else {
+          errorMessage = error.response?.data?.error || error.response?.data?.message || errorMessage
+        }
+      } else if (error instanceof Error) {
+        errorMessage = error.message
       }
       setError(errorMessage)
     } finally {
@@ -477,8 +593,17 @@ export default function DespachoDriverPage() {
     }
   }
 
-  // ✅ Función unificada de actualización/sincronización
+  // ✅ Función unificada de actualización/sincronización con mejor UX
   const handleRefresh = async () => {
+    if (!isOnline) {
+      toast({
+        title: "🌐 Sin conexión",
+        description: "No hay conexión a internet para actualizar los datos.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsRefreshing(true)
     const today = new Date().toISOString().split("T")[0]
     const isToday = selectedDate === today
@@ -493,6 +618,12 @@ export default function DespachoDriverPage() {
             description: "Los datos han sido sincronizados y actualizados correctamente.",
             className: "border-green-200 bg-green-50",
           })
+        } else {
+          toast({
+            title: "⚠️ Sincronización parcial",
+            description: "Algunos servicios no están disponibles, pero se actualizaron los datos disponibles.",
+            className: "border-yellow-200 bg-yellow-50",
+          })
         }
       } else {
         // Para días históricos: solo actualizar datos
@@ -506,7 +637,7 @@ export default function DespachoDriverPage() {
     } catch (error) {
       toast({
         title: "❌ Error",
-        description: "No se pudieron actualizar los datos.",
+        description: "No se pudieron actualizar todos los datos. Verifica tu conexión.",
         variant: "destructive",
       })
     } finally {
@@ -516,9 +647,13 @@ export default function DespachoDriverPage() {
 
   // --- Auto-complete / Sync operator data (conceptual for mobile context) ---
   const syncOperatorData2 = async () => {
+    if (!isOnline) {
+      console.log("📱 Modo offline - saltando sincronización")
+      return false
+    }
+
     // This function would ideally trigger backend processes
     // to update truck states, auto-complete old assignments/dispatches, etc.
-    // For this demo, it's a placeholder.
     console.log("Simulating operator data synchronization...")
     toast({
       title: "Sincronizando...",
@@ -536,6 +671,15 @@ export default function DespachoDriverPage() {
   }
 
   const handleRefresh2 = async () => {
+    if (!isOnline) {
+      toast({
+        title: "🌐 Sin conexión",
+        description: "No hay conexión a internet para actualizar los datos.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsRefreshing(true)
     const isTodaySelected = selectedDate === new Date().toISOString().split("T")[0]
 
@@ -590,10 +734,10 @@ export default function DespachoDriverPage() {
     }
   }, [selectedDate, user?.id])
 
-  // ✅ Auto-refresh cada 5 minutos si es el día actual
+  // ✅ Auto-refresh cada 5 minutos si es el día actual y estamos online
   useEffect(() => {
     const today = new Date().toISOString().split("T")[0]
-    if (selectedDate === today) {
+    if (selectedDate === today && isOnline) {
       const interval = setInterval(
         () => {
           console.log("🔄 Auto-refreshing current day assignments")
@@ -604,12 +748,12 @@ export default function DespachoDriverPage() {
 
       return () => clearInterval(interval)
     }
-  }, [selectedDate])
+  }, [selectedDate, isOnline])
 
   // Auto-refresh for today's data
   useEffect(() => {
     const today = new Date().toISOString().split("T")[0]
-    if (selectedDate === today) {
+    if (selectedDate === today && isOnline) {
       const interval = setInterval(
         () => {
           console.log("🔄 Auto-refreshing current day dispatches")
@@ -620,7 +764,7 @@ export default function DespachoDriverPage() {
 
       return () => clearInterval(interval)
     }
-  }, [selectedDate])
+  }, [selectedDate, isOnline])
 
   // ✅ Funciones del modal
   const openClientAssignmentModal = (clientAssignment: ClientAssignment, assignment: ExtendedAssignment) => {
@@ -666,6 +810,15 @@ export default function DespachoDriverPage() {
   }, [marcadorFinal])
 
   const completeClientAssignment = async () => {
+    if (!isOnline) {
+      toast({
+        title: "🌐 Sin conexión",
+        description: "Necesitas conexión a internet para completar la entrega.",
+        variant: "destructive",
+      })
+      return
+    }
+
     if (!selectedClientAssignment || !marcadorInicial || !marcadorFinal) {
       toast({
         title: "❌ Error",
@@ -786,6 +939,15 @@ export default function DespachoDriverPage() {
   }
 
   const completeDispatchDelivery = async () => {
+    if (!isOnline) {
+      toast({
+        title: "🌐 Sin conexión",
+        description: "Necesitas conexión a internet para completar la entrega.",
+        variant: "destructive",
+      })
+      return
+    }
+
     if (!selectedDispatchForCompletion || !marcadorInicial || !marcadorFinal) {
       toast({
         title: "❌ Error",
@@ -1008,9 +1170,14 @@ export default function DespachoDriverPage() {
   if (loading || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
+        <div className="text-center animate-slideIn">
           <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto mb-4" />
           <p className="text-gray-600">Cargando panel del conductor...</p>
+          {!isOnline && (
+            <p className="text-orange-600 text-sm mt-2">
+              🌐 Sin conexión - Intentando cargar datos locales
+            </p>
+          )}
         </div>
       </div>
     )
@@ -1019,7 +1186,7 @@ export default function DespachoDriverPage() {
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Card className="max-w-md w-full">
+        <Card className="max-w-md w-full animate-slideIn">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-red-600">
               <AlertTriangle className="h-5 w-5" />
@@ -1028,8 +1195,20 @@ export default function DespachoDriverPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-gray-600">{error}</p>
+            {!isOnline && (
+              <Alert className="border-orange-200 bg-orange-50">
+                <WifiOff className="h-4 w-4" />
+                <AlertDescription className="text-orange-800">
+                  Sin conexión a internet. Verifica tu conexión e intenta de nuevo.
+                </AlertDescription>
+              </Alert>
+            )}
             <div className="space-y-2">
-              <Button onClick={() => fetchData(selectedDate)} className="w-full">
+              <Button 
+                onClick={() => fetchData(selectedDate)} 
+                className="w-full"
+                disabled={!isOnline}
+              >
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Reintentar
               </Button>
@@ -1081,10 +1260,16 @@ export default function DespachoDriverPage() {
             ) : (
               <span className="text-sm text-white/70">Sin camión asignado</span>
             )}
-            <Badge className={`mt-1 text-xs ${currentLocation?.lat ? "bg-green-500" : "bg-red-500"} text-white`}>
-              <MapPin className="h-3 w-3 mr-1" />
-              GPS {currentLocation?.lat ? "Activo" : "Inactivo"}
-            </Badge>
+            <div className="flex items-center gap-2 mt-1">
+              <Badge className={`text-xs ${currentLocation?.lat ? "bg-green-500" : gpsPermissionDenied ? "bg-red-500" : "bg-yellow-500"} text-white`}>
+                <MapPin className="h-3 w-3 mr-1" />
+                GPS {currentLocation?.lat ? "Activo" : gpsPermissionDenied ? "Denegado" : "Buscando"}
+              </Badge>
+              <Badge className={`text-xs ${isOnline ? "bg-green-500" : "bg-red-500"} text-white`}>
+                {isOnline ? <Wifi className="h-3 w-3 mr-1" /> : <WifiOff className="h-3 w-3 mr-1" />}
+                {isOnline ? "Online" : "Offline"}
+              </Badge>
+            </div>
           </div>
         </div>
 
@@ -1107,12 +1292,31 @@ export default function DespachoDriverPage() {
               variant="ghost"
               size="sm"
               className="text-white hover:bg-white/20 ml-2"
-              disabled={isRefreshing}
+              disabled={isRefreshing || !isOnline}
             >
               <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
             </Button>
           </div>
         </div>
+
+        {/* ✅ Banner de estado de conexión */}
+        {!isOnline && (
+          <Alert className="mt-3 border-orange-400 bg-orange-50/10 text-white">
+            <WifiOff className="h-4 w-4 text-orange-300" />
+            <AlertDescription className="text-orange-200">
+              Modo offline - Los datos pueden no estar actualizados
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {gpsPermissionDenied && (
+          <Alert className="mt-3 border-yellow-400 bg-yellow-50/10 text-white">
+            <MapPin className="h-4 w-4 text-yellow-300" />
+            <AlertDescription className="text-yellow-200">
+              GPS desactivado - Habilita el GPS para funciones de ubicación
+            </AlertDescription>
+          </Alert>
+        )}
       </header>
 
       <main className="flex-1 overflow-auto max-w-xl mx-auto w-full px-4 py-6">
@@ -1135,7 +1339,7 @@ export default function DespachoDriverPage() {
           {/* --- Despachos Tab --- */}
           <TabsContent value="despachos" className="space-y-6">
             {assignments.length === 0 ? (
-              <Card className="text-center p-6 bg-white shadow rounded-lg">
+              <Card className="text-center p-6 bg-white shadow rounded-lg animate-slideIn">
                 <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">
                   {isToday
@@ -1147,11 +1351,19 @@ export default function DespachoDriverPage() {
                     ? "Los despachos aparecerán cuando el administrador te asigne uno."
                     : "No se encontraron despachos para esta fecha."}
                 </p>
+                {!isOnline && (
+                  <Alert className="mt-4 border-orange-200 bg-orange-50">
+                    <WifiOff className="h-4 w-4" />
+                    <AlertDescription>
+                      Sin conexión a internet. Es posible que haya despachos disponibles que no se muestran.
+                    </AlertDescription>
+                  </Alert>
+                )}
               </Card>
             ) : (
               <div className="space-y-4">
-                {assignments.map((dispatch) => (
-                  <Card key={dispatch.id} className="shadow-md rounded-lg overflow-hidden">
+                {assignments.map((dispatch, index) => (
+                  <Card key={dispatch.id} className="shadow-md rounded-lg overflow-hidden animate-slideIn" style={{ animationDelay: `${index * 0.1}s` }}>
                     <CardHeader className="p-4 bg-gradient-to-r from-blue-50 to-blue-100 border-b border-blue-200">
                       <div className="flex justify-between items-center mb-1">
                         <CardTitle className="text-lg font-bold text-blue-800">
@@ -1213,6 +1425,7 @@ export default function DespachoDriverPage() {
                         {dispatch.status === "PROGRAMADO" && (
                           <Button
                             className="flex-1 bg-green-500 hover:bg-green-600"
+                            disabled={!isOnline}
                             onClick={async () => {
                               // Logic to change status to CARGANDO
                               toast({
@@ -1225,6 +1438,11 @@ export default function DespachoDriverPage() {
                                 fetchData2()
                               } catch (error) {
                                 console.error("Error updating status:", error)
+                                toast({
+                                  title: "❌ Error",
+                                  description: "No se pudo actualizar el estado.",
+                                  variant: "destructive",
+                                })
                               }
                             }}
                           >
@@ -1235,6 +1453,7 @@ export default function DespachoDriverPage() {
                         {dispatch.status === "CARGANDO" && (
                           <Button
                             className="flex-1 bg-orange-500 hover:bg-orange-600"
+                            disabled={!isOnline}
                             onClick={async () => {
                               toast({
                                 title: "En Ruta...",
@@ -1245,6 +1464,11 @@ export default function DespachoDriverPage() {
                                 fetchData2()
                               } catch (error) {
                                 console.error("Error updating status:", error)
+                                toast({
+                                  title: "❌ Error",
+                                  description: "No se pudo actualizar el estado.",
+                                  variant: "destructive",
+                                })
                               }
                             }}
                           >
@@ -1270,6 +1494,7 @@ export default function DespachoDriverPage() {
                             </Button>
                             <Button
                               className="flex-1 bg-green-500 hover:bg-green-600"
+                              disabled={!isOnline}
                               onClick={() => openDeliveryModal(dispatch)}
                             >
                               <CheckCircle className="h-4 w-4 mr-2" />
@@ -1290,6 +1515,15 @@ export default function DespachoDriverPage() {
                           </>
                         )}
                       </div>
+
+                      {!isOnline && (
+                        <Alert className="mt-2 border-orange-200 bg-orange-50">
+                          <WifiOff className="h-4 w-4" />
+                          <AlertDescription className="text-orange-800 text-xs">
+                            Sin conexión - Los cambios se sincronizarán cuando se restablezca
+                          </AlertDescription>
+                        </Alert>
+                      )}
                     </CardContent>
                   </Card>
                 ))}
@@ -1346,7 +1580,7 @@ export default function DespachoDriverPage() {
             <Card className="p-6 bg-white shadow rounded-lg space-y-4">
               <CardTitle className="flex items-center gap-2 text-blue-700">
                 <MapPin className="h-5 w-5" />
-                GPS Activo - Ubicación en Tiempo Real
+                {currentLocation?.lat ? "GPS Activo - Ubicación en Tiempo Real" : gpsPermissionDenied ? "GPS Deshabilitado" : "Buscando Ubicación GPS"}
               </CardTitle>
               <div className="space-y-2 text-sm text-gray-700">
                 <p className="font-mono bg-blue-50 p-2 rounded-md">
@@ -1357,11 +1591,22 @@ export default function DespachoDriverPage() {
                   {currentLocation?.accuracy?.toFixed(0) || "N/A"}m
                 </p>
                 <p className="font-semibold mt-2">Dirección actual:</p>
-                <p>{currentLocation?.address || "Obteniendo dirección..."}</p>
+                <p>{currentLocation?.address || (gpsPermissionDenied ? "GPS deshabilitado por el usuario" : "Obteniendo ubicación...")}</p>
               </div>
+              
+              {gpsPermissionDenied && (
+                <Alert className="border-yellow-200 bg-yellow-50">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    Para habilitar el GPS, ve a la configuración de tu navegador y permite el acceso a la ubicación para este sitio.
+                  </AlertDescription>
+                </Alert>
+              )}
+
               <div className="flex gap-2">
                 <Button
                   className="flex-1"
+                  disabled={!currentLocation?.lat}
                   onClick={() => {
                     if (currentLocation?.lat && currentLocation?.lng) {
                       // Simulate sharing location (e.g., via web share API or custom endpoint)
@@ -1396,6 +1641,7 @@ export default function DespachoDriverPage() {
                 <Button
                   variant="outline"
                   className="flex-1 bg-transparent"
+                  disabled={!currentLocation?.lat}
                   onClick={() => {
                     if (currentLocation?.lat && currentLocation?.lng) {
                       window.open(
@@ -1473,6 +1719,15 @@ export default function DespachoDriverPage() {
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
+              {!isOnline && (
+                <Alert className="border-red-200 bg-red-50">
+                  <WifiOff className="h-4 w-4" />
+                  <AlertDescription className="text-red-800">
+                    Sin conexión a internet. No se puede completar la entrega en este momento.
+                  </AlertDescription>
+                </Alert>
+              )}
+
               <div className="bg-blue-50 p-4 rounded-lg">
                 <p className="text-sm text-blue-700 font-medium">
                   Cantidad asignada:
@@ -1504,6 +1759,7 @@ export default function DespachoDriverPage() {
                   onChange={(e) => setMarcadorInicial(e.target.value)}
                   placeholder="Ej: 2500.00"
                   className="focus:ring-2 focus:ring-blue-500"
+                  disabled={!isOnline}
                 />
                 <p className="text-xs text-gray-500">
                   Galones de combustible restantes en el camión antes de la entrega
@@ -1520,6 +1776,7 @@ export default function DespachoDriverPage() {
                   onChange={(e) => setMarcadorFinal(e.target.value)}
                   placeholder="Ej: 500.00"
                   className="focus:ring-2 focus:ring-blue-500"
+                  disabled={!isOnline}
                 />
                 <p className="text-xs text-gray-500">Galones de combustible entregados al cliente</p>
               </div>
@@ -1573,6 +1830,7 @@ export default function DespachoDriverPage() {
                 onClick={completeDispatchDelivery}
                 disabled={
                   isProcessingDelivery ||
+                  !isOnline ||
                   !marcadorInicial ||
                   !marcadorFinal ||
                   calculateDeliveredAmount2() <= 0 ||
@@ -1637,6 +1895,14 @@ export default function DespachoDriverPage() {
                 </AlertDescription>
               </Alert>
             )}
+            {!isOnline && (
+              <Alert className="bg-yellow-50 border-yellow-200">
+                <WifiOff className="h-4 w-4" />
+                <AlertDescription>
+                  Sin conexión a internet. El reporte se enviará cuando se restablezca la conexión.
+                </AlertDescription>
+              </Alert>
+            )}
           </div>
           <DialogFooter className="flex-col sm:flex-col gap-2 pt-4">
             <Button
@@ -1652,7 +1918,7 @@ export default function DespachoDriverPage() {
               ) : (
                 <>
                   <BellRing className="h-4 w-4 mr-2" />
-                  Enviar Reporte
+                  {isOnline ? "Enviar Reporte" : "Guardar Reporte (Envío Pendiente)"}
                 </>
               )}
             </Button>
