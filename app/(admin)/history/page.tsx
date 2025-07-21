@@ -570,7 +570,7 @@ export default function HistoryPage() {
                     variant="outline"
                     size="sm"
                     className="w-full bg-transparent"
-                    onClick={() => router.push(`/admin/history/truck/${truckHistory.truckId}`)}
+                    onClick={() => router.push(`/history/truck/${truckHistory.truckId}`)}
                   >
                     <Eye className="h-4 w-4 mr-2" />
                     Ver Detalle Completo
@@ -662,7 +662,7 @@ export default function HistoryPage() {
                     variant="outline"
                     size="sm"
                     className="w-full bg-transparent"
-                    onClick={() => router.push(`/admin/history/driver/${driverHistory.driverId}`)}
+                    onClick={() => router.push(`/history/driver/${driverHistory.driverId}`)}
                   >
                     <Eye className="h-4 w-4 mr-2" />
                     Ver Historial Completo

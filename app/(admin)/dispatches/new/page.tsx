@@ -184,16 +184,16 @@ export default function NewDispatchPage() {
   const handleLocationChange = (location: LocationData) => {
     setLocationData(location)
     updateFormData("deliveryAddress", location.address)
-    
+
     if (location.latitude && location.longitude) {
       updateFormData("deliveryLatitude", location.latitude)
       updateFormData("deliveryLongitude", location.longitude)
-      updateFormData("locationGPS", { 
-        latitude: location.latitude, 
-        longitude: location.longitude 
+      updateFormData("locationGPS", {
+        latitude: location.latitude,
+        longitude: location.longitude,
       })
     }
-    
+
     if (location.method === "GPS_MANUAL") {
       updateFormData("locationManual", true)
     }
@@ -243,10 +243,13 @@ export default function NewDispatchPage() {
         priority: formData.priority,
         scheduledDate: new Date(`${formData.scheduledDate}T${formData.scheduledTime || "08:00"}:00`).toISOString(),
         address: locationData.address,
-        locationGPS: locationData.latitude && locationData.longitude ? {
-          latitude: locationData.latitude,
-          longitude: locationData.longitude
-        } : undefined,
+        locationGPS:
+          locationData.latitude && locationData.longitude
+            ? {
+                latitude: locationData.latitude,
+                longitude: locationData.longitude,
+              }
+            : undefined,
         locationManual: locationData.method === "GPS_MANUAL",
         notes: formData.observations,
         photos: formData.photos.map((file) => ({
@@ -264,7 +267,7 @@ export default function NewDispatchPage() {
           title: isDraft ? "Borrador guardado" : "Despacho creado",
           description: `Despacho ${response.data.data.dispatchNumber} ${isDraft ? "guardado como borrador" : "creado exitosamente"}`,
         })
-        router.push("/admin/dispatches")
+        router.push("/dispatches")
       }
     } catch (error: any) {
       console.error("Error creating dispatch:", error)
@@ -312,12 +315,13 @@ export default function NewDispatchPage() {
     ? (selectedVehicle.maxCapacity || selectedVehicle.capacitygal) - selectedVehicle.currentLoad
     : 0
 
-  const isFormValid = formData.truckId && 
-                     formData.driverId && 
-                     formData.customerId && 
-                     formData.fuelType && 
-                     formData.quantity > 0 && 
-                     locationData.address
+  const isFormValid =
+    formData.truckId &&
+    formData.driverId &&
+    formData.customerId &&
+    formData.fuelType &&
+    formData.quantity > 0 &&
+    locationData.address
 
   return (
     <div className="container mx-auto py-6 space-y-6">
@@ -428,10 +432,10 @@ export default function NewDispatchPage() {
                           </div>
                           <div className="mt-2">
                             <div className="w-full bg-gray-200 rounded-full h-2">
-                              <div 
-                                className="bg-blue-600 h-2 rounded-full" 
-                                style={{ 
-                                  width: `${(selectedVehicle.currentLoad / selectedVehicle.capacitygal) * 100}%` 
+                              <div
+                                className="bg-blue-600 h-2 rounded-full"
+                                style={{
+                                  width: `${(selectedVehicle.currentLoad / selectedVehicle.capacitygal) * 100}%`,
                                 }}
                               ></div>
                             </div>
@@ -482,10 +486,9 @@ export default function NewDispatchPage() {
                       />
                       {selectedVehicle && formData.quantity > 0 && (
                         <p className="text-xs text-gray-600">
-                          {formData.quantity > availableCapacity 
-                            ? `⚠️ Excede capacidad disponible (${availableCapacity} gal)` 
-                            : `✅ Dentro de capacidad disponible (${availableCapacity} gal)`
-                          }
+                          {formData.quantity > availableCapacity
+                            ? `⚠️ Excede capacidad disponible (${availableCapacity} gal)`
+                            : `✅ Dentro de capacidad disponible (${availableCapacity} gal)`}
                         </p>
                       )}
                     </div>
@@ -529,15 +532,25 @@ export default function NewDispatchPage() {
                   )}
 
                   {formData.quantity > 0 && selectedVehicle && (
-                    <div className={`${formData.quantity <= availableCapacity ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'} border rounded-lg p-4`}>
+                    <div
+                      className={`${formData.quantity <= availableCapacity ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"} border rounded-lg p-4`}
+                    >
                       <div className="flex items-center justify-between">
-                        <div className={`text-sm ${formData.quantity <= availableCapacity ? 'text-green-700' : 'text-red-700'}`}>
+                        <div
+                          className={`text-sm ${formData.quantity <= availableCapacity ? "text-green-700" : "text-red-700"}`}
+                        >
                           <span className="font-medium">Capacidad utilizada:</span>{" "}
                           {((formData.quantity / selectedVehicle.capacitygal) * 100).toFixed(1)}%
                         </div>
-                        <div className={`text-sm ${formData.quantity <= availableCapacity ? 'text-green-700' : 'text-red-700'}`}>
+                        <div
+                          className={`text-sm ${formData.quantity <= availableCapacity ? "text-green-700" : "text-red-700"}`}
+                        >
                           <span className="font-medium">Restante:</span>{" "}
-                          {Math.max(0, selectedVehicle.capacitygal - selectedVehicle.currentLoad - formData.quantity).toLocaleString()} galones
+                          {Math.max(
+                            0,
+                            selectedVehicle.capacitygal - selectedVehicle.currentLoad - formData.quantity,
+                          ).toLocaleString()}{" "}
+                          galones
                         </div>
                       </div>
                     </div>
@@ -613,9 +626,7 @@ export default function NewDispatchPage() {
                     <MapPin className="h-5 w-5" />
                     <span>Ubicación de Descarga</span>
                   </CardTitle>
-                  <CardDescription>
-                    Configure la ubicación donde se realizará el despacho
-                  </CardDescription>
+                  <CardDescription>Configure la ubicación donde se realizará el despacho</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <LocationPicker
@@ -753,17 +764,17 @@ export default function NewDispatchPage() {
                       dispatch_number: nextDispatchNumber,
                       truck_id: formData.truckId,
                       driver_id: formData.driverId,
-                      stage: "planning"
+                      stage: "planning",
                     }}
                     label="Subir Documentos y Fotos"
                     description="JPG, PNG, PDF - Máximo 5MB por archivo. El conductor también podrá agregar fotos durante el despacho."
                     multiple={true}
                   />
-                  
+
                   <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
                     <div className="text-sm text-blue-800">
-                      <strong>Nota:</strong> Las fotos obligatorias (inicio de carga, entrega, conformidad) 
-                      serán tomadas por el conductor durante el proceso de despacho usando la aplicación móvil.
+                      <strong>Nota:</strong> Las fotos obligatorias (inicio de carga, entrega, conformidad) serán
+                      tomadas por el conductor durante el proceso de despacho usando la aplicación móvil.
                     </div>
                   </div>
                 </CardContent>
@@ -804,7 +815,9 @@ export default function NewDispatchPage() {
                 {selectedDriver && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Conductor</span>
-                    <span className="font-medium text-right">{selectedDriver.name} {selectedDriver.lastname}</span>
+                    <span className="font-medium text-right">
+                      {selectedDriver.name} {selectedDriver.lastname}
+                    </span>
                   </div>
                 )}
                 {selectedCustomer && (
@@ -835,9 +848,7 @@ export default function NewDispatchPage() {
           {!isFormValid && (
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>
-                Complete todos los campos obligatorios para crear el despacho
-              </AlertDescription>
+              <AlertDescription>Complete todos los campos obligatorios para crear el despacho</AlertDescription>
             </Alert>
           )}
 

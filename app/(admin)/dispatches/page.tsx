@@ -379,7 +379,7 @@ export default function DispatchesPage() {
             <RefreshCw className="h-4 w-4 mr-2" />
             Actualizar
           </Button>
-          <Button onClick={() => router.push("/admin/dispatches/new")} size="lg">
+          <Button onClick={() => router.push("/dispatches/new")} size="lg">
             <Plus className="h-4 w-4 mr-2" />
             Nuevo Despacho
           </Button>
@@ -503,7 +503,7 @@ export default function DispatchesPage() {
                   <SelectValue placeholder="Todos los estados" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="PROGRAMADO">Todos los estados</SelectItem>
+                  <SelectItem value="ALL">Todos los estados</SelectItem>
                   {Object.entries(STATUS_CONFIG).map(([key, config]) => (
                     <SelectItem key={key} value={key}>
                       <div className="flex items-center space-x-2">
@@ -523,7 +523,7 @@ export default function DispatchesPage() {
                   <SelectValue placeholder="Todos los tipos" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todos los tipos</SelectItem>
+                  <SelectItem value="ALL">Todos los tipos</SelectItem>
                   {Object.entries(FUEL_TYPE_LABELS).map(([key, label]) => (
                     <SelectItem key={key} value={key}>
                       {label}
@@ -540,7 +540,7 @@ export default function DispatchesPage() {
                   <SelectValue placeholder="Todas las prioridades" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="NORMAL">Todas las prioridades</SelectItem>
+                  <SelectItem value="ALL">Todas las prioridades</SelectItem>
                   {Object.entries(PRIORITY_CONFIG).map(([key, config]) => (
                     <SelectItem key={key} value={key}>
                       <Badge className={config.color}>{config.label}</Badge>
@@ -699,7 +699,7 @@ export default function DispatchesPage() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => router.push(`/admin/dispatches/${dispatch.id}/edit`)}
+                            onClick={() => router.push(`/dispatches/${dispatch.id}/edit`)}
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
@@ -736,7 +736,7 @@ export default function DispatchesPage() {
                     : "Aún no se han creado despachos"}
                 </p>
                 {!filters.search && !filters.status && !filters.fuelType && (
-                  <Button className="mt-4" onClick={() => router.push("/admin/dispatches/new")}>
+                  <Button className="mt-4" onClick={() => router.push("/dispatches/new")}>
                     <Plus className="h-4 w-4 mr-2" />
                     Crear Primer Despacho
                   </Button>

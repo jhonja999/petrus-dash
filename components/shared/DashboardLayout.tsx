@@ -20,6 +20,8 @@ import {
   ChevronLeft,
   ChevronRight,
   User,
+  FileText,
+  History,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -35,12 +37,15 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const pathname = usePathname()
 
-   const navigation = [
+  const navigation = [
     { name: "Panel", href: "/dashboard", icon: Home },
+    { name: "Despachos", href: "/dispatches", icon: FileText },
     { name: "Asignaciones", href: "/assignments", icon: MapPin },
     { name: "Camiones", href: "/trucks", icon: Truck },
     { name: "Clientes", href: "/customers", icon: Building2 },
     { name: "Usuarios", href: "/users", icon: Users },
+    { name: "Historial", href: "/history", icon: History },
+    { name: "Analytics", href: "/analytics", icon: BarChart3 },
     { name: "Reportes", href: "/reports", icon: BarChart3 },
   ]
 
@@ -73,14 +78,14 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200">
           {sidebarOpen && (
             <div className="flex items-center space-x-2">
-               <Link
-                              href="/"
-                              className="flex items-center space-x-3 hover:opacity-80 transition-opacity cursor-pointer"
-                              title="Ir al inicio"
-                            >
-              {/* <Truck className="h-8 w-8 text-blue-600" /> */}
-              
-              <LogoPetrus />
+              <Link
+                href="/"
+                className="flex items-center space-x-3 hover:opacity-80 transition-opacity cursor-pointer"
+                title="Ir al inicio"
+              >
+                {/* <Truck className="h-8 w-8 text-blue-600" /> */}
+
+                <LogoPetrus />
               </Link>
               {/* <span className="text-xl font-bold text-gray-900">Petrus</span> */}
             </div>
@@ -175,14 +180,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       </div>
 
       {/* Toaster de Sonner */}
-      <Toaster 
-        position="top-right"
-        richColors
-        closeButton
-        duration={4000}
-        expand={true}
-        visibleToasts={5}
-      />
+      <Toaster position="top-right" richColors closeButton duration={4000} expand={true} visibleToasts={5} />
     </div>
   )
 }

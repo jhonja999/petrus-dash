@@ -57,7 +57,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const payload = await verifyToken(token)
-    if (!payload || (payload.role !== "Admin" && payload.role !== "S_A")) {
+    if (!payload || (payload.role !== "Admin" && payload.role !== "S_A" && payload.role !== "Operador")) {
+      // Allow Operador to update status
       return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 })
     }
 
@@ -80,28 +81,28 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "Dispatch not found" }, { status: 404 })
     }
 
-    // Solo permitir edición si está en estado BORRADOR o PROGRAMADO
-    if (!["BORRADOR", "PROGRAMADO"].includes(existingDispatch.status)) {
-      return NextResponse.json({ error: "Cannot edit dispatch in current status" }, { status: 400 })
-    }
-
     const {
       truckId,
       driverId,
       customerId,
       fuelType,
       customFuelName,
-      quantity,
+      quantity, // This refers to the allocated quantity
+      deliveredQuantity, // New field for actual delivered quantity
+      marcadorInicial, // New field for initial odometer/tank reading
+      marcadorFinal, // New field for final odometer/tank reading
       locationGPS,
       locationManual,
       address,
       scheduledDate,
       notes,
       priority = "NORMAL",
-      status,
+      status, // New: Status update from driver
+      isEmergency, // New: For emergency button
+      emergencyNotes, // New: Notes for emergency
     } = body
 
-    // Preparar datos de actualización
+    // Prepare update data
     const updateData: any = {}
 
     if (truckId !== undefined) updateData.truckId = Number.parseInt(truckId)
@@ -113,13 +114,60 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     if (scheduledDate !== undefined) updateData.scheduledDate = new Date(scheduledDate)
     if (notes !== undefined) updateData.notes = notes
     if (priority !== undefined) updateData.priority = priority
-    if (status !== undefined) updateData.status = status
 
-    // Manejar cambios de cantidad
-    if (quantity !== undefined && quantity !== Number(existingDispatch.quantity)) {
+    // Handle delivered quantity and status changes
+    if (status !== undefined) {
+      updateData.status = status
+
+      if (status === "COMPLETADO") {
+        if (deliveredQuantity === undefined || deliveredQuantity <= 0) {
+          return NextResponse.json(
+            { error: "Delivered quantity must be greater than 0 for completion" },
+            { status: 400 },
+          )
+        }
+        updateData.deliveredQuantity = Number(deliveredQuantity)
+        updateData.completedAt = new Date() // Set completion timestamp
+        if (marcadorInicial !== undefined) updateData.marcadorInicial = Number(marcadorInicial)
+        if (marcadorFinal !== undefined) updateData.marcadorFinal = Number(marcadorFinal)
+
+        // Update truck currentLoad by decrementing the delivered quantity
+        await prisma.truck.update({
+          where: { id: existingDispatch.truckId },
+          data: {
+            currentLoad: {
+              decrement: Number(deliveredQuantity),
+            },
+          },
+        })
+      } else if (status === "CARGANDO") {
+        updateData.startedAt = new Date()
+        // When changing to CARGANDO, the quantity (allocated) has already been accounted for
+        // However, if initial load wasn't added, it should be added here
+        // Assuming currentLoad was incremented on initial POST of dispatch
+      } else if (status === "EN_RUTA") {
+        updateData.enRouteAt = new Date()
+      } else if (status === "CANCELADO") {
+        // If canceled, revert the allocated quantity from truck's currentLoad
+        if (existingDispatch.status !== "COMPLETADO") {
+          // Only revert if not already delivered
+          await prisma.truck.update({
+            where: { id: existingDispatch.truckId },
+            data: {
+              currentLoad: {
+                decrement: Number(existingDispatch.quantity),
+              },
+            },
+          })
+        }
+      }
+    }
+
+    // Handle allocated quantity changes (if quantity is updated and not for completion)
+    if (quantity !== undefined && quantity !== Number(existingDispatch.quantity) && status !== "COMPLETADO") {
       const quantityDifference = Number(quantity) - Number(existingDispatch.quantity)
 
-      // Actualizar la carga del camión
+      // Update the truck's load based on the change in allocated quantity
       await prisma.truck.update({
         where: { id: existingDispatch.truckId },
         data: {
@@ -132,7 +180,15 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       updateData.quantity = Number(quantity)
     }
 
-    // Manejar ubicación
+    // Handle emergency status
+    if (isEmergency !== undefined) {
+      updateData.isEmergency = isEmergency
+    }
+    if (emergencyNotes !== undefined) {
+      updateData.emergencyNotes = emergencyNotes
+    }
+
+    // Handle location
     if (locationGPS) {
       const [lat, lng] = locationGPS.split(",").map((coord: string) => Number.parseFloat(coord.trim()))
       if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
@@ -144,7 +200,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       updateData.locationMethod = "GPS_MANUAL"
     }
 
-    // Actualizar el despacho
+    // Update the dispatch
     const updatedDispatch = await prisma.dispatch.update({
       where: { id: dispatchId },
       data: updateData,
@@ -202,7 +258,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       return NextResponse.json({ error: "Cannot delete dispatch in current status" }, { status: 400 })
     }
 
-    // Revertir la carga del camión
+    // Revert the allocated quantity from the truck's currentLoad
     await prisma.truck.update({
       where: { id: existingDispatch.truckId },
       data: {

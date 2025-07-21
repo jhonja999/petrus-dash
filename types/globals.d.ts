@@ -105,6 +105,7 @@ export interface Dispatch {
   fuelType: FuelType
   customFuelName?: string | null
   quantity: Decimal
+  deliveredQuantity?: Decimal | null
   locationGPS?: string | null
   locationManual?: string | null
   address: string
