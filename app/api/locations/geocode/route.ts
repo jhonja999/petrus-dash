@@ -2,174 +2,113 @@ import { type NextRequest, NextResponse } from "next/server"
 
 const MAPBOX_ACCESS_TOKEN = process.env.MAPBOX_ACCESS_TOKEN
 
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const { address } = body
-
-    if (!address) {
-      return NextResponse.json({ error: "Dirección requerida" }, { status: 400 })
-    }
-
-    if (!MAPBOX_ACCESS_TOKEN) {
-      return NextResponse.json({ error: "Mapbox token no configurado" }, { status: 500 })
-    }
-
-    // Agregar "Perú" a la búsqueda si no está incluido
-    const searchQuery = address.includes("Perú") || address.includes("Peru") ? address : `${address}, Perú`
-
-    // Usar Mapbox Geocoding API
-    const response = await fetch(
-      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(searchQuery)}.json?` +
-        `access_token=${MAPBOX_ACCESS_TOKEN}&` +
-        `country=pe&` +
-        `limit=5&` +
-        `language=es&` +
-        `types=address,poi,place`,
-      {
-        headers: {
-          "User-Agent": "PetrusDash/1.0 (Fuel Distribution System)",
-        },
-      },
-    )
-
-    if (!response.ok) {
-      throw new Error("Error en la geocodificación de Mapbox")
-    }
-
-    const data = await response.json()
-
-    if (!data.features || data.features.length === 0) {
-      return NextResponse.json({
-        success: false,
-        error: "No se encontraron coordenadas para esta dirección",
-        coordinates: null,
-      })
-    }
-
-    const results = data.features.map((feature: any) => {
-      const [longitude, latitude] = feature.center
-
-      return {
-        success: true,
-        coordinates: { latitude, longitude },
-        formattedAddress: feature.place_name,
-        addressComponents: {
-          text: feature.text,
-          place_name: feature.place_name,
-          place_type: feature.place_type?.[0],
-          relevance: feature.relevance,
-          properties: feature.properties,
-          context: feature.context?.reduce((acc: any, ctx: any) => {
-            const [key, value] = ctx.id.split(".")
-            acc[key] = ctx.text
-            return acc
-          }, {}),
-        },
-        confidence: feature.relevance || 0,
-        bbox: feature.bbox,
-      }
-    })
-
-    // Validar que esté en Perú (las coordenadas ya están filtradas por country=pe)
-    const validResults = results.filter((result: any) => {
-      const { latitude, longitude } = result.coordinates
-      const peruBounds = {
-        north: -0.012,
-        south: -18.35,
-        east: -68.65,
-        west: -81.33,
-      }
-
-      return (
-        latitude >= peruBounds.south &&
-        latitude <= peruBounds.north &&
-        longitude >= peruBounds.west &&
-        longitude <= peruBounds.east
-      )
-    })
-
-    if (validResults.length === 0) {
-      return NextResponse.json({
-        success: false,
-        error: "Las coordenadas encontradas están fuera de Perú",
-        coordinates: null,
-      })
-    }
-
-    return NextResponse.json({
-      success: true,
-      results: validResults,
-      query: searchQuery,
-    })
-  } catch (error) {
-    console.error("Error in Mapbox geocoding:", error)
-    return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
-  }
+// Known cities in Peru for quick lookup
+const KNOWN_PERU_CITIES: { [key: string]: { lat: number; lng: number; address: string }[] } = {
+  lima: [
+    { lat: -12.0464, lng: -77.0428, address: "Lima, Perú" },
+    { lat: -12.0917, lng: -77.0282, address: "San Isidro, Lima, Perú" },
+    { lat: -12.12, lng: -77.031, address: "Miraflores, Lima, Perú" },
+  ],
+  cajamarca: [{ lat: -7.1619, lng: -78.5151, address: "Cajamarca, Perú" }],
+  arequipa: [{ lat: -16.409, lng: -71.5375, address: "Arequipa, Perú" }],
+  trujillo: [{ lat: -8.1159, lng: -79.0299, address: "Trujillo, Perú" }],
+  cusco: [{ lat: -13.532, lng: -71.9675, address: "Cusco, Perú" }],
 }
 
 export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url)
-    const address = searchParams.get("address")
+  const { searchParams } = new URL(request.url)
+  const address = searchParams.get("address")
 
-    if (!address) {
-      return NextResponse.json({ error: "Dirección requerida" }, { status: 400 })
+  if (!address) {
+    return NextResponse.json({ error: "Address parameter is required" }, { status: 400 })
+  }
+
+  console.log("Geocoding request:", address)
+
+  // 1. Strategy: Known Cities (instantaneous)
+  const lowerCaseAddress = address.toLowerCase()
+  for (const city in KNOWN_PERU_CITIES) {
+    if (lowerCaseAddress.includes(city)) {
+      const results = KNOWN_PERU_CITIES[city].filter((loc) => loc.address.toLowerCase().includes(lowerCaseAddress))
+      if (results.length > 0) {
+        console.log(`Found ${results.length} results from known cities.`)
+        return NextResponse.json(
+          results.map((r) => ({
+            display_name: r.address,
+            lat: r.lat.toString(),
+            lon: r.lng.toString(),
+            type: "city",
+            importance: 1.0,
+          })),
+        )
+      }
     }
+  }
 
-    if (!MAPBOX_ACCESS_TOKEN) {
-      return NextResponse.json({ error: "Mapbox token no configurado" }, { status: 500 })
-    }
-
-    // Agregar "Perú" a la búsqueda si no está incluido
-    const searchQuery = address.includes("Perú") || address.includes("Peru") ? address : `${address}, Perú`
-
-    // Usar Mapbox Geocoding API
-    const response = await fetch(
-      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(searchQuery)}.json?` +
+  // 2. Strategy: Mapbox API (if token configured)
+  if (MAPBOX_ACCESS_TOKEN) {
+    try {
+      const mapboxUrl =
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?` +
         `access_token=${MAPBOX_ACCESS_TOKEN}&` +
         `country=pe&` +
-        `limit=8&` +
-        `language=es&` +
-        `types=address,poi,place`,
-    )
+        `limit=5&` +
+        `language=es`
 
-    if (!response.ok) {
-      throw new Error("Error en la geocodificación de Mapbox")
-    }
+      const mapboxResponse = await fetch(mapboxUrl)
+      const mapboxData = await mapboxResponse.json()
 
-    const data = await response.json()
-
-    if (!data.features || data.features.length === 0) {
-      return NextResponse.json([])
-    }
-
-    const results = data.features.map((feature: any) => {
-      const [longitude, latitude] = feature.center
-
-      return {
-        place_id: feature.id,
-        display_name: feature.place_name,
-        lat: latitude.toString(),
-        lon: longitude.toString(),
-        type: feature.place_type?.[0] || "address",
-        importance: feature.relevance || 0,
-        address: {
-          road: feature.address,
-          suburb: feature.context?.find((c: any) => c.id.includes("neighborhood"))?.text,
-          city: feature.context?.find((c: any) => c.id.includes("place"))?.text,
-          state: feature.context?.find((c: any) => c.id.includes("region"))?.text,
-          country: feature.context?.find((c: any) => c.id.includes("country"))?.text,
-          postcode: feature.context?.find((c: any) => c.id.includes("postcode"))?.text,
-        },
-        properties: feature.properties,
-        bbox: feature.bbox,
+      if (mapboxResponse.ok && mapboxData.features && mapboxData.features.length > 0) {
+        const results = mapboxData.features.map((feature: any) => ({
+          display_name: feature.place_name,
+          lat: feature.center[1].toString(),
+          lon: feature.center[0].toString(),
+          type: feature.place_type?.[0] || "address",
+          importance: feature.relevance || 0.5,
+          address: feature.properties?.address, // Mapbox specific address components
+        }))
+        console.log(`Found ${results.length} results from Mapbox.`)
+        return NextResponse.json(results)
+      } else {
+        console.warn("Mapbox geocoding failed or returned no results:", mapboxData.message || "No features found")
       }
-    })
-
-    return NextResponse.json(results)
-  } catch (error) {
-    console.error("Error in Mapbox geocoding:", error)
-    return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
+    } catch (mapboxError) {
+      console.error("Error with Mapbox geocoding:", mapboxError)
+    }
+  } else {
+    console.warn("MAPBOX_ACCESS_TOKEN is not configured. Skipping Mapbox geocoding.")
   }
+
+  // 3. Strategy: Nominatim/OpenStreetMap (fallback)
+  try {
+    const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=5&countrycodes=pe&addressdetails=1`
+
+    const nominatimResponse = await fetch(nominatimUrl, {
+      headers: {
+        "User-Agent": "PetrusDash/1.0 (contact@example.com)", // Required by Nominatim
+      },
+    })
+    const nominatimData = await nominatimResponse.json()
+
+    if (nominatimResponse.ok && nominatimData && nominatimData.length > 0) {
+      const results = nominatimData.map((item: any) => ({
+        display_name: item.display_name,
+        lat: item.lat,
+        lon: item.lon,
+        type: item.type,
+        importance: item.importance || 0.1,
+        address: item.address, // Nominatim specific address components
+      }))
+      console.log(`Found ${results.length} results from Nominatim.`)
+      return NextResponse.json(results)
+    } else {
+      console.warn("Nominatim geocoding failed or returned no results.")
+    }
+  } catch (nominatimError) {
+    console.error("Error with Nominatim geocoding:", nominatimError)
+  }
+
+  // 4. Fallback: Return empty array if no results found from any strategy
+  console.log("No geocoding results found for:", address)
+  return NextResponse.json([])
 }

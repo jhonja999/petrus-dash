@@ -14,27 +14,29 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Token inválido" }, { status: 401 })
     }
 
-    // Obtener ubicaciones frecuentes ordenadas por uso
-    const frequentLocations = await prisma.$queryRaw`
-      SELECT 
-        id,
-        address,
-        latitude,
-        longitude,
-        district,
-        province,
-        department,
-        location_type as locationType,
-        usage_count as usageCount,
-        last_used as lastUsed,
-        contact_name as contactName,
-        contact_phone as contactPhone,
-        access_instructions as accessInstructions
-      FROM frequent_locations 
-      WHERE created_by = ${payload.id}
-      ORDER BY usage_count DESC, last_used DESC
-      LIMIT 20
-    `
+    // Obtener ubicaciones frecuentes usando Prisma ORM
+    const frequentLocations = await prisma.frequentLocation.findMany({
+      where: {
+        createdBy: payload.id,
+      },
+      orderBy: [{ usageCount: "desc" }, { lastUsed: "desc" }],
+      take: 20,
+      select: {
+        id: true,
+        address: true,
+        latitude: true,
+        longitude: true,
+        district: true,
+        province: true,
+        department: true,
+        locationType: true,
+        usageCount: true,
+        lastUsed: true,
+        contactName: true,
+        contactPhone: true,
+        accessInstructions: true,
+      },
+    })
 
     return NextResponse.json({
       success: true,
@@ -94,43 +96,56 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Las coordenadas deben estar dentro de Perú" }, { status: 400 })
     }
 
-    // Verificar si la ubicación ya existe
-    const existingLocation = await prisma.$queryRaw`
-      SELECT id FROM frequent_locations 
-      WHERE created_by = ${payload.id}
-      AND ABS(latitude - ${latitude}) < 0.001 
-      AND ABS(longitude - ${longitude}) < 0.001
-    `
+    // Verificar si la ubicación ya existe (usando Prisma)
+    const existingLocation = await prisma.frequentLocation.findFirst({
+      where: {
+        createdBy: payload.id,
+        latitude: {
+          gte: latitude - 0.001,
+          lte: latitude + 0.001,
+        },
+        longitude: {
+          gte: longitude - 0.001,
+          lte: longitude + 0.001,
+        },
+      },
+    })
 
-    if (Array.isArray(existingLocation) && existingLocation.length > 0) {
+    if (existingLocation) {
       // Actualizar contador de uso
-      await prisma.$executeRaw`
-        UPDATE frequent_locations 
-        SET usage_count = usage_count + 1, last_used = NOW()
-        WHERE id = ${(existingLocation[0] as any).id}
-      `
+      const updatedLocation = await prisma.frequentLocation.update({
+        where: { id: existingLocation.id },
+        data: {
+          usageCount: { increment: 1 },
+          lastUsed: new Date(),
+        },
+      })
 
       return NextResponse.json({
         success: true,
         message: "Ubicación actualizada",
-        data: existingLocation[0],
+        data: updatedLocation,
       })
     }
 
     // Crear nueva ubicación frecuente
-    const newLocation = await prisma.$queryRaw`
-      INSERT INTO frequent_locations (
-        address, latitude, longitude, district, province, department,
-        location_type, contact_name, contact_phone, access_instructions,
-        usage_count, created_by, last_used, created_at, updated_at
-      ) VALUES (
-        ${address}, ${latitude}, ${longitude}, ${district || ""}, 
-        ${province || ""}, ${department || "Lima"}, ${locationType || "descarga"},
-        ${contactName || ""}, ${contactPhone || ""}, ${accessInstructions || ""},
-        1, ${payload.id}, NOW(), NOW(), NOW()
-      )
-      RETURNING *
-    `
+    const newLocation = await prisma.frequentLocation.create({
+      data: {
+        address,
+        latitude,
+        longitude,
+        district: district || "",
+        province: province || "",
+        department: department || "Lima",
+        locationType: locationType || "descarga",
+        contactName: contactName || "",
+        contactPhone: contactPhone || "",
+        accessInstructions: accessInstructions || "",
+        usageCount: 1,
+        createdBy: payload.id,
+        lastUsed: new Date(),
+      },
+    })
 
     return NextResponse.json({
       success: true,

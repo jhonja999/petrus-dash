@@ -16,7 +16,8 @@ export async function GET(request: NextRequest) {
     }
 
     if (!MAPBOX_ACCESS_TOKEN) {
-      return NextResponse.json({ error: "Mapbox token no configurado" }, { status: 500 })
+      console.warn("Mapbox token not configured for search-places API. Returning empty results.")
+      return NextResponse.json({ success: true, data: [], message: "Mapbox token no configurado" })
     }
 
     let searchQuery = query || ""
@@ -65,7 +66,13 @@ export async function GET(request: NextRequest) {
     const response = await fetch(url)
 
     if (!response.ok) {
-      throw new Error("Error en la búsqueda de lugares")
+      // Log the error but return a graceful response to the client
+      const errorText = await response.text()
+      console.error(`Mapbox API error for search-places (status: ${response.status}): ${errorText}`)
+      return NextResponse.json(
+        { success: false, data: [], message: "Error en la búsqueda de lugares externos" },
+        { status: 200 },
+      ) // Return 200 with error message
     }
 
     const data = await response.json()
@@ -127,7 +134,10 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error("Error in places search:", error)
-    return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
+    return NextResponse.json(
+      { success: false, data: [], error: "Error interno del servidor al buscar lugares" },
+      { status: 200 },
+    ) // Return 200 with error message
   }
 }
 

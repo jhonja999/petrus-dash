@@ -127,6 +127,12 @@ enum HistoryEntityType {
   SYSTEM
 }
 
+enum LocationType {
+  carga
+  descarga
+  intermedio
+}
+
 model User {
   id                  Int      @id @default(autoincrement())
   dni                 String   @unique
@@ -148,6 +154,7 @@ model User {
   dispatches  Dispatch[]
   historyRecords HistoryRecord[]
   driverStats DriverStats[]
+  frequentLocations FrequentLocation[]
 
   @@map("users")
 }
@@ -541,4 +548,34 @@ model SystemAlert {
   @@index([severity])
   @@index([isActive])
   @@index([createdAt])
+}
+
+// Tabla para ubicaciones frecuentes
+model FrequentLocation {
+  id                  Int          @id @default(autoincrement())
+  address             String       // Dirección completa
+  latitude            Decimal      @db.Decimal(10, 8)
+  longitude           Decimal      @db.Decimal(10, 8)
+  district            String?      // Distrito
+  province            String?      // Provincia
+  department          String       @default("Lima") // Departamento
+  locationType        LocationType @default(descarga) // Tipo de ubicación
+  contactName         String?      // Nombre del contacto
+  contactPhone        String?      // Teléfono del contacto
+  accessInstructions  String?      // Instrucciones de acceso
+  usageCount          Int          @default(1) // Contador de uso
+  lastUsed            DateTime     @default(now()) // Última vez usado
+  createdBy           Int          // Usuario que creó la ubicación
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  // Relaciones
+  user                User         @relation(fields: [createdBy], references: [id])
+
+  @@map("frequent_locations")
+  @@index([createdBy])
+  @@index([usageCount])
+  @@index([lastUsed])
+  @@index([latitude, longitude])
+  @@index([locationType])
 }

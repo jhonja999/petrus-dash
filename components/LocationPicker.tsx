@@ -22,15 +22,16 @@ import {
   CrosshairIcon,
   Locate,
   Fuel,
-  Building2,
-  ShoppingCart,
+  Plus,
+  X,
 } from "lucide-react"
 import axios from "axios"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Factory, Truck, Plus, X } from "lucide-react"
+import { Factory, Truck } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { isWithinPeru, PERU_BOUNDS } from "@/lib/map-utils" // Import from map-utils
 
 interface Location {
   id?: number | string
@@ -67,26 +68,6 @@ export interface LocationData {
   references?: string
   locationType?: "carga" | "descarga" | "intermedio"
   zoneType?: "urbana" | "industrial" | "rural" | "puerto" | "aeropuerto"
-}
-
-interface LocationResult {
-  place_id: string
-  display_name: string
-  lat: string
-  lon: string
-  type: string
-  importance: number
-  address?: {
-    road?: string
-    suburb?: string
-    city?: string
-    state?: string
-    country?: string
-    postcode?: string
-  }
-  distance?: number
-  category?: string
-  properties?: any
 }
 
 interface FrequentLocation {
@@ -142,17 +123,13 @@ interface MapClickEvent {
   }
 }
 
-// Configuración específica para Perú
+// Configuración específica para Perú (using PERU_BOUNDS from map-utils)
 const PERU_CONFIG = {
-  bounds: {
-    north: -0.012,
-    south: -18.35,
-    east: -68.65,
-    west: -81.33,
-  },
+  bounds: PERU_BOUNDS, // Use imported bounds
   cities: {
     lima: { lat: -12.0464, lng: -77.0428, name: "Lima" },
     cajamarca: { lat: -7.1619, lng: -78.5151, name: "Cajamarca" },
+    arequipa: { lat: -16.409, lng: -71.5375, name: "Arequipa" },
   },
   departments: [
     "Lima",
@@ -203,19 +180,135 @@ const LOCATION_TYPE_CONFIG = {
   },
 }
 
-const PLACE_CATEGORIES = [
-  { id: "gasolinera", label: "Gasolineras", icon: Fuel, color: "text-red-600" },
-  { id: "grifo", label: "Grifos", icon: Fuel, color: "text-orange-600" },
-  { id: "hospital", label: "Hospitales", icon: Building2, color: "text-blue-600" },
-  { id: "banco", label: "Bancos", icon: Building2, color: "text-green-600" },
-  { id: "restaurante", label: "Restaurantes", icon: ShoppingCart, color: "text-purple-600" },
-  { id: "hotel", label: "Hoteles", icon: Building2, color: "text-indigo-600" },
-  { id: "mercado", label: "Mercados", icon: ShoppingCart, color: "text-yellow-600" },
-  { id: "terminal", label: "Terminales", icon: Building2, color: "text-gray-600" },
+// Hardcoded Gas Station/Grifo locations for demonstration
+const PRELOADED_FUEL_STATIONS: Location[] = [
+  // Lima
+  {
+    id: "lima-primax-1",
+    name: "Primax Javier Prado",
+    address: "Av. Javier Prado Este 123, San Isidro, Lima",
+    latitude: -12.0917,
+    longitude: -77.0282,
+    category: "gasolinera",
+  },
+  {
+    id: "lima-repsol-1",
+    name: "Repsol Miraflores",
+    address: "Av. Larco 500, Miraflores, Lima",
+    latitude: -12.12,
+    longitude: -77.031,
+    category: "gasolinera",
+  },
+  {
+    id: "lima-grifo-1",
+    name: "Grifo La Victoria",
+    address: "Av. 28 de Julio 1000, La Victoria, Lima",
+    latitude: -12.06,
+    longitude: -77.02,
+    category: "grifo",
+  },
+  {
+    id: "lima-shell-1",
+    name: "Shell Surco",
+    address: "Av. Caminos del Inca 1500, Santiago de Surco, Lima",
+    latitude: -12.13,
+    longitude: -76.99,
+    category: "gasolinera",
+  },
+  {
+    id: "lima-petroperu-1",
+    name: "Petroperú Callao",
+    address: "Av. Argentina 3000, Callao, Lima",
+    latitude: -12.05,
+    longitude: -77.09,
+    category: "gasolinera",
+  },
+  // Cajamarca
+  {
+    id: "cajamarca-primax-1",
+    name: "Primax Cajamarca Centro",
+    address: "Jr. Dos de Mayo 500, Cajamarca",
+    latitude: -7.158,
+    longitude: -78.516,
+    category: "gasolinera",
+  },
+  {
+    id: "cajamarca-grifo-1",
+    name: "Grifo El Inca",
+    address: "Av. Atahualpa 800, Cajamarca",
+    latitude: -7.165,
+    longitude: -78.51,
+    category: "grifo",
+  },
+  {
+    id: "cajamarca-repsol-1",
+    name: "Repsol Baños del Inca",
+    address: "Carretera Baños del Inca Km 4, Cajamarca",
+    latitude: -7.13,
+    longitude: -78.48,
+    category: "gasolinera",
+  },
+  {
+    id: "cajamarca-grifo-2",
+    name: "Grifo San Martín",
+    address: "Jr. San Martín 300, Cajamarca",
+    latitude: -7.16,
+    longitude: -78.52,
+    category: "grifo",
+  },
+  {
+    id: "cajamarca-primax-2",
+    name: "Primax Vía de Evitamiento",
+    address: "Vía de Evitamiento Norte 100, Cajamarca",
+    latitude: -7.17,
+    longitude: -78.5,
+    category: "gasolinera",
+  },
+  // Arequipa
+  {
+    id: "arequipa-primax-1",
+    name: "Primax Cayma",
+    address: "Av. Cayma 200, Cayma, Arequipa",
+    latitude: -16.38,
+    longitude: -71.54,
+    category: "gasolinera",
+  },
+  {
+    id: "arequipa-repsol-1",
+    name: "Repsol Yanahuara",
+    address: "Av. Ejército 1000, Yanahuara, Arequipa",
+    latitude: -16.39,
+    longitude: -71.55,
+    category: "gasolinera",
+  },
+  {
+    id: "arequipa-grifo-1",
+    name: "Grifo Cerro Colorado",
+    address: "Av. Aviación 500, Cerro Colorado, Arequipa",
+    latitude: -16.35,
+    longitude: -71.56,
+    category: "grifo",
+  },
+  {
+    id: "arequipa-shell-1",
+    name: "Shell Paucarpata",
+    address: "Av. Kennedy 1200, Paucarpata, Arequipa",
+    latitude: -16.42,
+    longitude: -71.5,
+    category: "gasolinera",
+  },
+  {
+    id: "arequipa-grifo-2",
+    name: "Grifo La Pampilla",
+    address: "Av. La Pampilla 300, Arequipa",
+    latitude: -16.41,
+    longitude: -71.52,
+    category: "grifo",
+  },
 ]
 
 type ZoneType = "urbana" | "industrial" | "rural" | "puerto" | "aeropuerto"
-type TabValue = "search" | "places" | "manual" | "frequent" | "gps"
+type TabValue = "search" | "manual" | "frequent" | "gps"
 
 export function LocationPicker({
   value,
@@ -233,7 +326,6 @@ export function LocationPicker({
 }: LocationPickerProps) {
   const [searchQuery, setSearchQuery] = useState(value?.address || initialAddress || "")
   const [searchResults, setSearchResults] = useState<Location[]>([])
-  const [placeResults, setPlaceResults] = useState<PlaceResult[]>([])
   const [frequentLocations, setFrequentLocations] = useState<FrequentLocation[]>([])
   const [isSearching, setIsSearching] = useState(false)
   const [isGettingLocation, setIsGettingLocation] = useState(false)
@@ -242,11 +334,11 @@ export function LocationPicker({
   const [activeTab, setActiveTab] = useState<TabValue>("search")
   const [selectedLocationMap, setSelectedLocationMap] = useState<{ lat: number; lng: number } | null>(null)
   const [showManualForm, setShowManualForm] = useState(false)
-  const [selectedCategory, setSelectedCategory] = useState<string>("")
+  const [showGasStations, setShowGasStations] = useState(false) // New state for gas stations visibility
   const searchTimeoutRef = useRef<NodeJS.Timeout>()
   const inputRef = useRef<HTMLInputElement>(null)
 
-  // Estados para formulario manual
+  // States for manual form
   const [manualForm, setManualForm] = useState<{
     address: string
     district: string
@@ -272,15 +364,16 @@ export function LocationPicker({
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<any>(null)
   const markerRef = useRef<any>(null)
+  const gasStationMarkersRef = useRef<any[]>([]) // Ref to store gas station markers
 
   const { toast } = useToast()
 
-  // Cargar ubicaciones frecuentes al montar
+  // Load frequent locations on mount
   useEffect(() => {
     loadFrequentLocations()
   }, [])
 
-  // Actualizar estado interno cuando cambia el valor
+  // Update internal state when value changes
   useEffect(() => {
     if (value) {
       setSearchQuery(value.address)
@@ -290,7 +383,7 @@ export function LocationPicker({
     }
   }, [value])
 
-  // Cargar mapa con Mapbox
+  // Load map with Mapbox
   useEffect(() => {
     if (!showMap || !mapRef.current) return
 
@@ -326,7 +419,7 @@ export function LocationPicker({
         const mapboxgl = window.mapboxgl
         mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN
 
-        // Centrar en Cajamarca por defecto para punto de carga, Lima para descarga
+        // Center on Cajamarca by default for load point, Lima for discharge
         const defaultLocation = locationType === "carga" ? PERU_CONFIG.cities.cajamarca : PERU_CONFIG.cities.lima
 
         const initialLat = selectedLocationMap?.lat || defaultLocation.lat
@@ -340,10 +433,10 @@ export function LocationPicker({
           language: "es",
         })
 
-        // Agregar controles de navegación
+        // Add navigation controls
         map.addControl(new mapboxgl.NavigationControl(), "top-right")
 
-        // Agregar marcadores para ciudades principales
+        // Add markers for main cities
         new mapboxgl.Marker({ color: "#3b82f6" })
           .setLngLat([PERU_CONFIG.cities.lima.lng, PERU_CONFIG.cities.lima.lat])
           .setPopup(new mapboxgl.Popup().setHTML("<strong>Lima</strong><br>Base Principal"))
@@ -354,7 +447,11 @@ export function LocationPicker({
           .setPopup(new mapboxgl.Popup().setHTML("<strong>Cajamarca</strong><br>Ruta Principal"))
           .addTo(map)
 
-        // ✅ CORRECCIÓN: Tipado explícito para el evento de click del mapa
+        new mapboxgl.Marker({ color: "#f59e0b" })
+          .setLngLat([PERU_CONFIG.cities.arequipa.lng, PERU_CONFIG.cities.arequipa.lat])
+          .setPopup(new mapboxgl.Popup().setHTML("<strong>Arequipa</strong><br>Ciudad Blanca"))
+          .addTo(map)
+
         map.on("click", (e: MapClickEvent) => {
           const { lat, lng } = e.lngLat
           if (isWithinPeru(lat, lng)) {
@@ -386,11 +483,48 @@ export function LocationPicker({
         mapInstanceRef.current.remove()
         mapInstanceRef.current = null
         markerRef.current = null
+        gasStationMarkersRef.current.forEach((marker: any) => marker.remove())
+        gasStationMarkersRef.current = []
       }
     }
   }, [showMap])
 
-  // Búsqueda con debounce
+  // Effect to manage gas station markers visibility
+  useEffect(() => {
+    if (!mapInstanceRef.current || !window.mapboxgl) return
+
+    gasStationMarkersRef.current.forEach((marker: any) => marker.remove())
+    gasStationMarkersRef.current = []
+
+    if (showGasStations) {
+      PRELOADED_FUEL_STATIONS.forEach((station) => {
+        const mapboxgl = window.mapboxgl
+        const color = station.category === "gasolinera" ? "#ef4444" : "#f97316" // Red for gasolinera, Orange for grifo
+        const marker = new mapboxgl.Marker({ color })
+          .setLngLat([station.longitude, station.latitude])
+          .setPopup(
+            new mapboxgl.Popup().setHTML(
+              `<strong>${station.name}</strong><br>${station.address}<br><button id="select-station-${station.id}" class="text-blue-600 hover:underline mt-1">Seleccionar ubicación</button>`,
+            ),
+          )
+          .addTo(mapInstanceRef.current)
+
+        marker.getElement().addEventListener("click", () => {
+          // Add event listener to the popup button after it's rendered
+          setTimeout(() => {
+            const selectButton = document.getElementById(`select-station-${station.id}`)
+            if (selectButton) {
+              selectButton.onclick = () => handleLocationSelect(station)
+            }
+          }, 0)
+        })
+
+        gasStationMarkersRef.current.push(marker)
+      })
+    }
+  }, [showGasStations])
+
+  // Search with debounce
   useEffect(() => {
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current)
@@ -415,7 +549,7 @@ export function LocationPicker({
   const loadFrequentLocations = async (): Promise<void> => {
     try {
       const response = await axios.get("/api/locations/frequent")
-      setFrequentLocations(response.data)
+      setFrequentLocations(response.data.data) // Accessing data property
     } catch (error) {
       console.error("Error loading frequent locations:", error)
     }
@@ -463,53 +597,6 @@ export function LocationPicker({
     }
   }
 
-  const searchPlaces = async (category: string): Promise<void> => {
-    setIsSearching(true)
-    setError(null)
-    setSelectedCategory(category)
-
-    try {
-      const currentLocation = selectedLocationMap || PERU_CONFIG.cities.lima
-
-      const response = await axios.get("/api/locations/search-places", {
-        params: {
-          category,
-          lat: currentLocation.lat,
-          lng: currentLocation.lng,
-          radius: 50000, // 50km
-        },
-      })
-
-      if (response.data.success && response.data.data) {
-        setPlaceResults(response.data.data)
-
-        if (response.data.data.length === 0) {
-          toast({
-            title: "Sin resultados",
-            description: `No se encontraron ${PLACE_CATEGORIES.find((c) => c.id === category)?.label?.toLowerCase()} cercanos`,
-          })
-        }
-      } else {
-        setPlaceResults([])
-        toast({
-          title: "Error en búsqueda",
-          description: "No se pudieron cargar los lugares",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      console.error("Places search error:", error)
-      setPlaceResults([])
-      toast({
-        title: "Error",
-        description: "Error al buscar lugares cercanos",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSearching(false)
-    }
-  }
-
   const getCurrentLocation = (): void => {
     if (!navigator.geolocation) {
       setError("La geolocalización no está disponible en este navegador")
@@ -524,7 +611,7 @@ export function LocationPicker({
         try {
           const { latitude, longitude } = position.coords
 
-          // Geocodificación inversa para obtener la dirección
+          // Reverse geocoding to get the address
           const response = await axios.get("/api/locations/reverse-geocode", {
             params: { lat: latitude, lon: longitude },
           })
@@ -541,7 +628,7 @@ export function LocationPicker({
           setShowResults(false)
         } catch (error) {
           console.error("Reverse geocoding error:", error)
-          // Usar coordenadas como fallback
+          // Use coordinates as fallback
           const location: Location = {
             name: "Mi ubicación actual",
             address: `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`,
@@ -575,14 +662,14 @@ export function LocationPicker({
       {
         enableHighAccuracy: true,
         timeout: 10000,
-        maximumAge: 300000, // 5 minutos
+        maximumAge: 300000, // 5 minutes
       },
     )
   }
 
   const handleLocationSelect = async (location: Location): Promise<void> => {
     try {
-      // Validar que la ubicación esté en territorio peruano
+      // Validate that the location is within Peruvian territory
       if (!isWithinPeru(location.latitude, location.longitude)) {
         setError("La ubicación seleccionada está fuera del territorio peruano")
         return
@@ -593,11 +680,11 @@ export function LocationPicker({
       setShowResults(false)
       setError(null)
 
-      // Actualizar mapa
+      // Update map
       setSelectedLocationMap({ lat: location.latitude, lng: location.longitude })
       updateMapLocation(location.latitude, location.longitude)
 
-      // Crear LocationData
+      // Create LocationData
       const locationData: LocationData = {
         latitude: location.latitude,
         longitude: location.longitude,
@@ -609,11 +696,11 @@ export function LocationPicker({
 
       onChange?.(locationData)
 
-      // Guardar como ubicación frecuente si no existe
+      // Save as frequent location if it doesn't exist
       if (!location.isFrequent) {
         try {
           await saveFrequentLocation(locationData)
-          loadFrequentLocations() // Recargar ubicaciones frecuentes
+          loadFrequentLocations() // Reload frequent locations
         } catch (saveError) {
           console.warn("Could not save location as frequent:", saveError)
         }
@@ -624,22 +711,9 @@ export function LocationPicker({
     }
   }
 
-  const handlePlaceSelect = (place: PlaceResult): void => {
-    const location: Location = {
-      id: place.id,
-      name: place.name,
-      address: place.address,
-      latitude: place.latitude,
-      longitude: place.longitude,
-      category: place.category,
-      distance: place.distance,
-      properties: place.properties,
-    }
+  // Removed handlePlaceSelect as "places" tab is removed
 
-    handleLocationSelect(location)
-  }
-
-  // ✅ CORRECCIÓN: Tipado explícito para eventos de input
+  // Explicit typing for input events
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const value = e.target.value
     setSearchQuery(value)
@@ -692,7 +766,7 @@ export function LocationPicker({
       return
     }
 
-    // Construir dirección completa más específica
+    // Build more specific full address
     const addressParts = [
       manualForm.address.trim(),
       manualForm.district.trim(),
@@ -703,7 +777,7 @@ export function LocationPicker({
 
     const fullAddress = addressParts.join(", ")
 
-    // Intentar geocodificar la dirección manual
+    // Try to geocode the manual address
     try {
       const coordinates = await geocodeAddress(fullAddress)
 
@@ -742,7 +816,7 @@ export function LocationPicker({
       onChange?.(locationData)
       setShowManualForm(false)
 
-      // Limpiar formulario manual
+      // Clear manual form
       setManualForm({
         address: "",
         district: "",
@@ -755,14 +829,14 @@ export function LocationPicker({
         zoneType: "urbana",
       })
 
-      // Guardar como ubicación frecuente si tiene coordenadas
+      // Save as frequent location if it has coordinates
       if (coordinates) {
         saveFrequentLocation(locationData)
       }
     } catch (error) {
       console.error("Error processing manual address:", error)
 
-      // Incluso si falla la geocodificación, guardar la dirección
+      // Even if geocoding fails, save the address
       const locationData: LocationData = {
         address: fullAddress,
         method: "MANUAL_INPUT",
@@ -781,7 +855,7 @@ export function LocationPicker({
       onChange?.(locationData)
       setShowManualForm(false)
 
-      // Limpiar formulario manual
+      // Clear manual form
       setManualForm({
         address: "",
         district: "",
@@ -819,7 +893,7 @@ export function LocationPicker({
         }),
       })
 
-      // Recargar ubicaciones frecuentes
+      // Reload frequent locations
       loadFrequentLocations()
     } catch (error) {
       console.error("Error saving frequent location:", error)
@@ -898,15 +972,6 @@ export function LocationPicker({
     return null
   }
 
-  const isWithinPeru = (latitude: number, longitude: number): boolean => {
-    return (
-      latitude >= PERU_CONFIG.bounds.south &&
-      latitude <= PERU_CONFIG.bounds.north &&
-      longitude >= PERU_CONFIG.bounds.west &&
-      longitude <= PERU_CONFIG.bounds.east
-    )
-  }
-
   const getLocationTypeIcon = () => {
     const config = LOCATION_TYPE_CONFIG[locationType]
     const Icon = config.icon
@@ -915,26 +980,8 @@ export function LocationPicker({
 
   const getLocationTypeConfig = () => LOCATION_TYPE_CONFIG[locationType]
 
-  const getCategoryIcon = (categoryId: string) => {
-    const category = PLACE_CATEGORIES.find((c) => c.id === categoryId)
-    if (category) {
-      const Icon = category.icon
-      return <Icon className={`h-4 w-4 ${category.color}`} />
-    }
-    return <MapPin className="h-4 w-4 text-gray-500" />
-  }
-
-  const formatDistance = (distance?: number): string => {
-    if (!distance) return ""
-    if (distance < 1000) return `${distance}m`
-    return `${(distance / 1000).toFixed(1)}km`
-  }
-
-  // ✅ CORRECCIÓN: Funciones para manejar cambios en formulario manual con tipos explícitos
-  const updateManualFormField = <K extends keyof typeof manualForm>(
-    field: K,
-    value: typeof manualForm[K]
-  ): void => {
+  // Function to handle changes in manual form with explicit types
+  const updateManualFormField = <K extends keyof typeof manualForm>(field: K, value: (typeof manualForm)[K]): void => {
     setManualForm((prev) => ({ ...prev, [field]: value }))
   }
 
@@ -953,14 +1000,12 @@ export function LocationPicker({
       <CardContent className="space-y-4">
         {isOfficeMode && (
           <Tabs value={activeTab} onValueChange={(value: string) => setActiveTab(value as TabValue)}>
-            <TabsList className="grid w-full grid-cols-5">
+            <TabsList className="grid w-full grid-cols-4">
+              {" "}
+              {/* Updated grid-cols to 4 */}
               <TabsTrigger value="search" className="flex items-center gap-2">
                 <Search className="h-4 w-4" />
                 Búsqueda
-              </TabsTrigger>
-              <TabsTrigger value="places" className="flex items-center gap-2">
-                <Building2 className="h-4 w-4" />
-                Lugares
               </TabsTrigger>
               <TabsTrigger value="gps" className="flex items-center gap-2">
                 <CrosshairIcon className="h-4 w-4" />
@@ -1016,11 +1061,11 @@ export function LocationPicker({
                   </Button>
                 </div>
 
-                {/* Resultados de búsqueda */}
+                {/* Search Results */}
                 {showResults && (
                   <Card className="absolute top-full left-0 right-0 z-50 mt-1 max-h-80 overflow-y-auto shadow-lg">
                     <CardContent className="p-2">
-                      {/* Ubicaciones frecuentes */}
+                      {/* Frequent Locations */}
                       {searchQuery.trim() === "" && frequentLocations.length > 0 && (
                         <div className="mb-3">
                           <div className="flex items-center gap-2 mb-2 px-2">
@@ -1063,7 +1108,7 @@ export function LocationPicker({
                         </div>
                       )}
 
-                      {/* Resultados de búsqueda */}
+                      {/* Search Results */}
                       {searchResults.length > 0 && (
                         <div>
                           {searchQuery.trim() !== "" && (
@@ -1085,9 +1130,7 @@ export function LocationPicker({
                                   <div className="font-medium text-sm truncate">{location.name}</div>
                                   <div className="text-xs text-gray-500 truncate">{location.address}</div>
                                   {location.distance && (
-                                    <div className="text-xs text-blue-500 mt-1">
-                                      📍 {formatDistance(location.distance)}
-                                    </div>
+                                    <div className="text-xs text-blue-500 mt-1">📍 {location.distance}m</div>
                                   )}
                                 </div>
                               </div>
@@ -1096,7 +1139,7 @@ export function LocationPicker({
                         </div>
                       )}
 
-                      {/* Mensaje cuando no hay resultados */}
+                      {/* Message when no results */}
                       {searchQuery.trim() !== "" && searchResults.length === 0 && !isSearching && (
                         <div className="text-center py-4 text-gray-500">
                           <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
@@ -1114,77 +1157,7 @@ export function LocationPicker({
               </div>
             </TabsContent>
 
-            <TabsContent value="places" className="space-y-4">
-              <div className="grid grid-cols-2 gap-2">
-                {PLACE_CATEGORIES.map((category) => (
-                  <Button
-                    key={category.id}
-                    variant={selectedCategory === category.id ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => searchPlaces(category.id)}
-                    disabled={isSearching}
-                    className="justify-start"
-                  >
-                    {getCategoryIcon(category.id)}
-                    <span className="ml-2">{category.label}</span>
-                    {isSearching && selectedCategory === category.id && (
-                      <Loader2 className="h-3 w-3 ml-2 animate-spin" />
-                    )}
-                  </Button>
-                ))}
-              </div>
-
-              {placeResults.length > 0 && (
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                  <div className="flex items-center gap-2 mb-2 px-2">
-                    <Building2 className="h-4 w-4 text-gray-500" />
-                    <span className="text-sm font-medium text-gray-700">
-                      {PLACE_CATEGORIES.find((c) => c.id === selectedCategory)?.label} encontrados
-                    </span>
-                    <Badge variant="secondary" className="text-xs">
-                      {placeResults.length}
-                    </Badge>
-                  </div>
-                  {placeResults.map((place) => (
-                    <button
-                      key={place.id}
-                      onClick={() => handlePlaceSelect(place)}
-                      className="w-full text-left p-3 border rounded-lg hover:bg-gray-50 transition-colors"
-                    >
-                      <div className="flex items-start gap-3">
-                        {getCategoryIcon(place.category)}
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{place.name}</div>
-                          <div className="text-xs text-gray-500 truncate">{place.address}</div>
-                          <div className="flex items-center gap-2 mt-1">
-                            {place.distance && (
-                              <Badge variant="outline" className="text-xs">
-                                📍 {formatDistance(place.distance)}
-                              </Badge>
-                            )}
-                            {place.properties?.phone && (
-                              <Badge variant="outline" className="text-xs">
-                                📞 {place.properties.phone}
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {selectedCategory && placeResults.length === 0 && !isSearching && (
-                <div className="text-center py-8 text-gray-500">
-                  <Building2 className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">
-                    No se encontraron {PLACE_CATEGORIES.find((c) => c.id === selectedCategory)?.label?.toLowerCase()}
-                  </p>
-                  <p className="text-xs">Intenta buscar en otra área</p>
-                </div>
-              )}
-            </TabsContent>
+            {/* Removed TabsContent for "places" */}
 
             <TabsContent value="gps" className="space-y-4">
               <div className="text-center py-6">
@@ -1280,7 +1253,7 @@ export function LocationPicker({
                       <Input
                         id="manual-address"
                         value={manualForm.address}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                           updateManualFormField("address", e.target.value)
                         }
                         placeholder="Jr. Los Olivos 123"
@@ -1292,7 +1265,7 @@ export function LocationPicker({
                       <Input
                         id="manual-district"
                         value={manualForm.district}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                           updateManualFormField("district", e.target.value)
                         }
                         placeholder="San Isidro"
@@ -1304,7 +1277,7 @@ export function LocationPicker({
                       <Input
                         id="manual-province"
                         value={manualForm.province}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                           updateManualFormField("province", e.target.value)
                         }
                         placeholder="Lima"
@@ -1335,7 +1308,7 @@ export function LocationPicker({
                       <Input
                         id="manual-contact"
                         value={manualForm.contactName}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                           updateManualFormField("contactName", e.target.value)
                         }
                         placeholder="Nombre del contacto"
@@ -1347,7 +1320,7 @@ export function LocationPicker({
                       <Input
                         id="manual-phone"
                         value={manualForm.contactPhone}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                           updateManualFormField("contactPhone", e.target.value)
                         }
                         placeholder="+51 999 999 999"
@@ -1360,7 +1333,7 @@ export function LocationPicker({
                     <Input
                       id="manual-references"
                       value={manualForm.references}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => 
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                         updateManualFormField("references", e.target.value)
                       }
                       placeholder="Frente al banco, cerca del mercado..."
@@ -1372,7 +1345,7 @@ export function LocationPicker({
                     <Textarea
                       id="manual-instructions"
                       value={manualForm.accessInstructions}
-                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => 
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                         updateManualFormField("accessInstructions", e.target.value)
                       }
                       placeholder="Horarios, códigos de acceso, restricciones..."
@@ -1452,7 +1425,7 @@ export function LocationPicker({
           </div>
         )}
 
-        {/* Ubicación seleccionada */}
+        {/* Selected Location */}
         {selectedLocation && (
           <div className="mt-3">
             <Card className="bg-green-50 border-green-200">
@@ -1472,7 +1445,7 @@ export function LocationPicker({
           </div>
         )}
 
-        {/* Errores */}
+        {/* Errors */}
         {error && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
@@ -1499,11 +1472,22 @@ export function LocationPicker({
                 </div>
               </div>
             )}
+            <div className="absolute bottom-2 right-2 z-[1000]">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowGasStations(!showGasStations)}
+                className="flex items-center gap-1"
+              >
+                <Fuel className="h-4 w-4" />
+                {showGasStations ? "Ocultar Gasolineras" : "Mostrar Gasolineras"}
+              </Button>
+            </div>
           </div>
         )}
       </CardContent>
 
-      {/* Ayuda contextual */}
+      {/* Contextual help */}
       <div className="text-xs text-gray-500 mt-2 px-6 pb-4">
         <p>
           💡 <strong>Ejemplos de direcciones:</strong>
@@ -1511,7 +1495,7 @@ export function LocationPicker({
         <p>• "Jiron Dos de Mayo 123, Cajamarca"</p>
         <p>• "Av. Javier Prado 456, San Isidro, Lima"</p>
         <p>• "Cal. Las Flores 789, Arequipa"</p>
-        <p>• Busca gasolineras, hospitales, bancos y más lugares específicos</p>
+        <p>• Utiliza el botón "Mostrar Gasolineras" para ver estaciones de servicio cercanas.</p>
       </div>
     </Card>
   )
