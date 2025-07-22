@@ -31,7 +31,6 @@ import {
   Factory,
 } from "lucide-react"
 import axios from "axios"
-import { getNextDispatchNumber } from "@/lib/dispatch-numbering" // Import the sequential number generator
 
 interface DispatchFormData {
   truckId: string
@@ -71,6 +70,20 @@ interface Customer {
   companyname: string
   ruc: string
   address: string
+}
+
+interface Location {
+  id?: number | string
+  name: string
+  address: string
+  latitude: number
+  longitude: number
+  isFrequent?: boolean
+  district?: string
+  province?: string
+  department?: string
+  usageCount?: number
+  lastUsed?: Date
 }
 
 const FUEL_TYPES = [
@@ -139,10 +152,24 @@ export default function NewDispatchPage() {
     documents: [],
   })
 
-  const [locationData, setLocationData] = useState<LocationData>({
+  // Ubicación de carga (Cajamarca por defecto)
+  const [loadingLocationData, setLoadingLocationData] = useState<LocationData>({
+    address: "Cajamarca, Perú",
+    latitude: -7.1619,
+    longitude: -78.5151,
+    method: "OFFICE_PLANNED",
+    locationType: "carga",
+    timestamp: new Date(),
+  })
+
+  // Ubicación de descarga (movible y confirmable)
+  const [deliveryLocationData, setDeliveryLocationData] = useState<LocationData>({
     address: "",
     method: "OFFICE_PLANNED",
+    locationType: "descarga",
   })
+
+  const [isDeliveryLocationConfirmed, setIsDeliveryLocationConfirmed] = useState(false)
 
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [drivers, setDrivers] = useState<Driver[]>([])
@@ -156,13 +183,13 @@ export default function NewDispatchPage() {
           axios.get("/api/trucks"),
           axios.get("/api/users"),
           axios.get("/api/customers"),
-          getNextDispatchNumber(), // Get the sequential dispatch number
+          axios.get("/api/dispatches/next-number"), // Usar API route en lugar de función directa
         ])
 
         setVehicles(vehiclesRes.data.filter((v: Vehicle) => v.state === "Activo"))
-        setDrivers(driversRes.data.filter((d: Driver) => d.role === "Operador" && d.state === "Activo"))
+        setDrivers(driversRes.data.filter((d: Driver) => d.role === "OPERADOR" && d.state === "Activo"))
         setCustomers(customersRes.data)
-        setNextDispatchNumber(nextDispatchNumRes) // Set the sequential dispatch number
+        setNextDispatchNumber(nextDispatchNumRes.data.data) // Obtener desde la respuesta de la API
       } catch (error) {
         console.error("Error loading data:", error)
         toast({
@@ -180,33 +207,64 @@ export default function NewDispatchPage() {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
-  const handleLocationChange = (location: LocationData) => {
-    setLocationData(location)
-    updateFormData("deliveryAddress", location.address)
+  const handleLoadingLocationChange = (location: LocationData) => {
+    setLoadingLocationData(location)
+  }
 
-    if (location.latitude && location.longitude) {
-      updateFormData("deliveryLatitude", location.latitude)
-      updateFormData("deliveryLongitude", location.longitude)
-      updateFormData("locationGPS", {
-        latitude: location.latitude,
-        longitude: location.longitude,
-      })
-    }
+  const handleDeliveryLocationChange = (location: LocationData) => {
+    if (!isDeliveryLocationConfirmed) {
+      setDeliveryLocationData(location)
+      updateFormData("deliveryAddress", location.address)
 
-    if (location.method === "GPS_MANUAL") {
-      updateFormData("locationManual", true)
+      if (location.latitude && location.longitude) {
+        updateFormData("deliveryLatitude", location.latitude)
+        updateFormData("deliveryLongitude", location.longitude)
+        updateFormData("locationGPS", {
+          latitude: location.latitude,
+          longitude: location.longitude,
+        })
+      }
+
+      if (location.method === "GPS_MANUAL") {
+        updateFormData("locationManual", true)
+      }
     }
   }
 
-  const handleLocationSelect = (location: { address: string; lat: number; lng: number }) => {
+  const confirmDeliveryLocation = () => {
+    if (deliveryLocationData.address) {
+      setIsDeliveryLocationConfirmed(true)
+      toast({
+        title: "Ubicación confirmada",
+        description: "La ubicación de entrega ha sido confirmada",
+      })
+    } else {
+      toast({
+        title: "Error",
+        description: "Debe seleccionar una ubicación antes de confirmar",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const changeDeliveryLocation = () => {
+    setIsDeliveryLocationConfirmed(false)
+    toast({
+      title: "Ubicación desbloqueada",
+      description: "Ahora puede cambiar la ubicación de entrega",
+    })
+  }
+
+  const handleLocationSelect = (location: Location) => {
     const newLocationData: LocationData = {
       address: location.address,
-      latitude: location.lat,
-      longitude: location.lng,
+      latitude: location.latitude,
+      longitude: location.longitude,
       method: "SEARCH_SELECTED",
       timestamp: new Date(),
+      locationType: "descarga",
     }
-    handleLocationChange(newLocationData)
+    handleDeliveryLocationChange(newLocationData)
   }
 
   const handleSubmit = async (isDraft = false) => {
@@ -231,6 +289,15 @@ export default function NewDispatchPage() {
         return
       }
 
+      if (!isDeliveryLocationConfirmed) {
+        toast({
+          title: "Error de validación",
+          description: "Debe confirmar la ubicación de entrega antes de crear el despacho",
+          variant: "destructive",
+        })
+        return
+      }
+
       // Prepare request data
       const requestData = {
         truckId: Number.parseInt(formData.truckId),
@@ -241,15 +308,15 @@ export default function NewDispatchPage() {
         quantity: formData.quantity,
         priority: formData.priority,
         scheduledDate: new Date(`${formData.scheduledDate}T${formData.scheduledTime || "08:00"}:00`).toISOString(),
-        address: locationData.address,
+        address: deliveryLocationData.address,
         locationGPS:
-          locationData.latitude && locationData.longitude
+          deliveryLocationData.latitude && deliveryLocationData.longitude
             ? {
-                latitude: locationData.latitude,
-                longitude: locationData.longitude,
+                latitude: deliveryLocationData.latitude,
+                longitude: deliveryLocationData.longitude,
               }
             : undefined,
-        locationManual: locationData.method === "SEARCH_SELECTED",
+        locationManual: deliveryLocationData.method === "SEARCH_SELECTED",
         notes: formData.observations,
         photos: formData.photos.map((file) => ({
           public_id: file.public_id,
@@ -257,6 +324,12 @@ export default function NewDispatchPage() {
           original_filename: file.original_filename,
         })),
         status: isDraft ? "BORRADOR" : "PROGRAMADO",
+        // Incluir información de ubicación de carga
+        loadingLocation: {
+          address: loadingLocationData.address,
+          latitude: loadingLocationData.latitude,
+          longitude: loadingLocationData.longitude,
+        },
       }
 
       const response = await axios.post("/api/dispatches", requestData)
@@ -299,12 +372,17 @@ export default function NewDispatchPage() {
       photos: [],
       documents: [],
     })
-    setLocationData({
+    setDeliveryLocationData({
       address: "",
       method: "OFFICE_PLANNED",
+      locationType: "descarga",
     })
+    setIsDeliveryLocationConfirmed(false)
+
     // Re-fetch the next dispatch number after reset
-    getNextDispatchNumber().then(setNextDispatchNumber)
+    axios.get("/api/dispatches/next-number").then((response) => {
+      setNextDispatchNumber(response.data.data)
+    })
   }
 
   const selectedVehicle = vehicles.find((v) => v.id === Number.parseInt(formData.truckId))
@@ -322,7 +400,8 @@ export default function NewDispatchPage() {
     formData.customerId &&
     formData.fuelType &&
     formData.quantity > 0 &&
-    locationData.address
+    deliveryLocationData.address &&
+    isDeliveryLocationConfirmed
 
   const calculateDistanceFromLima = (lat: number, lng: number): number => {
     const R = 6371 // Radio de la Tierra en km
@@ -654,17 +733,11 @@ export default function NewDispatchPage() {
                     </div>
 
                     <LocationPicker
-                      value={{
-                        address: "Planta Petrus - Av. Industrial 123, Lima, Perú",
-                        latitude: -12.0464,
-                        longitude: -77.0428,
-                        method: "OFFICE_PLANNED",
-                        locationType: "carga",
-                        timestamp: new Date(),
-                      }}
-                      onChange={(location) => {
-                        // Manejar cambio de punto de carga si es necesario
-                        console.log("Punto de carga:", location)
+                      value={loadingLocationData}
+                      onChange={handleLoadingLocationChange}
+                      onLocationSelect={(location) => {
+                        // Handle loading location selection
+                        console.log("Loading location selected:", location)
                       }}
                       label="Ubicación de Carga"
                       locationType="carga"
@@ -682,11 +755,17 @@ export default function NewDispatchPage() {
                       <MapPin className="h-5 w-5 text-green-600" />
                       <h3 className="text-lg font-medium">Punto de Descarga</h3>
                       <Badge variant="outline">Destino</Badge>
+                      {isDeliveryLocationConfirmed && (
+                        <Badge className="bg-green-100 text-green-800">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Confirmado
+                        </Badge>
+                      )}
                     </div>
 
                     <LocationPicker
-                      value={locationData}
-                      onChange={handleLocationChange}
+                      value={deliveryLocationData}
+                      onChange={handleDeliveryLocationChange}
                       onLocationSelect={handleLocationSelect}
                       label="Ubicación de Entrega"
                       placeholder="Buscar dirección de entrega en Perú..."
@@ -696,10 +775,40 @@ export default function NewDispatchPage() {
                       isOfficeMode={true}
                       initialAddress={formData.deliveryAddress}
                     />
+
+                    {/* Botones de confirmación */}
+                    <div className="flex gap-2">
+                      {!isDeliveryLocationConfirmed ? (
+                        <Button
+                          onClick={confirmDeliveryLocation}
+                          disabled={!deliveryLocationData.address}
+                          className="flex-1"
+                        >
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Confirmar Ubicación de Entrega
+                        </Button>
+                      ) : (
+                        <Button onClick={changeDeliveryLocation} variant="outline" className="flex-1 bg-transparent">
+                          <MapPin className="h-4 w-4 mr-2" />
+                          Cambiar Ubicación de Entrega
+                        </Button>
+                      )}
+                    </div>
+
+                    {isDeliveryLocationConfirmed && (
+                      <Alert>
+                        <CheckCircle className="h-4 w-4" />
+                        <AlertDescription>
+                          <strong>Ubicación confirmada:</strong> {deliveryLocationData.address}
+                          <br />
+                          La ubicación está bloqueada para evitar cambios accidentales.
+                        </AlertDescription>
+                      </Alert>
+                    )}
                   </div>
 
                   {/* Información de Ruta */}
-                  {locationData.latitude && locationData.longitude && (
+                  {deliveryLocationData.latitude && deliveryLocationData.longitude && (
                     <div className="mt-6 p-4 bg-green-50 rounded-lg border border-green-200">
                       <div className="flex items-center gap-2 mb-3">
                         <Route className="h-5 w-5 text-green-600" />
@@ -709,14 +818,20 @@ export default function NewDispatchPage() {
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
                         <div className="text-center p-3 bg-white rounded border">
                           <div className="text-lg font-bold text-blue-600">
-                            {Math.round(calculateDistanceFromLima(locationData.latitude, locationData.longitude))} km
+                            {Math.round(
+                              calculateDistanceFromLima(deliveryLocationData.latitude, deliveryLocationData.longitude),
+                            )}{" "}
+                            km
                           </div>
                           <div className="text-gray-600">Distancia desde Lima</div>
                         </div>
 
                         <div className="text-center p-3 bg-white rounded border">
                           <div className="text-lg font-bold text-green-600">
-                            {Math.round(calculateDistanceFromLima(locationData.latitude, locationData.longitude) / 60)}{" "}
+                            {Math.round(
+                              calculateDistanceFromLima(deliveryLocationData.latitude, deliveryLocationData.longitude) /
+                                60,
+                            )}{" "}
                             hrs
                           </div>
                           <div className="text-gray-600">Tiempo estimado</div>
@@ -730,11 +845,11 @@ export default function NewDispatchPage() {
                         </div>
                       </div>
 
-                      {locationData.department && locationData.department !== "Lima" && (
+                      {deliveryLocationData.department && deliveryLocationData.department !== "Lima" && (
                         <Alert className="mt-4">
                           <AlertTriangle className="h-4 w-4" />
                           <AlertDescription>
-                            <strong>Ruta interdepartamental:</strong> Lima → {locationData.department}
+                            <strong>Ruta interdepartamental:</strong> Lima → {deliveryLocationData.department}
                             <br />
                             Considere tiempos adicionales para controles y peajes.
                           </AlertDescription>
@@ -929,6 +1044,14 @@ export default function NewDispatchPage() {
                     <span className="font-medium text-right truncate">{selectedCustomer.companyname}</span>
                   </div>
                 )}
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Ubicación</span>
+                  <span
+                    className={`font-medium text-right ${isDeliveryLocationConfirmed ? "text-green-600" : "text-orange-600"}`}
+                  >
+                    {isDeliveryLocationConfirmed ? "Confirmada" : "Pendiente"}
+                  </span>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -951,7 +1074,11 @@ export default function NewDispatchPage() {
           {!isFormValid && (
             <Alert variant="destructive">
               <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>Complete todos los campos obligatorios para crear el despacho</AlertDescription>
+              <AlertDescription>
+                {!isDeliveryLocationConfirmed
+                  ? "Debe confirmar la ubicación de entrega antes de crear el despacho"
+                  : "Complete todos los campos obligatorios para crear el despacho"}
+              </AlertDescription>
             </Alert>
           )}
 

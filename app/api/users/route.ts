@@ -23,9 +23,11 @@ export async function GET(request: Request) {
         return NextResponse.json({ error: "Invalid role filter" }, { status: 400 })
       }
     }
+
     if (state) {
       whereClause.state = state
     }
+
     if (search) {
       whereClause.OR = [
         { name: { contains: search, mode: "insensitive" } },
@@ -47,6 +49,7 @@ export async function GET(request: Request) {
         state: true,
       },
     })
+
     return NextResponse.json(users)
   } catch (error) {
     console.error("Error fetching users:", error)

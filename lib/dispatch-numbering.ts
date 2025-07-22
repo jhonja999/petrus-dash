@@ -34,9 +34,15 @@ export async function generateDispatchNumber(): Promise<string> {
 
 /**
  * Obtiene el próximo número de despacho sin incrementar la secuencia
+ * SOLO PARA USO EN EL SERVIDOR - NO LLAMAR DESDE EL CLIENTE
  * @returns Promise<string> - Próximo número de despacho
  */
 export async function getNextDispatchNumber(): Promise<string> {
+  // Verificar que estamos en el servidor
+  if (typeof window !== "undefined") {
+    throw new Error("getNextDispatchNumber can only be called on the server side")
+  }
+
   const currentYear = new Date().getFullYear()
 
   try {

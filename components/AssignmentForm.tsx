@@ -23,6 +23,7 @@ interface AssignmentFormProps {
 
 const fuelTypeLabels = {
   DIESEL_B5: "Diésel B5",
+  DIESEL_B500: "Diésel B500",
   GASOLINA_90: "Gasolina 90",
   GASOLINA_95: "Gasolina 95",
   GLP: "GLP",
@@ -135,8 +136,8 @@ export function AssignmentForm({ trucks, drivers, onSuccess, refreshing = false 
 
   // Filter only active trucks for assignment
   const availableTrucks = localTrucks.filter((truck) => truck.state === "Activo")
-  // Corrected role comparison: "Operador" instead of "conductor"
-  const availableDrivers = drivers.filter((driver) => driver.role === "Operador" && driver.state === "Activo")
+  // Corrected role comparison: "OPERADOR" instead of "conductor"
+  const availableDrivers = drivers.filter((driver) => driver.role === "OPERADOR" && driver.state === "Activo")
 
   const isRefreshDisabled = refreshing || manualRefreshing
 
@@ -180,7 +181,9 @@ export function AssignmentForm({ trucks, drivers, onSuccess, refreshing = false 
                   ) : (
                     availableTrucks.map((truck) => (
                       <SelectItem key={truck.id} value={truck.id.toString()}>
-                        {truck.placa} - {fuelTypeLabels[truck.typefuel]} (Cap: {truck.capacitygal.toString()})
+                        {truck.placa} -{" "}
+                        {fuelTypeLabels[truck.typefuel as keyof typeof fuelTypeLabels] || truck.typefuel} (Cap:{" "}
+                        {truck.capacitygal.toString()})
                         {Number(truck.lastRemaining) > 0 && (
                           <span className="text-blue-600 ml-2">(Remanente: {truck.lastRemaining.toString()})</span>
                         )}
@@ -199,7 +202,7 @@ export function AssignmentForm({ trucks, drivers, onSuccess, refreshing = false 
                     variant="outline"
                     size="sm"
                     onClick={handleRefreshTrucks}
-                    className="w-full flex items-center gap-2 hover:bg-gray-50 transition-colors"
+                    className="w-full flex items-center gap-2 hover:bg-gray-50 transition-colors bg-transparent"
                     disabled={isRefreshDisabled}
                   >
                     <RefreshCw className={`h-4 w-4 ${isRefreshDisabled ? "animate-spin" : ""}`} />
@@ -270,7 +273,11 @@ export function AssignmentForm({ trucks, drivers, onSuccess, refreshing = false 
             <div className="space-y-2">
               <Label htmlFor="fuelType">Tipo de Combustible</Label>
               <Input
-                value={selectedTruck ? fuelTypeLabels[selectedTruck.typefuel] : ""}
+                value={
+                  selectedTruck
+                    ? fuelTypeLabels[selectedTruck.typefuel as keyof typeof fuelTypeLabels] || selectedTruck.typefuel
+                    : ""
+                }
                 disabled
                 placeholder="Seleccione un camión primero"
               />

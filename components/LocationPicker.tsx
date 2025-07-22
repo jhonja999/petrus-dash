@@ -1,38 +1,53 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import type React from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   MapPin,
   Search,
-  CheckCircle,
-  Loader2,
-  MapPinIcon,
-  Building2,
-  Factory,
-  Truck,
   Navigation,
   Clock,
-  Phone,
+  AlertCircle,
+  CheckCircle2,
   Star,
+  Loader2,
+  Phone,
   History,
-  Plus,
-  X,
+  CrosshairIcon,
+  Locate,
 } from "lucide-react"
+import axios from "axios"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
+import { Factory, Truck, Plus, X } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+
+interface Location {
+  id?: number | string
+  name: string
+  address: string
+  latitude: number
+  longitude: number
+  isFrequent?: boolean
+  district?: string
+  province?: string
+  department?: string
+  usageCount?: number
+  lastUsed?: Date
+}
 
 export interface LocationData {
   latitude?: number
   longitude?: number
   address: string
-  method: "OFFICE_PLANNED" | "MANUAL_INPUT" | "SEARCH_SELECTED" | "FREQUENT_LOCATION" | "GPS_MANUAL"
+  method: "OFFICE_PLANNED" | "MANUAL_INPUT" | "SEARCH_SELECTED" | "FREQUENT_LOCATION" | "GPS_MANUAL" | "GPS_AUTO"
   accuracy?: number
   timestamp?: Date
   // Campos adicionales para oficina
@@ -81,13 +96,14 @@ interface FrequentLocation {
 
 interface LocationPickerProps {
   value?: LocationData
-  onChange: (location: LocationData) => void
+  onChange?: (location: LocationData) => void
+  onLocationSelect: (location: Location) => void
+  selectedLocation?: Location | null
   label?: string
   required?: boolean
   placeholder?: string
   showMap?: boolean
   className?: string
-  onLocationSelect?: (location: { address: string; lat: number; lng: number }) => void
   initialAddress?: string
   locationType?: "carga" | "descarga" | "intermedio"
   isOfficeMode?: boolean // Nuevo prop para modo oficina
@@ -155,30 +171,75 @@ const LOCATION_TYPE_CONFIG = {
   },
 }
 
+// Términos comunes en direcciones peruanas para normalización
+const PERU_ADDRESS_TERMS = {
+  jr: "jiron",
+  "jr.": "jiron",
+  jirón: "jiron",
+  av: "avenida",
+  "av.": "avenida",
+  ave: "avenida",
+  "ave.": "avenida",
+  cal: "calle",
+  "cal.": "calle",
+  psj: "pasaje",
+  "psj.": "pasaje",
+  pje: "pasaje",
+  "pje.": "pasaje",
+  mz: "manzana",
+  "mz.": "manzana",
+  lt: "lote",
+  "lt.": "lote",
+  urb: "urbanización",
+  "urb.": "urbanización",
+  "aa.hh": "asentamiento humano",
+  aahh: "asentamiento humano",
+  "pueblo joven": "pueblo joven",
+  pj: "pueblo joven",
+}
+
+type ZoneType = "urbana" | "industrial" | "rural" | "puerto" | "aeropuerto"
+
 export function LocationPicker({
   value,
   onChange,
+  onLocationSelect,
+  selectedLocation,
   label = "Ubicación",
   required = false,
-  placeholder = "Buscar ubicación en Perú...",
+  placeholder = "Buscar dirección o ubicación...",
   showMap = true,
   className,
-  onLocationSelect,
   initialAddress = "",
   locationType = "descarga",
   isOfficeMode = true,
 }: LocationPickerProps) {
-  const [searchQuery, setSearchQuery] = useState(value?.address || initialAddress)
-  const [searchResults, setSearchResults] = useState<LocationResult[]>([])
-  const [isSearching, setIsSearching] = useState(false)
-  const [showSearchResults, setShowSearchResults] = useState(false)
-  const [selectedLocation, setSelectedLocation] = useState<{ lat: number; lng: number } | null>(null)
-  const [activeTab, setActiveTab] = useState<"search" | "manual" | "frequent">("search")
+  const [searchQuery, setSearchQuery] = useState(value?.address || initialAddress || "")
+  const [searchResults, setSearchResults] = useState<Location[]>([])
   const [frequentLocations, setFrequentLocations] = useState<FrequentLocation[]>([])
+  const [isSearching, setIsSearching] = useState(false)
+  const [isGettingLocation, setIsGettingLocation] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [showResults, setShowResults] = useState(false)
+  const [showSearchResults, setShowSearchResults] = useState(false)
+  const [activeTab, setActiveTab] = useState<"search" | "manual" | "frequent" | "gps">("search")
+  const [selectedLocationMap, setSelectedLocationMap] = useState<{ lat: number; lng: number } | null>(null)
   const [showManualForm, setShowManualForm] = useState(false)
+  const searchTimeoutRef = useRef<NodeJS.Timeout>()
+  const inputRef = useRef<HTMLInputElement>(null)
 
   // Estados para formulario manual
-  const [manualForm, setManualForm] = useState({
+  const [manualForm, setManualForm] = useState<{
+    address: string
+    district: string
+    province: string
+    department: string
+    references: string
+    contactName: string
+    contactPhone: string
+    accessInstructions: string
+    zoneType: ZoneType
+  }>({
     address: "",
     district: "",
     province: "",
@@ -187,13 +248,12 @@ export function LocationPicker({
     contactName: "",
     contactPhone: "",
     accessInstructions: "",
-    zoneType: "urbana" as const,
+    zoneType: "urbana",
   })
 
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<any>(null)
   const markerRef = useRef<any>(null)
-  const searchTimeoutRef = useRef<NodeJS.Timeout>()
 
   const { toast } = useToast()
 
@@ -207,7 +267,7 @@ export function LocationPicker({
     if (value) {
       setSearchQuery(value.address)
       if (value.latitude && value.longitude) {
-        setSelectedLocation({ lat: value.latitude, lng: value.longitude })
+        setSelectedLocationMap({ lat: value.latitude, lng: value.longitude })
       }
     }
   }, [value])
@@ -247,9 +307,11 @@ export function LocationPicker({
       try {
         const L = window.L
 
-        // Centrar en Lima por defecto
-        const initialLat = selectedLocation?.lat || PERU_CONFIG.cities.lima.lat
-        const initialLng = selectedLocation?.lng || PERU_CONFIG.cities.lima.lng
+        // Centrar en Cajamarca por defecto para punto de carga, Lima para descarga
+        const defaultLocation = locationType === "carga" ? PERU_CONFIG.cities.cajamarca : PERU_CONFIG.cities.lima
+
+        const initialLat = selectedLocationMap?.lat || defaultLocation.lat
+        const initialLng = selectedLocationMap?.lng || defaultLocation.lng
 
         const map = L.map(mapRef.current).setView([initialLat, initialLng], 10)
 
@@ -283,8 +345,8 @@ export function LocationPicker({
 
         mapInstanceRef.current = map
 
-        if (selectedLocation) {
-          updateMapLocation(selectedLocation.lat, selectedLocation.lng, false)
+        if (selectedLocationMap) {
+          updateMapLocation(selectedLocationMap.lat, selectedLocationMap.lng, false)
         }
       } catch (error) {
         console.error("Error initializing map:", error)
@@ -302,131 +364,263 @@ export function LocationPicker({
     }
   }, [showMap])
 
+  // Búsqueda con debounce
+  useEffect(() => {
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current)
+    }
+
+    if (searchQuery.trim().length >= 3) {
+      searchTimeoutRef.current = setTimeout(() => {
+        performSearch(searchQuery)
+      }, 500)
+    } else {
+      setSearchResults([])
+      setShowResults(false)
+    }
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current)
+      }
+    }
+  }, [searchQuery])
+
   const loadFrequentLocations = async () => {
     try {
-      const response = await fetch("/api/locations/frequent")
-      if (response.ok) {
-        const data = await response.json()
-        setFrequentLocations(data.data || [])
-      }
+      const response = await axios.get("/api/locations/frequent")
+      setFrequentLocations(response.data)
     } catch (error) {
       console.error("Error loading frequent locations:", error)
     }
   }
 
-  const searchLocation = useCallback(
-    async (query: string) => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current)
+  // Normalizar términos de direcciones peruanas
+  const normalizePeruvianAddress = (address: string): string[] => {
+    const normalized = address.toLowerCase().trim()
+    const variations = [normalized]
+
+    // Crear variaciones con términos normalizados
+    let expandedAddress = normalized
+    Object.entries(PERU_ADDRESS_TERMS).forEach(([abbrev, full]) => {
+      if (expandedAddress.includes(abbrev)) {
+        expandedAddress = expandedAddress.replace(new RegExp(`\\b${abbrev}\\b`, "g"), full)
+      }
+    })
+
+    if (expandedAddress !== normalized) {
+      variations.push(expandedAddress)
+    }
+
+    // Agregar variaciones con y sin números
+    const withoutNumbers = normalized.replace(/\d+/g, "").replace(/\s+/g, " ").trim()
+    if (withoutNumbers !== normalized && withoutNumbers.length > 3) {
+      variations.push(withoutNumbers)
+    }
+
+    return variations
+  }
+
+  const performSearch = async (query: string) => {
+    if (!query.trim()) return
+
+    setIsSearching(true)
+    setError(null)
+
+    try {
+      // Normalizar la consulta para direcciones peruanas
+      const queryVariations = normalizePeruvianAddress(query)
+
+      // Intentar geocodificación con múltiples variaciones
+      let bestResults: Location[] = []
+
+      for (const variation of queryVariations) {
+        try {
+          const response = await axios.get("/api/locations/geocode", {
+            params: { address: variation },
+          })
+
+          if (response.data && response.data.length > 0) {
+            const results = response.data.map((result: any) => ({
+              name: result.display_name || result.name || variation,
+              address: result.display_name || result.formatted_address || variation,
+              latitude: Number.parseFloat(result.lat || result.latitude),
+              longitude: Number.parseFloat(result.lon || result.longitude),
+            }))
+
+            // Filtrar resultados válidos en territorio peruano
+            const validResults = results.filter(
+              (loc: Location) =>
+                loc.latitude >= -18.5 && loc.latitude <= -0.5 && loc.longitude >= -81.5 && loc.longitude <= -68.5,
+            )
+
+            if (validResults.length > 0) {
+              bestResults = validResults
+              break // Usar los primeros resultados válidos
+            }
+          }
+        } catch (variationError) {
+          console.warn(`Geocoding failed for variation: ${variation}`, variationError)
+          continue
+        }
       }
 
-      if (!query.trim() || query.length < 3) {
-        setSearchResults([])
-        setShowSearchResults(false)
+      // Si no hay resultados de geocodificación, buscar en ubicaciones guardadas
+      if (bestResults.length === 0) {
+        try {
+          const savedResponse = await axios.get("/api/locations", {
+            params: { search: query },
+          })
+          bestResults = savedResponse.data || []
+        } catch (savedError) {
+          console.warn("Error searching saved locations:", savedError)
+        }
+      }
+
+      setSearchResults(bestResults)
+      setShowResults(bestResults.length > 0)
+
+      if (bestResults.length === 0) {
+        setError(
+          "No se encontraron ubicaciones. Intenta con una dirección más específica como 'Jiron Dos de Mayo 123, Cajamarca'",
+        )
+      }
+    } catch (error) {
+      console.error("Search error:", error)
+      setError("Error al buscar ubicaciones. Verifica tu conexión e intenta nuevamente.")
+      setSearchResults([])
+      setShowResults(false)
+    } finally {
+      setIsSearching(false)
+    }
+  }
+
+  const getCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setError("La geolocalización no está disponible en este navegador")
+      return
+    }
+
+    setIsGettingLocation(true)
+    setError(null)
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords
+
+          // Geocodificación inversa para obtener la dirección
+          const response = await axios.get("/api/locations/reverse-geocode", {
+            params: { lat: latitude, lon: longitude },
+          })
+
+          const location: Location = {
+            name: response.data.name || "Mi ubicación actual",
+            address: response.data.address || `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+            latitude,
+            longitude,
+          }
+
+          handleLocationSelect(location)
+          setSearchQuery(location.address)
+          setShowResults(false)
+        } catch (error) {
+          console.error("Reverse geocoding error:", error)
+          // Usar coordenadas como fallback
+          const location: Location = {
+            name: "Mi ubicación actual",
+            address: `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`,
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+          }
+          handleLocationSelect(location)
+          setSearchQuery(location.address)
+          setShowResults(false)
+        } finally {
+          setIsGettingLocation(false)
+        }
+      },
+      (error) => {
+        setIsGettingLocation(false)
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            setError("Permiso de ubicación denegado. Habilita la ubicación en tu navegador.")
+            break
+          case error.POSITION_UNAVAILABLE:
+            setError("Ubicación no disponible. Intenta nuevamente.")
+            break
+          case error.TIMEOUT:
+            setError("Tiempo de espera agotado. Intenta nuevamente.")
+            break
+          default:
+            setError("Error desconocido al obtener la ubicación.")
+            break
+        }
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 300000, // 5 minutos
+      },
+    )
+  }
+
+  const handleLocationSelect = async (location: Location) => {
+    try {
+      // Validar que la ubicación esté en territorio peruano
+      const isValidLocation = await axios.get("/api/locations/validate", {
+        params: { lat: location.latitude, lon: location.longitude },
+      })
+
+      if (!isValidLocation.data.valid) {
+        setError("La ubicación seleccionada está fuera del territorio peruano")
         return
       }
 
-      searchTimeoutRef.current = setTimeout(async () => {
-        setIsSearching(true)
+      onLocationSelect(location)
+      setSearchQuery(location.address)
+      setShowResults(false)
+      setError(null)
+
+      // Guardar como ubicación frecuente si no existe
+      if (!location.isFrequent) {
         try {
-          // Búsqueda inteligente con bias hacia Lima y Cajamarca
-          const searchQuery = query.includes("Perú") || query.includes("Peru") ? query : `${query}, Perú`
-
-          const response = await fetch(
-            `https://nominatim.openstreetmap.org/search?` +
-              `format=json&` +
-              `q=${encodeURIComponent(searchQuery)}&` +
-              `limit=8&` +
-              `countrycodes=pe&` +
-              `addressdetails=1&` +
-              `extratags=1&` +
-              `namedetails=1&` +
-              `viewbox=${PERU_CONFIG.bounds.west},${PERU_CONFIG.bounds.south},${PERU_CONFIG.bounds.east},${PERU_CONFIG.bounds.north}&` +
-              `bounded=1`,
-            {
-              headers: {
-                "User-Agent": "PetrusDash/1.0 (Fuel Distribution System)",
-              },
-            },
-          )
-
-          if (response.ok) {
-            const data = await response.json()
-
-            // Procesar y enriquecer resultados
-            const processedResults = data.map((result: any) => ({
-              ...result,
-              distance: calculateDistanceFromLima(Number.parseFloat(result.lat), Number.parseFloat(result.lon)),
-              type: classifyLocationType(result),
-            }))
-
-            // Ordenar por relevancia (importancia + proximidad a rutas principales)
-            const sortedResults = processedResults.sort((a: any, b: any) => {
-              const aScore = calculateRelevanceScore(a)
-              const bScore = calculateRelevanceScore(b)
-              return bScore - aScore
-            })
-
-            setSearchResults(sortedResults)
-            setShowSearchResults(sortedResults.length > 0)
-          }
-        } catch (error) {
-          console.error("Search error:", error)
-          toast({
-            title: "Error de búsqueda",
-            description: "No se pudo realizar la búsqueda. Inténtalo de nuevo.",
-            variant: "destructive",
+          await axios.post("/api/locations", {
+            name: location.name,
+            address: location.address,
+            latitude: location.latitude,
+            longitude: location.longitude,
           })
-        } finally {
-          setIsSearching(false)
+          loadFrequentLocations() // Recargar ubicaciones frecuentes
+        } catch (saveError) {
+          console.warn("Could not save location as frequent:", saveError)
         }
-      }, 300) // Debounce de 300ms
-    },
-    [toast],
-  )
-
-  const calculateDistanceFromLima = (lat: number, lng: number): number => {
-    const R = 6371 // Radio de la Tierra en km
-    const dLat = toRadians(lat - PERU_CONFIG.cities.lima.lat)
-    const dLng = toRadians(lng - PERU_CONFIG.cities.lima.lng)
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(toRadians(PERU_CONFIG.cities.lima.lat)) *
-        Math.cos(toRadians(lat)) *
-        Math.sin(dLng / 2) *
-        Math.sin(dLng / 2)
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-    return R * c
+      }
+    } catch (error) {
+      console.error("Location validation error:", error)
+      setError("Error al validar la ubicación")
+    }
   }
 
-  const toRadians = (degrees: number): number => degrees * (Math.PI / 180)
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setSearchQuery(value)
 
-  const classifyLocationType = (result: any): string => {
-    const name = result.display_name.toLowerCase()
-    const type = result.type?.toLowerCase() || ""
-
-    if (name.includes("terminal") || name.includes("puerto") || name.includes("aeropuerto")) return "terminal"
-    if (name.includes("grifo") || name.includes("estación") || name.includes("combustible")) return "fuel_station"
-    if (name.includes("almacén") || name.includes("depósito")) return "warehouse"
-    if (name.includes("fábrica") || name.includes("planta") || name.includes("industrial")) return "industrial"
-    if (type.includes("city") || type.includes("town")) return "city"
-    if (type.includes("suburb") || type.includes("neighbourhood")) return "district"
-    return "address"
+    if (value.trim() === "") {
+      setShowResults(false)
+      setError(null)
+    }
   }
 
-  const calculateRelevanceScore = (result: any): number => {
-    let score = result.importance || 0
+  const handleInputFocus = () => {
+    if (frequentLocations.length > 0 && searchQuery.trim() === "") {
+      setShowResults(true)
+    }
+  }
 
-    // Bonus por proximidad a Lima o Cajamarca
-    if (result.distance < 50) score += 0.3
-    else if (result.distance < 200) score += 0.2
-    else if (result.distance < 500) score += 0.1
-
-    // Bonus por tipo de ubicación relevante
-    if (result.type === "terminal" || result.type === "fuel_station") score += 0.2
-    if (result.type === "industrial" || result.type === "warehouse") score += 0.15
-
-    return score
+  const handleInputBlur = () => {
+    // Delay hiding results to allow clicking on them
+    setTimeout(() => setShowResults(false), 200)
   }
 
   const selectSearchResult = (result: LocationResult) => {
@@ -436,7 +630,7 @@ export function LocationPicker({
     setSearchQuery(result.display_name)
     setSearchResults([])
     setShowSearchResults(false)
-    setSelectedLocation({ lat, lng })
+    setSelectedLocationMap({ lat, lng })
     updateMapLocation(lat, lng)
 
     const locationData: LocationData = {
@@ -451,7 +645,7 @@ export function LocationPicker({
       locationType,
     }
 
-    onChange(locationData)
+    onChange?.(locationData)
 
     // Guardar como ubicación frecuente
     saveFrequentLocation(locationData)
@@ -459,7 +653,7 @@ export function LocationPicker({
 
   const selectFrequentLocation = (location: FrequentLocation) => {
     setSearchQuery(location.address)
-    setSelectedLocation({ lat: location.latitude, lng: location.longitude })
+    setSelectedLocationMap({ lat: location.latitude, lng: location.longitude })
     updateMapLocation(location.latitude, location.longitude)
 
     const locationData: LocationData = {
@@ -475,7 +669,7 @@ export function LocationPicker({
       locationType,
     }
 
-    onChange(locationData)
+    onChange?.(locationData)
   }
 
   const handleManualSubmit = async () => {
@@ -488,9 +682,19 @@ export function LocationPicker({
       return
     }
 
+    // Construir dirección completa más específica
+    const addressParts = [
+      manualForm.address.trim(),
+      manualForm.district.trim(),
+      manualForm.province.trim(),
+      manualForm.department.trim(),
+      "Perú",
+    ].filter(Boolean)
+
+    const fullAddress = addressParts.join(", ")
+
     // Intentar geocodificar la dirección manual
     try {
-      const fullAddress = `${manualForm.address}, ${manualForm.district}, ${manualForm.province}, ${manualForm.department}, Perú`
       const coordinates = await geocodeAddress(fullAddress)
 
       const locationData: LocationData = {
@@ -511,24 +715,46 @@ export function LocationPicker({
       }
 
       if (coordinates) {
-        setSelectedLocation({ lat: coordinates.lat, lng: coordinates.lng })
+        setSelectedLocationMap({ lat: coordinates.lat, lng: coordinates.lng })
         updateMapLocation(coordinates.lat, coordinates.lng)
+
+        toast({
+          title: "Ubicación geocodificada",
+          description: "La dirección se ha localizado en el mapa",
+        })
+      } else {
+        toast({
+          title: "Ubicación guardada",
+          description: "La dirección se ha guardado (geocodificación pendiente)",
+        })
       }
 
-      onChange(locationData)
+      onChange?.(locationData)
       setShowManualForm(false)
 
-      toast({
-        title: "Ubicación guardada",
-        description: "La ubicación manual ha sido registrada",
+      // Limpiar formulario manual
+      setManualForm({
+        address: "",
+        district: "",
+        province: "",
+        department: "Lima",
+        references: "",
+        contactName: "",
+        contactPhone: "",
+        accessInstructions: "",
+        zoneType: "urbana",
       })
 
-      // Guardar como ubicación frecuente
-      saveFrequentLocation(locationData)
+      // Guardar como ubicación frecuente si tiene coordenadas
+      if (coordinates) {
+        saveFrequentLocation(locationData)
+      }
     } catch (error) {
-      // Si no se pueden obtener coordenadas, guardar solo la dirección
+      console.error("Error processing manual address:", error)
+
+      // Incluso si falla la geocodificación, guardar la dirección
       const locationData: LocationData = {
-        address: `${manualForm.address}, ${manualForm.district}, ${manualForm.province}, ${manualForm.department}`,
+        address: fullAddress,
         method: "MANUAL_INPUT",
         timestamp: new Date(),
         district: manualForm.district,
@@ -542,12 +768,25 @@ export function LocationPicker({
         locationType,
       }
 
-      onChange(locationData)
+      onChange?.(locationData)
       setShowManualForm(false)
 
+      // Limpiar formulario manual
+      setManualForm({
+        address: "",
+        district: "",
+        province: "",
+        department: "Lima",
+        references: "",
+        contactName: "",
+        contactPhone: "",
+        accessInstructions: "",
+        zoneType: "urbana",
+      })
+
       toast({
-        title: "Ubicación guardada",
-        description: "La ubicación manual ha sido registrada (sin coordenadas GPS)",
+        title: "Dirección guardada",
+        description: "La dirección se ha guardado sin coordenadas GPS",
       })
     }
   }
@@ -603,9 +842,10 @@ export function LocationPicker({
     }
 
     onLocationSelect?.({
+      name: searchQuery || `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
       address: searchQuery || `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
-      lat,
-      lng,
+      latitude: lat,
+      longitude: lng,
     })
   }
 
@@ -636,10 +876,26 @@ export function LocationPicker({
 
   const geocodeAddress = async (address: string): Promise<{ lat: number; lng: number } | null> => {
     try {
+      // Preparar la dirección - si no incluye Perú, agregarlo
+      let searchAddress = address.trim()
+      if (!searchAddress.toLowerCase().includes("perú") && !searchAddress.toLowerCase().includes("peru")) {
+        searchAddress = `${searchAddress}, Perú`
+      }
+
+      // Normalizar términos comunes peruanos
+      searchAddress = searchAddress
+        .replace(/\bjiron\b/gi, "jr.")
+        .replace(/\bavenida\b/gi, "av.")
+        .replace(/\bcalle\b/gi, "cal.")
+        .replace(/\bpasaje\b/gi, "psj.")
+        .replace(/\burbanización\b/gi, "urb.")
+        .replace(/\bmanzana\b/gi, "mz.")
+        .replace(/\blote\b/gi, "lt.")
+
       const response = await fetch(
         `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-          address,
-        )}&limit=1&countrycodes=pe&addressdetails=1`,
+          searchAddress,
+        )}&limit=3&countrycodes=pe&addressdetails=1&dedupe=1&extratags=1`,
         {
           headers: {
             "User-Agent": "PetrusDash/1.0",
@@ -650,9 +906,11 @@ export function LocationPicker({
       if (response.ok) {
         const data = await response.json()
         if (data.length > 0) {
+          // Tomar el primer resultado más relevante
+          const bestResult = data[0]
           return {
-            lat: Number.parseFloat(data[0].lat),
-            lng: Number.parseFloat(data[0].lon),
+            lat: Number.parseFloat(bestResult.lat),
+            lng: Number.parseFloat(bestResult.lon),
           }
         }
       }
@@ -679,6 +937,18 @@ export function LocationPicker({
 
   const getLocationTypeConfig = () => LOCATION_TYPE_CONFIG[locationType]
 
+  const getSuggestionText = () => {
+    const suggestions = [
+      "Jr. Los Olivos 123, San Isidro, Lima",
+      "Av. Arequipa 456, Miraflores, Lima",
+      "Jiron Dos de Mayo 789, Cajamarca",
+      "Calle Real 321, Barranco, Lima",
+      "Psj. Las Flores 654, Surco, Lima",
+    ]
+
+    return suggestions[Math.floor(Math.random() * suggestions.length)]
+  }
+
   return (
     <Card className={className}>
       <CardHeader className="pb-3">
@@ -694,10 +964,14 @@ export function LocationPicker({
       <CardContent className="space-y-4">
         {isOfficeMode && (
           <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)}>
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="search" className="flex items-center gap-2">
                 <Search className="h-4 w-4" />
                 Búsqueda
+              </TabsTrigger>
+              <TabsTrigger value="gps" className="flex items-center gap-2">
+                <CrosshairIcon className="h-4 w-4" />
+                GPS
               </TabsTrigger>
               <TabsTrigger value="frequent" className="flex items-center gap-2">
                 <Star className="h-4 w-4" />
@@ -713,68 +987,125 @@ export function LocationPicker({
               <div className="relative">
                 <div className="flex gap-2">
                   <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                     <Input
+                      ref={inputRef}
+                      id="location-search"
+                      type="text"
                       value={searchQuery}
-                      onChange={(e) => {
-                        setSearchQuery(e.target.value)
-                        searchLocation(e.target.value)
-                      }}
-                      onBlur={() => {
-                        setTimeout(() => setShowSearchResults(false), 150)
-                      }}
-                      onFocus={() => {
-                        if (searchResults.length > 0) {
-                          setShowSearchResults(true)
-                        }
-                      }}
+                      onChange={handleInputChange}
+                      onFocus={handleInputFocus}
+                      onBlur={handleInputBlur}
                       placeholder={placeholder}
-                      className="pr-10"
+                      className="pl-10 pr-4"
+                      required={required}
                     />
                     {isSearching && (
-                      <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />
+                      <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                      </div>
                     )}
                   </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={getCurrentLocation}
+                    disabled={isGettingLocation}
+                    title="Usar mi ubicación actual"
+                  >
+                    {isGettingLocation ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                    ) : (
+                      <Navigation className="h-4 w-4" />
+                    )}
+                  </Button>
                 </div>
 
                 {/* Resultados de búsqueda */}
-                {showSearchResults && searchResults.length > 0 && (
-                  <Card className="absolute z-50 w-full mt-1 max-h-80 overflow-y-auto shadow-lg">
-                    <CardContent className="p-0">
-                      {searchResults.map((result) => (
-                        <button
-                          key={result.place_id}
-                          className="w-full text-left p-3 hover:bg-gray-100 border-b border-gray-100 last:border-b-0"
-                          onClick={() => selectSearchResult(result)}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className="flex-shrink-0 mt-0.5">
-                              {result.type === "terminal" && <Factory className="h-4 w-4 text-blue-600" />}
-                              {result.type === "fuel_station" && <Truck className="h-4 w-4 text-green-600" />}
-                              {result.type === "industrial" && <Building2 className="h-4 w-4 text-purple-600" />}
-                              {result.type === "city" && <MapPin className="h-4 w-4 text-red-600" />}
-                              {!["terminal", "fuel_station", "industrial", "city"].includes(result.type) && (
-                                <MapPinIcon className="h-4 w-4 text-gray-400" />
-                              )}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="text-sm font-medium truncate">
-                                {result.address?.road || result.display_name.split(",")[0]}
-                              </div>
-                              <div className="text-xs text-gray-500 truncate">{result.display_name}</div>
-                              <div className="flex items-center gap-2 mt-1">
-                                <Badge variant="outline" className="text-xs">
-                                  {Math.round(result.distance || 0)} km de Lima
-                                </Badge>
-                                {result.type && (
-                                  <Badge variant="secondary" className="text-xs">
-                                    {result.type}
-                                  </Badge>
-                                )}
-                              </div>
-                            </div>
+                {showResults && (
+                  <Card className="absolute top-full left-0 right-0 z-50 mt-1 max-h-80 overflow-y-auto shadow-lg">
+                    <CardContent className="p-2">
+                      {/* Ubicaciones frecuentes */}
+                      {searchQuery.trim() === "" && frequentLocations.length > 0 && (
+                        <div className="mb-3">
+                          <div className="flex items-center gap-2 mb-2 px-2">
+                            <Clock className="h-4 w-4 text-gray-500" />
+                            <span className="text-sm font-medium text-gray-700">Ubicaciones frecuentes</span>
                           </div>
-                        </button>
-                      ))}
+                          {frequentLocations.slice(0, 5).map((location, index) => (
+                            <button
+                              key={`frequent-${index}`}
+                              type="button"
+                              onClick={() =>
+                                handleLocationSelect({
+                                  id: location.id,
+                                  isFrequent: true,
+                                  name: location.address.split(",")[0],
+                                  address: location.address,
+                                  latitude: location.latitude,
+                                  longitude: location.longitude,
+                                  district: location.district,
+                                  province: location.province,
+                                  department: location.department,
+                                  usageCount: location.usageCount,
+                                  lastUsed: location.lastUsed,
+                                })
+                              }
+                              className="w-full text-left p-2 hover:bg-gray-50 rounded-md transition-colors"
+                            >
+                              <div className="flex items-start gap-2">
+                                <MapPin className="h-4 w-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium text-sm truncate">{location.address.split(",")[0]}</div>
+                                  <div className="text-xs text-gray-500 truncate">{location.address}</div>
+                                </div>
+                                <Badge variant="secondary" className="text-xs">
+                                  Frecuente
+                                </Badge>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Resultados de búsqueda */}
+                      {searchResults.length > 0 && (
+                        <div>
+                          {searchQuery.trim() !== "" && (
+                            <div className="flex items-center gap-2 mb-2 px-2">
+                              <Search className="h-4 w-4 text-gray-500" />
+                              <span className="text-sm font-medium text-gray-700">Resultados de búsqueda</span>
+                            </div>
+                          )}
+                          {searchResults.map((location, index) => (
+                            <button
+                              key={`search-${index}`}
+                              type="button"
+                              onClick={() => handleLocationSelect(location)}
+                              className="w-full text-left p-2 hover:bg-gray-50 rounded-md transition-colors"
+                            >
+                              <div className="flex items-start gap-2">
+                                <MapPin className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium text-sm truncate">{location.name}</div>
+                                  <div className="text-xs text-gray-500 truncate">{location.address}</div>
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Mensaje cuando no hay resultados */}
+                      {searchQuery.trim() !== "" && searchResults.length === 0 && !isSearching && (
+                        <div className="text-center py-4 text-gray-500">
+                          <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">No se encontraron ubicaciones</p>
+                          <p className="text-xs mt-1">Intenta con términos más específicos</p>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 )}
@@ -782,6 +1113,37 @@ export function LocationPicker({
 
               <div className="text-xs text-gray-500">
                 💡 Busque por dirección, distrito, empresa o punto de referencia en Perú
+              </div>
+            </TabsContent>
+
+            <TabsContent value="gps" className="space-y-4">
+              <div className="text-center py-6">
+                <Locate className="h-12 w-12 mx-auto mb-4 text-blue-500" />
+                <h3 className="text-lg font-medium mb-2">Obtener Ubicación Actual</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Use el GPS de su dispositivo para obtener la ubicación actual
+                </p>
+
+                <Button onClick={getCurrentLocation} disabled={isGettingLocation} className="w-full" size="lg">
+                  {isGettingLocation ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Obteniendo ubicación...
+                    </>
+                  ) : (
+                    <>
+                      <CrosshairIcon className="h-4 w-4 mr-2" />
+                      Usar Mi Ubicación GPS
+                    </>
+                  )}
+                </Button>
+
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="text-xs text-blue-800">
+                    <strong>Nota:</strong> Asegúrese de permitir el acceso a la ubicación cuando su navegador lo
+                    solicite. La ubicación debe estar dentro del territorio peruano.
+                  </div>
+                </div>
               </div>
             </TabsContent>
 
@@ -938,7 +1300,7 @@ export function LocationPicker({
                     <Label htmlFor="zone-type">Tipo de Zona</Label>
                     <Select
                       value={manualForm.zoneType}
-                      onValueChange={(value: any) => setManualForm((prev) => ({ ...prev, zoneType: value }))}
+                      onValueChange={(value: ZoneType) => setManualForm((prev) => ({ ...prev, zoneType: value }))}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -955,7 +1317,7 @@ export function LocationPicker({
 
                   <div className="flex gap-2">
                     <Button onClick={handleManualSubmit} className="flex-1">
-                      <CheckCircle className="h-4 w-4 mr-2" />
+                      <CheckCircle2 className="h-4 w-4 mr-2" />
                       Guardar Ubicación
                     </Button>
                     <Button variant="outline" onClick={() => setShowManualForm(false)}>
@@ -986,6 +1348,7 @@ export function LocationPicker({
               {value.latitude && value.longitude && (
                 <div className="text-xs mt-1">
                   📍 {value.latitude.toFixed(6)}, {value.longitude.toFixed(6)}
+                  {value.accuracy && <span className="ml-2">±{Math.round(value.accuracy)}m</span>}
                 </div>
               )}
               {value.contactName && (
@@ -1005,14 +1368,42 @@ export function LocationPicker({
           </div>
         )}
 
+        {/* Ubicación seleccionada */}
+        {selectedLocation && (
+          <div className="mt-3">
+            <Card className="bg-green-50 border-green-200">
+              <CardContent className="p-3">
+                <div className="flex items-start gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-sm text-green-800">{selectedLocation.name}</div>
+                    <div className="text-xs text-green-600 mt-1">{selectedLocation.address}</div>
+                    <div className="text-xs text-green-500 mt-1">
+                      {selectedLocation.latitude.toFixed(6)}, {selectedLocation.longitude.toFixed(6)}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Errores */}
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="text-sm">{error}</AlertDescription>
+          </Alert>
+        )}
+
         {showMap && (
           <div className="relative">
             <div ref={mapRef} className="w-full h-64 rounded-lg border border-gray-300 bg-gray-100" />
-            {selectedLocation && (
+            {selectedLocationMap && (
               <div className="absolute top-2 left-2 z-[1000] pointer-events-none">
                 <Badge className="bg-white text-gray-900 shadow-md border">
                   <Navigation className="h-3 w-3 mr-1" />
-                  {selectedLocation.lat.toFixed(6)}, {selectedLocation.lng.toFixed(6)}
+                  {selectedLocationMap.lat.toFixed(6)}, {selectedLocationMap.lng.toFixed(6)}
                 </Badge>
               </div>
             )}
@@ -1027,6 +1418,16 @@ export function LocationPicker({
           </div>
         )}
       </CardContent>
+
+      {/* Ayuda contextual */}
+      <div className="text-xs text-gray-500 mt-2">
+        <p>
+          💡 <strong>Ejemplos de direcciones:</strong>
+        </p>
+        <p>• "Jiron Dos de Mayo 123, Cajamarca"</p>
+        <p>• "Av. Javier Prado 456, San Isidro, Lima"</p>
+        <p>• "Cal. Las Flores 789, Arequipa"</p>
+      </div>
     </Card>
   )
 }
@@ -1036,3 +1437,5 @@ declare global {
     L: any
   }
 }
+
+export default LocationPicker
