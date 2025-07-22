@@ -5,15 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Map, Maximize2, Minimize2, Navigation, MapPin, AlertCircle } from "lucide-react"
-import { MapUtils } from "@/lib/map-utils"
-
-// Tipos para Leaflet (se cargarán dinámicamente)
-declare global {
-  interface Window {
-    L: any
-  }
-}
+import { Map, Maximize2, Minimize2, Navigation, MapPin, AlertCircle, Truck, Route } from "lucide-react"
 
 interface MapLocation {
   id: string
@@ -33,6 +25,19 @@ interface MapViewProps {
   height?: string
   onLocationClick?: (location: MapLocation) => void
   className?: string
+  focusArea?: "cajamarca" | "lima" | "peru"
+}
+
+// Configuración específica para Cajamarca
+const CAJAMARCA_CONFIG = {
+  center: { lat: -7.1619, lng: -78.5151 },
+  bounds: {
+    north: -6.9,
+    south: -7.4,
+    east: -78.2,
+    west: -78.8
+  },
+  zoom: 13
 }
 
 export function MapView({
@@ -43,160 +48,46 @@ export function MapView({
   height = "400px",
   onLocationClick,
   className,
+  focusArea = "cajamarca"
 }: MapViewProps) {
   const mapRef = useRef<HTMLDivElement>(null)
-  const mapInstanceRef = useRef<any>(null)
-  const markersRef = useRef<any[]>([])
-  const routeRef = useRef<any>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string>("")
   const [isFullscreen, setIsFullscreen] = useState(false)
-  const [leafletLoaded, setLeafletLoaded] = useState(false)
+  const [selectedLocation, setSelectedLocation] = useState<MapLocation | null>(null)
 
-  // Cargar Leaflet dinámicamente
-  useEffect(() => {
-    const loadLeaflet = async () => {
-      try {
-        // Cargar CSS de Leaflet
-        if (!document.querySelector('link[href*="leaflet.css"]')) {
-          const link = document.createElement("link")
-          link.rel = "stylesheet"
-          link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-          document.head.appendChild(link)
-        }
-
-        // Cargar JavaScript de Leaflet
-        if (!(window as any).L) {
-          const script = document.createElement("script")
-          script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-          script.onload = () => {
-            setLeafletLoaded(true)
-          }
-          script.onerror = () => {
-            setError("Error cargando Leaflet")
-            setIsLoading(false)
-          }
-          document.head.appendChild(script)
-        } else {
-          setLeafletLoaded(true)
-        }
-      } catch (err) {
-        setError("Error inicializando mapa")
-        setIsLoading(false)
-      }
+  // Determinar centro del mapa basado en el área de enfoque
+  const getMapCenter = () => {
+    if (center) return center
+    
+    switch (focusArea) {
+      case "cajamarca":
+        return CAJAMARCA_CONFIG.center
+      case "lima":
+        return { lat: -12.0464, lng: -77.0428 }
+      default:
+        return CAJAMARCA_CONFIG.center
     }
-
-    loadLeaflet()
-  }, [])
-
-  // Inicializar mapa cuando Leaflet esté cargado
-  useEffect(() => {
-    if (!leafletLoaded || !mapRef.current) return
-
-    initializeMap()
-    setIsLoading(false)
-
-    return () => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove()
-        mapInstanceRef.current = null
-      }
-    }
-  }, [leafletLoaded])
-
-  // Actualizar mapa cuando cambien las ubicaciones
-  useEffect(() => {
-    if (!mapInstanceRef.current || !leafletLoaded) return
-
-    updateMapContent()
-  }, [locations, showRoute, leafletLoaded])
-
-  const initializeMap = () => {
-    if (!mapRef.current || !(window as any).L) return
-
-    const L = (window as any).L
-
-    // Determinar centro del mapa
-    const mapCenter =
-      center ||
-      (locations.length > 0
-        ? MapUtils.calculateOptimalView(locations.map((loc) => ({ lat: loc.lat, lng: loc.lng }))).lat !== 0
-          ? MapUtils.getBoundsCenter(MapUtils.calculateBounds(locations.map((loc) => ({ lat: loc.lat, lng: loc.lng }))))
-          : MapUtils.DEFAULT_CENTER
-        : MapUtils.DEFAULT_CENTER)
-
-    // Crear mapa
-    mapInstanceRef.current = L.map(mapRef.current).setView([mapCenter.lat, mapCenter.lng], zoom)
-
-    // Agregar capa de OpenStreetMap
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      maxZoom: 19,
-    }).addTo(mapInstanceRef.current)
-
-    // Configurar controles
-    mapInstanceRef.current.zoomControl.setPosition("topright")
   }
 
-  const updateMapContent = () => {
-    if (!mapInstanceRef.current || !(window as any).L) return
+  const mapCenter = getMapCenter()
 
-    const L = (window as any).L
+  const toggleFullscreen = () => {
+    setIsFullscreen(!isFullscreen)
+  }
 
-    // Limpiar marcadores existentes
-    markersRef.current.forEach((marker) => {
-      mapInstanceRef.current.removeLayer(marker)
-    })
-    markersRef.current = []
-
-    // Limpiar ruta existente
-    if (routeRef.current) {
-      mapInstanceRef.current.removeLayer(routeRef.current)
-      routeRef.current = null
-    }
-
-    // Agregar nuevos marcadores
-    locations.forEach((location) => {
-      const icon = getLocationIcon(location.type, location.status)
-
-      const marker = L.marker([location.lat, location.lng], { icon })
-        .addTo(mapInstanceRef.current)
-        .bindPopup(createPopupContent(location))
-
-      if (onLocationClick) {
-        marker.on("click", () => onLocationClick(location))
-      }
-
-      markersRef.current.push(marker)
-    })
-
-    // Agregar ruta si está habilitada
-    if (showRoute && locations.length > 1) {
-      const routePoints = locations.map((loc) => [loc.lat, loc.lng])
-      routeRef.current = L.polyline(routePoints, {
-        color: "#3b82f6",
-        weight: 4,
-        opacity: 0.7,
-      }).addTo(mapInstanceRef.current)
-    }
-
-    // Ajustar vista para mostrar todas las ubicaciones
-    if (locations.length > 0) {
-      const group = new L.featureGroup(markersRef.current)
-      mapInstanceRef.current.fitBounds(group.getBounds().pad(0.1))
-    }
+  const centerOnLocations = () => {
+    if (locations.length === 0) return
+    
+    // Si hay ubicaciones, centrar en la primera
+    const firstLocation = locations[0]
+    setSelectedLocation(firstLocation)
   }
 
   const getLocationIcon = (type: string, status?: string) => {
-    if (!(window as any).L) return null
-
-    const L = (window as any).L
-
     const iconConfigs = {
-      truck: { color: "#10b981", icon: "🚛" },
-      delivery: { color: "#3b82f6", icon: "📦" },
-      pickup: { color: "#f59e0b", icon: "⛽" },
-      waypoint: { color: "#6b7280", icon: "📍" },
+      truck: { color: "#10b981", icon: "🚛", label: "Camión" },
+      delivery: { color: "#3b82f6", icon: "📦", label: "Entrega" },
+      pickup: { color: "#f59e0b", icon: "⛽", label: "Carga" },
+      waypoint: { color: "#6b7280", icon: "📍", label: "Punto" },
     }
 
     const config = iconConfigs[type as keyof typeof iconConfigs] || iconConfigs.waypoint
@@ -207,65 +98,19 @@ export function MapView({
     else if (status === "error") color = "#ef4444"
     else if (status === "pending") color = "#f59e0b"
 
-    return L.divIcon({
-      html: `
-        <div style="
-          background-color: ${color};
-          width: 30px;
-          height: 30px;
-          border-radius: 50%;
-          border: 3px solid white;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 14px;
-          box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-        ">
-          ${config.icon}
-        </div>
-      `,
-      className: "custom-div-icon",
-      iconSize: [30, 30],
-      iconAnchor: [15, 15],
-    })
+    return { ...config, color }
   }
 
-  const createPopupContent = (location: MapLocation) => {
-    const statusBadge = location.status
-      ? `<span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">${location.status}</span>`
-      : ""
-
-    return `
-      <div class="p-2 min-w-[200px]">
-        <div class="font-semibold text-gray-900 mb-1">${location.title}</div>
-        ${location.description ? `<div class="text-sm text-gray-600 mb-2">${location.description}</div>` : ""}
-        ${statusBadge}
-        <div class="text-xs text-gray-500 mt-2">
-          ${MapUtils.formatCoordinates(location.lat, location.lng)}
-        </div>
-      </div>
-    `
-  }
-
-  const toggleFullscreen = () => {
-    setIsFullscreen(!isFullscreen)
-  }
-
-  const centerOnLocations = () => {
-    if (!mapInstanceRef.current || locations.length === 0) return
-
-    const L = (window as any).L
-    const group = new L.featureGroup(markersRef.current)
-    mapInstanceRef.current.fitBounds(group.getBounds().pad(0.1))
-  }
-
-  if (error) {
-    return (
-      <Alert variant="destructive" className={className}>
-        <AlertCircle className="h-4 w-4" />
-        <AlertDescription>{error}</AlertDescription>
-      </Alert>
-    )
+  const calculateDistance = (loc1: MapLocation, loc2: MapLocation): number => {
+    const R = 6371 // Radio de la Tierra en km
+    const dLat = (loc2.lat - loc1.lat) * Math.PI / 180
+    const dLng = (loc2.lng - loc1.lng) * Math.PI / 180
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(loc1.lat * Math.PI / 180) * Math.cos(loc2.lat * Math.PI / 180) * 
+      Math.sin(dLng/2) * Math.sin(dLng/2)
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+    return R * c
   }
 
   return (
@@ -274,7 +119,7 @@ export function MapView({
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-base">
             <Map className="h-4 w-4" />
-            Mapa de Ubicaciones
+            Mapa de Rutas - {focusArea === "cajamarca" ? "Cajamarca" : "Perú"}
             {locations.length > 0 && <Badge variant="secondary">{locations.length} ubicaciones</Badge>}
           </CardTitle>
           <div className="flex gap-2">
@@ -292,26 +137,121 @@ export function MapView({
         <div
           ref={mapRef}
           style={{ height: isFullscreen ? "calc(100vh - 120px)" : height }}
-          className="w-full rounded-b-lg overflow-hidden"
+          className="w-full rounded-b-lg overflow-hidden bg-gray-100 relative"
         >
-          {isLoading && (
-            <div className="flex items-center justify-center h-full bg-gray-100">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                <div className="text-sm text-gray-600">Cargando mapa...</div>
+          {/* Mapa simplificado para Cajamarca */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-center p-8">
+              <div className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <MapPin className="h-12 w-12 text-blue-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Mapa de Rutas - Cajamarca
+              </h3>
+              <p className="text-gray-600 mb-4">
+                Centro: {mapCenter.lat.toFixed(4)}, {mapCenter.lng.toFixed(4)}
+              </p>
+              
+              {/* Información de ubicaciones */}
+              {locations.length > 0 && (
+                <div className="space-y-2 max-w-md">
+                  {locations.map((location) => {
+                    const iconConfig = getLocationIcon(location.type, location.status)
+                    return (
+                      <div
+                        key={location.id}
+                        className="flex items-center justify-between p-3 bg-white rounded-lg border cursor-pointer hover:bg-gray-50"
+                        onClick={() => {
+                          setSelectedLocation(location)
+                          onLocationClick?.(location)
+                        }}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div 
+                            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm"
+                            style={{ backgroundColor: iconConfig.color }}
+                          >
+                            {iconConfig.icon}
+                          </div>
+                          <div className="text-left">
+                            <div className="font-medium text-sm">{location.title}</div>
+                            <div className="text-xs text-gray-500">{location.description}</div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <Badge variant="outline" className="text-xs">
+                            {iconConfig.label}
+                          </Badge>
+                          {location.status && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              {location.status}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Mostrar ruta si está habilitada */}
+              {showRoute && locations.length > 1 && (
+                <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Route className="h-4 w-4 text-blue-600" />
+                    <span className="text-sm font-medium text-blue-900">Información de Ruta</span>
+                  </div>
+                  <div className="text-xs text-blue-700">
+                    Distancia total: {locations.length > 1 ? 
+                      calculateDistance(locations[0], locations[locations.length - 1]).toFixed(1) : 0} km
+                  </div>
+                  <div className="text-xs text-blue-700">
+                    Puntos de parada: {locations.length}
+                  </div>
+                </div>
+              )}
+
+              {locations.length === 0 && (
+                <div className="text-gray-500">
+                  <MapPin className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <div className="text-sm">No hay ubicaciones para mostrar</div>
+                  <div className="text-xs mt-1">
+                    Las ubicaciones aparecerán aquí cuando se configuren rutas
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Información de ubicación seleccionada */}
+          {selectedLocation && (
+            <div className="absolute bottom-4 left-4 right-4 bg-white p-4 rounded-lg shadow-lg border">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-medium">{selectedLocation.title}</h4>
+                  <p className="text-sm text-gray-600">{selectedLocation.description}</p>
+                  <p className="text-xs text-gray-500">
+                    {selectedLocation.lat.toFixed(6)}, {selectedLocation.lng.toFixed(6)}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectedLocation(null)}
+                >
+                  ✕
+                </Button>
               </div>
             </div>
           )}
-        </div>
 
-        {locations.length === 0 && !isLoading && (
-          <div className="flex items-center justify-center h-32 text-gray-500">
-            <div className="text-center">
-              <MapPin className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <div className="text-sm">No hay ubicaciones para mostrar</div>
-            </div>
+          {/* Indicador de área de enfoque */}
+          <div className="absolute top-4 left-4">
+            <Badge variant="outline" className="bg-white">
+              📍 {focusArea === "cajamarca" ? "Cajamarca, Perú" : "Perú"}
+            </Badge>
           </div>
-        )}
+        </div>
       </CardContent>
     </Card>
   )

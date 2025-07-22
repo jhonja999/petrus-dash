@@ -12,8 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { CloudinaryUpload } from "@/components/CloudinaryUpload"
-import { LocationPicker, type LocationData } from "@/components/LocationPicker"
+import { SimpleLocationPicker } from "@/components/SimpleLocationPicker"
 import { useToast } from "@/hooks/use-toast"
 import {
   Truck,
@@ -31,7 +30,8 @@ import {
   Factory,
 } from "lucide-react"
 import axios from "axios"
-import { LocationMethod } from "@/types/globals" // Import LocationMethod
+import { format } from "date-fns"
+import { es } from "date-fns/locale"
 
 interface DispatchFormData {
   truckId: string
@@ -46,8 +46,7 @@ interface DispatchFormData {
   deliveryAddress: string
   deliveryLatitude?: number
   deliveryLongitude?: number
-  locationGPS?: { latitude: number; longitude: number } // This will be converted to string for API
-  locationMethod?: LocationMethod // Added locationMethod
+  locationMethod?: string
   clientName: string
   clientRuc: string
   clientContact: string
@@ -73,18 +72,22 @@ interface Customer {
   address: string
 }
 
-interface Location {
-  id?: number | string
-  name: string
+interface LocationData {
   address: string
-  latitude?: number // Made optional
-  longitude?: number // Made optional
-  isFrequent?: boolean
-  district?: string
-  province?: string
-  department?: string
-  usageCount?: number
-  lastUsed?: Date
+  latitude?: number
+  longitude?: number
+  method: "OFFICE_PLANNED" | "MANUAL" | "GPS" | "SEARCH_SELECTED"
+  timestamp?: Date
+}
+
+interface Vehicle {
+  id: number
+  placa: string
+  typefuel: string
+  capacitygal: number
+  currentLoad: number
+  maxCapacity?: number
+  state: string
 }
 
 const FUEL_TYPES = [
@@ -117,19 +120,6 @@ const TIME_SLOTS = [
   { value: "20:00", label: "20:00 - Noche Tardía" },
 ]
 
-interface Vehicle {
-  id: number
-  placa: string
-  typefuel: string
-  capacitygal: number
-  currentLoad: number
-  maxCapacity?: number
-  state: string
-}
-
-// Helper function to check if a coordinate is a valid number
-const isValidCoordinate = (coord: number | undefined): coord is number => typeof coord === "number" && !isNaN(coord)
-
 export default function NewDispatchPage() {
   const router = useRouter()
   const { toast } = useToast()
@@ -158,19 +148,16 @@ export default function NewDispatchPage() {
 
   // Ubicación de carga (Cajamarca por defecto)
   const [loadingLocationData, setLoadingLocationData] = useState<LocationData>({
-    address: "Cajamarca, Perú",
+    address: "Terminal de Combustibles Cajamarca, Av. Hoyos Rubio 1250, Cajamarca",
     latitude: -7.1619,
     longitude: -78.5151,
     method: "OFFICE_PLANNED",
-    locationType: "carga",
-    timestamp: new Date(),
   })
 
-  // Ubicación de descarga (movible y confirmable)
+  // Ubicación de descarga
   const [deliveryLocationData, setDeliveryLocationData] = useState<LocationData>({
     address: "",
     method: "OFFICE_PLANNED",
-    locationType: "descarga",
   })
 
   const [isDeliveryLocationConfirmed, setIsDeliveryLocationConfirmed] = useState(false)
@@ -187,13 +174,13 @@ export default function NewDispatchPage() {
           axios.get("/api/trucks"),
           axios.get("/api/users"),
           axios.get("/api/customers"),
-          axios.get("/api/dispatches/next-number"), // Usar API route en lugar de función directa
+          axios.get("/api/dispatches/next-number"),
         ])
 
         setVehicles(vehiclesRes.data.filter((v: Vehicle) => v.state === "Activo"))
         setDrivers(driversRes.data.filter((d: Driver) => d.role === "OPERADOR" && d.state === "Activo"))
         setCustomers(customersRes.data)
-        setNextDispatchNumber(nextDispatchNumRes.data.data) // Obtener desde la respuesta de la API
+        setNextDispatchNumber(nextDispatchNumRes.data.data)
       } catch (error) {
         console.error("Error loading data:", error)
         toast({
@@ -220,35 +207,30 @@ export default function NewDispatchPage() {
       setDeliveryLocationData(location)
       updateFormData("deliveryAddress", location.address)
 
-      // The locationGPS field in formData is an object, but we'll convert it to a string for the API call
-      if (isValidCoordinate(location.latitude) && isValidCoordinate(location.longitude)) {
-        updateFormData("locationGPS", {
-          latitude: location.latitude,
-          longitude: location.longitude,
-        })
-      } else {
-        updateFormData("locationGPS", undefined)
+      if (location.latitude && location.longitude) {
+        updateFormData("deliveryLatitude", location.latitude)
+        updateFormData("deliveryLongitude", location.longitude)
       }
 
-      // Map frontend method to backend LocationMethod enum using proper enum values
-let mappedLocationMethod: LocationMethod | undefined;
-switch (location.method) {
-  case "MANUAL_INPUT":
-    mappedLocationMethod = LocationMethod.MANUAL;
-    break;
-  case "GPS_AUTO":
-    mappedLocationMethod = LocationMethod.GPS;
-    break;
-  case "OFFICE_PLANNED":
-    mappedLocationMethod = LocationMethod.OFFICE_PLANNED;
-    break;
-  case "SEARCH_SELECTED":
-    mappedLocationMethod = LocationMethod.SEARCH_SELECTED;
-    break;
-  default:
-    mappedLocationMethod = undefined;
-}
-updateFormData("locationMethod", mappedLocationMethod);
+      // Mapear método de ubicación
+      let mappedLocationMethod: string
+      switch (location.method) {
+        case "MANUAL":
+          mappedLocationMethod = "MANUAL_INPUT"
+          break
+        case "GPS":
+          mappedLocationMethod = "GPS_AUTO"
+          break
+        case "OFFICE_PLANNED":
+          mappedLocationMethod = "OFFICE_PLANNED"
+          break
+        case "SEARCH_SELECTED":
+          mappedLocationMethod = "SEARCH_SELECTED"
+          break
+        default:
+          mappedLocationMethod = "OFFICE_PLANNED"
+      }
+      updateFormData("locationMethod", mappedLocationMethod)
     }
   }
 
@@ -274,18 +256,6 @@ updateFormData("locationMethod", mappedLocationMethod);
       title: "Ubicación desbloqueada",
       description: "Ahora puede cambiar la ubicación de entrega",
     })
-  }
-
-  const handleLocationSelect = (location: Location) => {
-    const newLocationData: LocationData = {
-      address: location.address,
-      latitude: location.latitude,
-      longitude: location.longitude,
-      method: "SEARCH_SELECTED",
-      timestamp: new Date(),
-      locationType: "descarga",
-    }
-    handleDeliveryLocationChange(newLocationData)
   }
 
   const handleSubmit = async (isDraft = false) => {
@@ -330,12 +300,10 @@ updateFormData("locationMethod", mappedLocationMethod);
         priority: formData.priority,
         scheduledDate: new Date(`${formData.scheduledDate}T${formData.scheduledTime || "08:00"}:00`).toISOString(),
         address: deliveryLocationData.address,
-        // Convert locationGPS object to a string "latitude,longitude" for the API
-        locationGPS:
-          isValidCoordinate(deliveryLocationData.latitude) && isValidCoordinate(deliveryLocationData.longitude)
-            ? `${deliveryLocationData.latitude},${deliveryLocationData.longitude}`
-            : undefined,
-        locationMethod: formData.locationMethod, // Use the mapped location method
+        locationGPS: deliveryLocationData.latitude && deliveryLocationData.longitude
+          ? `${deliveryLocationData.latitude},${deliveryLocationData.longitude}`
+          : undefined,
+        locationMethod: formData.locationMethod,
         notes: formData.observations,
         photos: formData.photos.map((file) => ({
           public_id: file.public_id,
@@ -343,7 +311,6 @@ updateFormData("locationMethod", mappedLocationMethod);
           original_filename: file.original_filename,
         })),
         status: isDraft ? "BORRADOR" : "PROGRAMADO",
-        // Incluir información de ubicación de carga
         loadingLocation: {
           address: loadingLocationData.address,
           latitude: loadingLocationData.latitude,
@@ -394,7 +361,6 @@ updateFormData("locationMethod", mappedLocationMethod);
     setDeliveryLocationData({
       address: "",
       method: "OFFICE_PLANNED",
-      locationType: "descarga",
     })
     setIsDeliveryLocationConfirmed(false)
 
@@ -422,15 +388,15 @@ updateFormData("locationMethod", mappedLocationMethod);
     deliveryLocationData.address &&
     isDeliveryLocationConfirmed
 
-  const calculateDistanceFromLima = (lat: number, lng: number): number => {
+  const calculateDistanceFromCajamarca = (lat: number, lng: number): number => {
     const R = 6371 // Radio de la Tierra en km
-    const limaLat = -12.0464
-    const limaLng = -77.0428
-    const dLat = toRadians(lat - limaLat)
-    const dLng = toRadians(lng - limaLng)
+    const cajamarcaLat = -7.1619
+    const cajamarcaLng = -78.5151
+    const dLat = toRadians(lat - cajamarcaLat)
+    const dLng = toRadians(lng - cajamarcaLng)
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(toRadians(limaLat)) * Math.cos(toRadians(lat)) * Math.sin(dLng / 2) * Math.sin(dLng / 2)
+      Math.cos(toRadians(cajamarcaLat)) * Math.cos(toRadians(lat)) * Math.sin(dLng / 2) * Math.sin(dLng / 2)
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
     return R * c
   }
@@ -443,7 +409,7 @@ updateFormData("locationMethod", mappedLocationMethod);
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Nuevo Despacho de Combustible</h1>
-          <p className="text-gray-600 mt-1">Crear nuevo despacho programado - Sistema Petrus</p>
+          <p className="text-gray-600 mt-1">Crear nuevo despacho programado - Sistema Petrus Cajamarca</p>
         </div>
         <div className="flex items-center space-x-2">
           <Badge variant="outline" className="text-lg font-mono px-4 py-2">
@@ -644,31 +610,6 @@ updateFormData("locationMethod", mappedLocationMethod);
                       />
                     </div>
                   )}
-
-                  {formData.quantity > 0 && selectedVehicle && (
-                    <div
-                      className={`${formData.quantity <= availableCapacity ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"} border rounded-lg p-4`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div
-                          className={`text-sm ${formData.quantity <= availableCapacity ? "text-green-700" : "text-red-700"}`}
-                        >
-                          <span className="font-medium">Capacidad utilizada:</span>{" "}
-                          {((formData.quantity / selectedVehicle.capacitygal) * 100).toFixed(1)}%
-                        </div>
-                        <div
-                          className={`text-sm ${formData.quantity <= availableCapacity ? "text-green-700" : "text-red-700"}`}
-                        >
-                          <span className="font-medium">Restante:</span>{" "}
-                          {Math.max(
-                            0,
-                            selectedVehicle.capacitygal - selectedVehicle.currentLoad - formData.quantity,
-                          ).toLocaleString()}{" "}
-                          galones
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </CardContent>
               </Card>
 
@@ -738,9 +679,9 @@ updateFormData("locationMethod", mappedLocationMethod);
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
                     <MapPin className="h-5 w-5" />
-                    <span>Planificación de Ruta</span>
+                    <span>Planificación de Ruta - Cajamarca</span>
                   </CardTitle>
-                  <CardDescription>Configure los puntos de carga y descarga para el despacho</CardDescription>
+                  <CardDescription>Configure los puntos de carga y descarga para el despacho en Cajamarca</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   {/* Punto de Carga */}
@@ -751,18 +692,12 @@ updateFormData("locationMethod", mappedLocationMethod);
                       <Badge variant="outline">Origen</Badge>
                     </div>
 
-                    <LocationPicker
+                    <SimpleLocationPicker
                       value={loadingLocationData}
                       onChange={handleLoadingLocationChange}
-                      onLocationSelect={(location) => {
-                        // Handle loading location selection
-                        console.log("Loading location selected:", location)
-                      }}
                       label="Ubicación de Carga"
                       locationType="carga"
                       isOfficeMode={true}
-                      showMap={true}
-                      placeholder="Buscar planta o terminal de carga..."
                     />
                   </div>
 
@@ -782,17 +717,13 @@ updateFormData("locationMethod", mappedLocationMethod);
                       )}
                     </div>
 
-                    <LocationPicker
+                    <SimpleLocationPicker
                       value={deliveryLocationData}
                       onChange={handleDeliveryLocationChange}
-                      onLocationSelect={handleLocationSelect}
                       label="Ubicación de Entrega"
-                      placeholder="Buscar dirección de entrega en Perú..."
-                      required={true}
-                      showMap={true}
                       locationType="descarga"
+                      required={true}
                       isOfficeMode={true}
-                      initialAddress={formData.deliveryAddress}
                     />
 
                     {/* Botones de confirmación */}
@@ -827,61 +758,49 @@ updateFormData("locationMethod", mappedLocationMethod);
                   </div>
 
                   {/* Información de Ruta */}
-                  {isValidCoordinate(deliveryLocationData.latitude) &&
-                    isValidCoordinate(deliveryLocationData.longitude) && (
-                      <div className="mt-6 p-4 bg-green-50 rounded-lg border border-green-200">
-                        <div className="flex items-center gap-2 mb-3">
-                          <Route className="h-5 w-5 text-green-600" />
-                          <h4 className="font-medium text-green-800">Información de Ruta</h4>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                          <div className="text-center p-3 bg-white rounded border">
-                            <div className="text-lg font-bold text-blue-600">
-                              {Math.round(
-                                calculateDistanceFromLima(
-                                  deliveryLocationData.latitude,
-                                  deliveryLocationData.longitude,
-                                ),
-                              )}{" "}
-                              km
-                            </div>
-                            <div className="text-gray-600">Distancia desde Lima</div>
-                          </div>
-
-                          <div className="text-center p-3 bg-white rounded border">
-                            <div className="text-lg font-bold text-green-600">
-                              {Math.round(
-                                calculateDistanceFromLima(
-                                  deliveryLocationData.latitude,
-                                  deliveryLocationData.longitude,
-                                ) / 60,
-                              )}{" "}
-                              hrs
-                            </div>
-                            <div className="text-gray-600">Tiempo estimado</div>
-                          </div>
-
-                          <div className="text-center p-3 bg-white rounded border">
-                            <div className="text-lg font-bold text-purple-600">
-                              {selectedVehicle ? Math.round(formData.quantity / 100) : 0} L
-                            </div>
-                            <div className="text-gray-600">Consumo estimado</div>
-                          </div>
-                        </div>
-
-                        {deliveryLocationData.department && deliveryLocationData.department !== "Lima" && (
-                          <Alert className="mt-4">
-                            <AlertTriangle className="h-4 w-4" />
-                            <AlertDescription>
-                              <strong>Ruta interdepartamental:</strong> Lima → {deliveryLocationData.department}
-                              <br />
-                              Considere tiempos adicionales para controles y peajes.
-                            </AlertDescription>
-                          </Alert>
-                        )}
+                  {deliveryLocationData.latitude && deliveryLocationData.longitude && (
+                    <div className="mt-6 p-4 bg-green-50 rounded-lg border border-green-200">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Route className="h-5 w-5 text-green-600" />
+                        <h4 className="font-medium text-green-800">Información de Ruta</h4>
                       </div>
-                    )}
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                        <div className="text-center p-3 bg-white rounded border">
+                          <div className="text-lg font-bold text-blue-600">
+                            {Math.round(
+                              calculateDistanceFromCajamarca(
+                                deliveryLocationData.latitude,
+                                deliveryLocationData.longitude,
+                              ),
+                            )}{" "}
+                            km
+                          </div>
+                          <div className="text-gray-600">Distancia desde terminal</div>
+                        </div>
+
+                        <div className="text-center p-3 bg-white rounded border">
+                          <div className="text-lg font-bold text-green-600">
+                            {Math.round(
+                              calculateDistanceFromCajamarca(
+                                deliveryLocationData.latitude,
+                                deliveryLocationData.longitude,
+                              ) / 30,
+                            )}{" "}
+                            hrs
+                          </div>
+                          <div className="text-gray-600">Tiempo estimado</div>
+                        </div>
+
+                        <div className="text-center p-3 bg-white rounded border">
+                          <div className="text-lg font-bold text-purple-600">
+                            {selectedVehicle ? Math.round(formData.quantity / 200) : 0} L
+                          </div>
+                          <div className="text-gray-600">Consumo estimado</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
@@ -998,22 +917,6 @@ updateFormData("locationMethod", mappedLocationMethod);
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <CloudinaryUpload
-                    onUpload={(files) => updateFormData("photos", files)}
-                    maxFiles={10}
-                    folder="dispatch-photos"
-                    tags={["dispatch", "new", nextDispatchNumber]}
-                    context={{
-                      dispatch_number: nextDispatchNumber,
-                      truck_id: formData.truckId,
-                      driver_id: formData.driverId,
-                      stage: "planning",
-                    }}
-                    label="Subir Documentos y Fotos"
-                    description="JPG, PNG, PDF - Máximo 5MB por archivo. El conductor también podrá agregar fotos durante el despacho."
-                    multiple={true}
-                  />
-
                   <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
                     <div className="text-sm text-blue-800">
                       <strong>Nota:</strong> Las fotos obligatorias (inicio de carga, entrega, conformidad) serán

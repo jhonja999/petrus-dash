@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import type { DispatchStatus } from "@prisma/client"
 import { generateDispatchNumber } from "@/lib/dispatch-numbering" // Import the sequential number generator
+import { LocationMethod } from "@prisma/client" // Import LocationMethod enum
 
 // Mapeo de valores válidos de status
 const VALID_DISPATCH_STATUSES: DispatchStatus[] = ["PROGRAMADO", "CARGANDO", "EN_RUTA", "COMPLETADO", "CANCELADO"]
@@ -286,6 +287,27 @@ export async function POST(request: Request) {
     const loadingLatitude = loadingLocation?.latitude || null
     const loadingLongitude = loadingLocation?.longitude || null
 
+    // Validate and map locationMethod to enum
+    let validLocationMethod: LocationMethod | null = null
+    if (locationMethod) {
+      switch (locationMethod) {
+        case "OFFICE_PLANNED":
+          validLocationMethod = LocationMethod.OFFICE_PLANNED
+          break
+        case "MANUAL_INPUT":
+          validLocationMethod = LocationMethod.MANUAL_INPUT
+          break
+        case "GPS_AUTO":
+          validLocationMethod = LocationMethod.GPS_AUTO
+          break
+        case "GPS_MANUAL":
+          validLocationMethod = LocationMethod.GPS_MANUAL
+          break
+        default:
+          validLocationMethod = LocationMethod.OFFICE_PLANNED
+      }
+    }
+
     const newDispatch = await prisma.dispatch.create({
       data: {
         dispatchNumber,
@@ -299,7 +321,7 @@ export async function POST(request: Request) {
         deliveryAddress: address,
         deliveryLatitude,
         deliveryLongitude,
-        locationMethod: locationMethod, // Directly use the provided locationMethod
+        locationMethod: validLocationMethod,
         scheduledDate: new Date(scheduledDate),
         priority,
         status: "PROGRAMADO",
