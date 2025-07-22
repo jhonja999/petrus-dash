@@ -6,8 +6,8 @@ import type {
   DischargeStatus,
   DispatchStatus,
   Role,
-  TruckState, // Now correctly exported by Prisma Client
-  AssignmentStatus, // Import AssignmentStatus enum
+  TruckState,
+  AssignmentStatus,
 } from "@prisma/client"
 
 // Re-export Prisma types for easier access
@@ -18,8 +18,16 @@ export {
   DispatchStatus,
   Role,
   TruckState,
-  AssignmentStatus, // Re-export AssignmentStatus
+  AssignmentStatus,
 } from "@prisma/client"
+
+// Location method enum for dispatch location tracking
+export enum LocationMethod {
+  OFFICE_PLANNED = "OFFICE_PLANNED",
+  MANUAL = "MANUAL",
+  GPS = "GPS",
+  SEARCH_SELECTED = "SEARCH_SELECTED",
+}
 
 // Fuel type labels for UI
 export const FUEL_TYPE_LABELS: Record<FuelType, string> = {
@@ -72,14 +80,14 @@ export interface Truck {
   id: number
   placa: string
   typefuel: FuelType
-  customFuelType?: string | null // Added custom fuel type field
   capacitygal: Decimal
   lastRemaining: Decimal
   state: TruckState // Using the 'TruckState' enum from Prisma
   // Nuevos campos para gestión de capacidades
-  minCapacity?: Decimal | null
-  maxCapacity?: Decimal | null
+  minCapacity: Decimal
+  maxCapacity: Decimal
   currentLoad: Decimal
+  customFuelType?: string | null
   createdAt: Date
   updatedAt: Date
 }

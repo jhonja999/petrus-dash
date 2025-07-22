@@ -37,8 +37,8 @@ interface Location {
   id?: number | string
   name: string
   address: string
-  latitude: number
-  longitude: number
+  latitude?: number // Made optional
+  longitude?: number // Made optional
   isFrequent?: boolean
   district?: string
   province?: string
@@ -390,6 +390,9 @@ const PRELOADED_FUEL_STATIONS: Location[] = [
 type ZoneType = "urbana" | "industrial" | "rural" | "puerto" | "aeropuerto"
 type TabValue = "search" | "manual" | "frequent" | "gps"
 
+// Helper function to check if a coordinate is a valid number
+const isValidCoordinate = (coord: number | undefined): coord is number => typeof coord === "number" && !isNaN(coord)
+
 export function LocationPicker({
   value,
   onChange,
@@ -457,8 +460,10 @@ export function LocationPicker({
   useEffect(() => {
     if (value) {
       setSearchQuery(value.address)
-      if (value.latitude && value.longitude) {
+      if (isValidCoordinate(value.latitude) && isValidCoordinate(value.longitude)) {
         setSelectedLocationMap({ lat: value.latitude, lng: value.longitude })
+      } else {
+        setSelectedLocationMap(null) // Clear map selection if value has invalid coords
       }
     }
   }, [value])
@@ -567,7 +572,7 @@ export function LocationPicker({
         gasStationMarkersRef.current = []
       }
     }
-  }, [showMap])
+  }, [showMap, selectedLocationMap]) // Added selectedLocationMap to dependencies
 
   // Effect to manage gas station markers visibility
   useEffect(() => {
@@ -578,28 +583,30 @@ export function LocationPicker({
 
     if (showGasStations) {
       PRELOADED_FUEL_STATIONS.forEach((station) => {
-        const mapboxgl = window.mapboxgl
-        const color = station.category === "gasolinera" ? "#ef4444" : "#f97316" // Red for gasolinera, Orange for grifo
-        const marker = new mapboxgl.Marker({ color })
-          .setLngLat([station.longitude, station.latitude])
-          .setPopup(
-            new mapboxgl.Popup().setHTML(
-              `<strong>${station.name}</strong><br>${station.address}<br><button id="select-station-${station.id}" class="text-blue-600 hover:underline mt-1">Seleccionar ubicación</button>`,
-            ),
-          )
-          .addTo(mapInstanceRef.current)
+        if (isValidCoordinate(station.latitude) && isValidCoordinate(station.longitude)) {
+          const mapboxgl = window.mapboxgl
+          const color = station.category === "gasolinera" ? "#ef4444" : "#f97316" // Red for gasolinera, Orange for grifo
+          const marker = new mapboxgl.Marker({ color })
+            .setLngLat([station.longitude, station.latitude])
+            .setPopup(
+              new mapboxgl.Popup().setHTML(
+                `<strong>${station.name}</strong><br>${station.address}<br><button id="select-station-${station.id}" class="text-blue-600 hover:underline mt-1">Seleccionar ubicación</button>`,
+              ),
+            )
+            .addTo(mapInstanceRef.current)
 
-        marker.getElement().addEventListener("click", () => {
-          // Add event listener to the popup button after it's rendered
-          setTimeout(() => {
-            const selectButton = document.getElementById(`select-station-${station.id}`)
-            if (selectButton) {
-              selectButton.onclick = () => handleLocationSelect(station)
-            }
-          }, 0)
-        })
+          marker.getElement().addEventListener("click", () => {
+            // Add event listener to the popup button after it's rendered
+            setTimeout(() => {
+              const selectButton = document.getElementById(`select-station-${station.id}`)
+              if (selectButton) {
+                selectButton.onclick = () => handleLocationSelect(station)
+              }
+            }, 0)
+          })
 
-        gasStationMarkersRef.current.push(marker)
+          gasStationMarkersRef.current.push(marker)
+        }
       })
     }
   }, [showGasStations])
@@ -647,14 +654,19 @@ export function LocationPicker({
       })
 
       if (response.data && response.data.length > 0) {
-        const results = response.data.map((result: any) => ({
-          name: result.display_name?.split(",")[0] || result.name || query,
-          address: result.display_name || result.formatted_address || query,
-          latitude: Number.parseFloat(result.lat || result.latitude),
-          longitude: Number.parseFloat(result.lon || result.longitude),
-          category: result.type || "address", // Using 'type' from geocode response
-          properties: result.properties,
-        }))
+        const results = response.data.map((result: any) => {
+          const lat = Number.parseFloat(result.lat || result.latitude)
+          const lng = Number.parseFloat(result.lon || result.longitude)
+
+          return {
+            name: result.display_name?.split(",")[0] || result.name || query,
+            address: result.display_name || result.formatted_address || query,
+            latitude: isValidCoordinate(lat) ? lat : undefined, // Set to undefined if not valid
+            longitude: isValidCoordinate(lng) ? lng : undefined, // Set to undefined if not valid
+            category: result.type || "address", // Using 'type' from geocode response
+            properties: result.properties,
+          }
+        })
 
         setSearchResults(results)
         setShowResults(results.length > 0)
@@ -750,9 +762,25 @@ export function LocationPicker({
   const handleLocationSelect = async (location: Location): Promise<void> => {
     try {
       // Validate that the location is within Peruvian territory
-      if (!isWithinPeru(location.latitude, location.longitude)) {
-        setError("La ubicación seleccionada está fuera del territorio peruano")
-        return
+      if (isValidCoordinate(location.latitude) && isValidCoordinate(location.longitude)) {
+        if (!isWithinPeru(location.latitude, location.longitude)) {
+          setError("La ubicación seleccionada está fuera del territorio peruano")
+          return
+        }
+      } else {
+        setError("La ubicación seleccionada no tiene coordenadas GPS válidas.")
+        // Clear map marker and selected map location if coordinates are invalid
+        if (markerRef.current) {
+          markerRef.current.remove()
+          markerRef.current = null
+        }
+        setSelectedLocationMap(null)
+        toast({
+          title: "Ubicación sin coordenadas",
+          description: "La ubicación seleccionada no tiene coordenadas GPS válidas para mostrar en el mapa.",
+          variant: "destructive",
+        })
+        return // Stop processing if coordinates are invalid
       }
 
       onLocationSelect(location)
@@ -777,7 +805,7 @@ export function LocationPicker({
       onChange?.(locationData)
 
       // Save as frequent location if it doesn't exist and has coordinates
-      if (!location.isFrequent && location.latitude && location.longitude) {
+      if (!location.isFrequent && isValidCoordinate(location.latitude) && isValidCoordinate(location.longitude)) {
         try {
           await saveFrequentLocation(locationData)
           loadFrequentLocations() // Reload frequent locations
@@ -954,7 +982,7 @@ export function LocationPicker({
   }
 
   const saveFrequentLocation = async (location: LocationData): Promise<void> => {
-    if (!location.latitude || !location.longitude) return
+    if (!isValidCoordinate(location.latitude) || !isValidCoordinate(location.longitude)) return
 
     try {
       await fetch("/api/locations/frequent", {
@@ -1039,9 +1067,11 @@ export function LocationPicker({
 
       if (response.data && response.data.length > 0) {
         const result = response.data[0]
-        return {
-          lat: Number.parseFloat(result.lat),
-          lng: Number.parseFloat(result.lon),
+        const lat = Number.parseFloat(result.lat)
+        const lng = Number.parseFloat(result.lon)
+
+        if (isValidCoordinate(lat) && isValidCoordinate(lng)) {
+          return { lat, lng }
         }
       }
     } catch (error) {
@@ -1478,7 +1508,7 @@ export function LocationPicker({
             </div>
             <div className="text-sm text-blue-700">
               <div className="font-medium">{value.address}</div>
-              {value.latitude && value.longitude && (
+              {isValidCoordinate(value.latitude) && isValidCoordinate(value.longitude) && (
                 <div className="text-xs mt-1">
                   📍 {value.latitude.toFixed(6)}, {value.longitude.toFixed(6)}
                   {value.accuracy && <span className="ml-2">±{Math.round(value.accuracy)}m</span>}
@@ -1511,9 +1541,11 @@ export function LocationPicker({
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm text-green-800">{selectedLocation.name}</div>
                     <div className="text-xs text-green-600 mt-1">{selectedLocation.address}</div>
-                    <div className="text-xs text-green-500 mt-1">
-                      {selectedLocation.latitude.toFixed(6)}, {selectedLocation.longitude.toFixed(6)}
-                    </div>
+                    {isValidCoordinate(selectedLocation.latitude) && isValidCoordinate(selectedLocation.longitude) && (
+                      <div className="text-xs text-green-500 mt-1">
+                        {selectedLocation.latitude.toFixed(6)}, {selectedLocation.longitude.toFixed(6)}
+                      </div>
+                    )}
                   </div>
                 </div>
               </CardContent>

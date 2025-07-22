@@ -31,6 +31,7 @@ import {
   Factory,
 } from "lucide-react"
 import axios from "axios"
+import { LocationMethod } from "@/types/globals" // Import LocationMethod
 
 interface DispatchFormData {
   truckId: string
@@ -46,7 +47,7 @@ interface DispatchFormData {
   deliveryLatitude?: number
   deliveryLongitude?: number
   locationGPS?: { latitude: number; longitude: number } // This will be converted to string for API
-  locationManual?: boolean
+  locationMethod?: LocationMethod // Added locationMethod
   clientName: string
   clientRuc: string
   clientContact: string
@@ -76,8 +77,8 @@ interface Location {
   id?: number | string
   name: string
   address: string
-  latitude: number
-  longitude: number
+  latitude?: number // Made optional
+  longitude?: number // Made optional
   isFrequent?: boolean
   district?: string
   province?: string
@@ -125,6 +126,9 @@ interface Vehicle {
   maxCapacity?: number
   state: string
 }
+
+// Helper function to check if a coordinate is a valid number
+const isValidCoordinate = (coord: number | undefined): coord is number => typeof coord === "number" && !isNaN(coord)
 
 export default function NewDispatchPage() {
   const router = useRouter()
@@ -217,7 +221,7 @@ export default function NewDispatchPage() {
       updateFormData("deliveryAddress", location.address)
 
       // The locationGPS field in formData is an object, but we'll convert it to a string for the API call
-      if (location.latitude && location.longitude) {
+      if (isValidCoordinate(location.latitude) && isValidCoordinate(location.longitude)) {
         updateFormData("locationGPS", {
           latitude: location.latitude,
           longitude: location.longitude,
@@ -226,11 +230,25 @@ export default function NewDispatchPage() {
         updateFormData("locationGPS", undefined)
       }
 
-      if (location.method === "GPS_MANUAL") {
-        updateFormData("locationManual", true)
-      } else {
-        updateFormData("locationManual", false)
-      }
+      // Map frontend method to backend LocationMethod enum using proper enum values
+let mappedLocationMethod: LocationMethod | undefined;
+switch (location.method) {
+  case "MANUAL_INPUT":
+    mappedLocationMethod = LocationMethod.MANUAL;
+    break;
+  case "GPS_AUTO":
+    mappedLocationMethod = LocationMethod.GPS;
+    break;
+  case "OFFICE_PLANNED":
+    mappedLocationMethod = LocationMethod.OFFICE_PLANNED;
+    break;
+  case "SEARCH_SELECTED":
+    mappedLocationMethod = LocationMethod.SEARCH_SELECTED;
+    break;
+  default:
+    mappedLocationMethod = undefined;
+}
+updateFormData("locationMethod", mappedLocationMethod);
     }
   }
 
@@ -314,11 +332,10 @@ export default function NewDispatchPage() {
         address: deliveryLocationData.address,
         // Convert locationGPS object to a string "latitude,longitude" for the API
         locationGPS:
-          deliveryLocationData.latitude && deliveryLocationData.longitude
+          isValidCoordinate(deliveryLocationData.latitude) && isValidCoordinate(deliveryLocationData.longitude)
             ? `${deliveryLocationData.latitude},${deliveryLocationData.longitude}`
             : undefined,
-        locationManual:
-          deliveryLocationData.method === "GPS_MANUAL" || deliveryLocationData.method === "SEARCH_SELECTED",
+        locationMethod: formData.locationMethod, // Use the mapped location method
         notes: formData.observations,
         photos: formData.photos.map((file) => ({
           public_id: file.public_id,
@@ -810,55 +827,61 @@ export default function NewDispatchPage() {
                   </div>
 
                   {/* Información de Ruta */}
-                  {deliveryLocationData.latitude && deliveryLocationData.longitude && (
-                    <div className="mt-6 p-4 bg-green-50 rounded-lg border border-green-200">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Route className="h-5 w-5 text-green-600" />
-                        <h4 className="font-medium text-green-800">Información de Ruta</h4>
+                  {isValidCoordinate(deliveryLocationData.latitude) &&
+                    isValidCoordinate(deliveryLocationData.longitude) && (
+                      <div className="mt-6 p-4 bg-green-50 rounded-lg border border-green-200">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Route className="h-5 w-5 text-green-600" />
+                          <h4 className="font-medium text-green-800">Información de Ruta</h4>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                          <div className="text-center p-3 bg-white rounded border">
+                            <div className="text-lg font-bold text-blue-600">
+                              {Math.round(
+                                calculateDistanceFromLima(
+                                  deliveryLocationData.latitude,
+                                  deliveryLocationData.longitude,
+                                ),
+                              )}{" "}
+                              km
+                            </div>
+                            <div className="text-gray-600">Distancia desde Lima</div>
+                          </div>
+
+                          <div className="text-center p-3 bg-white rounded border">
+                            <div className="text-lg font-bold text-green-600">
+                              {Math.round(
+                                calculateDistanceFromLima(
+                                  deliveryLocationData.latitude,
+                                  deliveryLocationData.longitude,
+                                ) / 60,
+                              )}{" "}
+                              hrs
+                            </div>
+                            <div className="text-gray-600">Tiempo estimado</div>
+                          </div>
+
+                          <div className="text-center p-3 bg-white rounded border">
+                            <div className="text-lg font-bold text-purple-600">
+                              {selectedVehicle ? Math.round(formData.quantity / 100) : 0} L
+                            </div>
+                            <div className="text-gray-600">Consumo estimado</div>
+                          </div>
+                        </div>
+
+                        {deliveryLocationData.department && deliveryLocationData.department !== "Lima" && (
+                          <Alert className="mt-4">
+                            <AlertTriangle className="h-4 w-4" />
+                            <AlertDescription>
+                              <strong>Ruta interdepartamental:</strong> Lima → {deliveryLocationData.department}
+                              <br />
+                              Considere tiempos adicionales para controles y peajes.
+                            </AlertDescription>
+                          </Alert>
+                        )}
                       </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                        <div className="text-center p-3 bg-white rounded border">
-                          <div className="text-lg font-bold text-blue-600">
-                            {Math.round(
-                              calculateDistanceFromLima(deliveryLocationData.latitude, deliveryLocationData.longitude),
-                            )}{" "}
-                            km
-                          </div>
-                          <div className="text-gray-600">Distancia desde Lima</div>
-                        </div>
-
-                        <div className="text-center p-3 bg-white rounded border">
-                          <div className="text-lg font-bold text-green-600">
-                            {Math.round(
-                              calculateDistanceFromLima(deliveryLocationData.latitude, deliveryLocationData.longitude) /
-                                60,
-                            )}{" "}
-                            hrs
-                          </div>
-                          <div className="text-gray-600">Tiempo estimado</div>
-                        </div>
-
-                        <div className="text-center p-3 bg-white rounded border">
-                          <div className="text-lg font-bold text-purple-600">
-                            {selectedVehicle ? Math.round(formData.quantity / 100) : 0} L
-                          </div>
-                          <div className="text-gray-600">Consumo estimado</div>
-                        </div>
-                      </div>
-
-                      {deliveryLocationData.department && deliveryLocationData.department !== "Lima" && (
-                        <Alert className="mt-4">
-                          <AlertTriangle className="h-4 w-4" />
-                          <AlertDescription>
-                            <strong>Ruta interdepartamental:</strong> Lima → {deliveryLocationData.department}
-                            <br />
-                            Considere tiempos adicionales para controles y peajes.
-                          </AlertDescription>
-                        </Alert>
-                      )}
-                    </div>
-                  )}
+                    )}
                 </CardContent>
               </Card>
             </TabsContent>

@@ -214,8 +214,7 @@ export async function POST(request: Request) {
       quantity,
       address,
       locationGPS,
-      locationManual,
-      locationMethod, // Se extrae desde body correctamente
+      locationMethod, // Now directly use locationMethod from frontend
       scheduledDate,
       priority = "NORMAL",
       notes,
@@ -232,7 +231,6 @@ export async function POST(request: Request) {
       quantity,
       address,
       locationGPS,
-      locationManual,
       locationMethod,
       scheduledDate,
       priority,
@@ -301,7 +299,7 @@ export async function POST(request: Request) {
         deliveryAddress: address,
         deliveryLatitude,
         deliveryLongitude,
-        locationMethod: locationMethod || (locationManual ? "MANUAL" : "GPS"),
+        locationMethod: locationMethod, // Directly use the provided locationMethod
         scheduledDate: new Date(scheduledDate),
         priority,
         status: "PROGRAMADO",
