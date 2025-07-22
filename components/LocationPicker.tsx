@@ -223,7 +223,7 @@ const PRELOADED_FUEL_STATIONS: Location[] = [
     longitude: -77.09,
     category: "gasolinera",
   },
-  // Cajamarca
+  // Cajamarca (Expanded List)
   {
     id: "cajamarca-primax-1",
     name: "Primax Cajamarca Centro",
@@ -262,6 +262,86 @@ const PRELOADED_FUEL_STATIONS: Location[] = [
     address: "Vía de Evitamiento Norte 100, Cajamarca",
     latitude: -7.17,
     longitude: -78.5,
+    category: "gasolinera",
+  },
+  {
+    id: "cajamarca-mobil-1",
+    name: "Mobil El Tambo",
+    address: "Av. Manco Cápac 789, Cajamarca",
+    latitude: -7.15,
+    longitude: -78.505,
+    category: "gasolinera",
+  },
+  {
+    id: "cajamarca-grifo-3",
+    name: "Grifo Los Álamos",
+    address: "Carretera a La Colpa Km 2, Cajamarca",
+    latitude: -7.14,
+    longitude: -78.495,
+    category: "grifo",
+  },
+  {
+    id: "cajamarca-texaco-1",
+    name: "Texaco Fonavi",
+    address: "Jr. Alfonso Ugarte 1230, Cajamarca",
+    latitude: -7.175,
+    longitude: -78.51,
+    category: "gasolinera",
+  },
+  {
+    id: "cajamarca-valvoline-1",
+    name: "Valvoline Express Cajamarca",
+    address: "Av. Héroes de San Ramón 456, Cajamarca",
+    latitude: -7.168,
+    longitude: -78.518,
+    category: "grifo",
+  },
+  {
+    id: "cajamarca-pecsa-1",
+    name: "Pecsa La Recoleta",
+    address: "Av. La Recoleta 100, Cajamarca",
+    latitude: -7.16,
+    longitude: -78.525,
+    category: "gasolinera",
+  },
+  {
+    id: "cajamarca-grifo-4",
+    name: "Grifo El Quinde",
+    address: "Jr. El Quinde 205, Cajamarca",
+    latitude: -7.155,
+    longitude: -78.512,
+    category: "grifo",
+  },
+  {
+    id: "cajamarca-gasnor-1",
+    name: "Gasnor Cajamarca",
+    address: "Jr. Tarapacá 315, Cajamarca",
+    latitude: -7.159,
+    longitude: -78.514,
+    category: "gasolinera",
+  },
+  {
+    id: "cajamarca-repsol-2",
+    name: "Repsol San Vicente",
+    address: "Av. San Vicente 876, Cajamarca",
+    latitude: -7.172,
+    longitude: -78.508,
+    category: "gasolinera",
+  },
+  {
+    id: "cajamarca-grifo-5",
+    name: "Grifo Alameda",
+    address: "Alameda de Los Incas 400, Cajamarca",
+    latitude: -7.163,
+    longitude: -78.509,
+    category: "grifo",
+  },
+  {
+    id: "cajamarca-primax-3",
+    name: "Primax Carretera Celendín",
+    address: "Carretera a Celendín Km 3, Cajamarca",
+    latitude: -7.145,
+    longitude: -78.49,
     category: "gasolinera",
   },
   // Arequipa
@@ -572,7 +652,7 @@ export function LocationPicker({
           address: result.display_name || result.formatted_address || query,
           latitude: Number.parseFloat(result.lat || result.latitude),
           longitude: Number.parseFloat(result.lon || result.longitude),
-          category: result.category || "address",
+          category: result.type || "address", // Using 'type' from geocode response
           properties: result.properties,
         }))
 
@@ -696,8 +776,8 @@ export function LocationPicker({
 
       onChange?.(locationData)
 
-      // Save as frequent location if it doesn't exist
-      if (!location.isFrequent) {
+      // Save as frequent location if it doesn't exist and has coordinates
+      if (!location.isFrequent && location.latitude && location.longitude) {
         try {
           await saveFrequentLocation(locationData)
           loadFrequentLocations() // Reload frequent locations
@@ -710,8 +790,6 @@ export function LocationPicker({
       setError("Error al seleccionar la ubicación")
     }
   }
-
-  // Removed handlePlaceSelect as "places" tab is removed
 
   // Explicit typing for input events
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
@@ -893,7 +971,7 @@ export function LocationPicker({
         }),
       })
 
-      // Reload frequent locations
+      // Recargar ubicaciones frecuentes
       loadFrequentLocations()
     } catch (error) {
       console.error("Error saving frequent location:", error)
@@ -1156,8 +1234,6 @@ export function LocationPicker({
                 💡 Busque por dirección, distrito, empresa o punto de referencia en Perú
               </div>
             </TabsContent>
-
-            {/* Removed TabsContent for "places" */}
 
             <TabsContent value="gps" className="space-y-4">
               <div className="text-center py-6">

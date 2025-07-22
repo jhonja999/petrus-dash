@@ -51,7 +51,7 @@ import Link from "next/link"
 import axios from "axios"
 import { useAuth } from "@/contexts/AuthContext"
 import { useToast } from "@/hooks/use-toast"
-import { format } from "date-fns"
+import { format } from "date-fns" // Import addMinutes
 import { es } from "date-fns/locale"
 import type { FuelType } from "@/types/globals"
 import { FUEL_TYPE_LABELS } from "@/types/globals"
@@ -117,6 +117,8 @@ interface ClientAssignment {
     address?: string
   }
   assignmentId: number
+  deliveryLatitude?: number
+  deliveryLongitude?: number
 }
 
 interface ExtendedAssignment {
@@ -161,8 +163,10 @@ interface ExtendedAssignment {
   deliveryLatitude?: number
   deliveryLongitude?: number
   customFuelName?: string
-  currentLatitude?: number
-  currentLongitude?: number
+  currentLatitude?: number // truck's last known currentLatitude
+  currentLongitude?: number // truck's last known currentLongitude
+  loadPointLatitude?: number
+  loadPointLongitude?: number
 }
 
 interface RouteData {
@@ -184,6 +188,9 @@ interface RouteData {
     speed?: number
     accuracy?: number
   }>
+  distanceToNextStop: number
+  estimatedTimeToNextStop: number
+  nextStopAddress: string | null
 }
 
 interface LocationPoint {
@@ -318,6 +325,9 @@ export default function DespachoDriverPage() {
     routeEfficiency: 0,
     lastLocationUpdate: new Date(),
     locations: [],
+    distanceToNextStop: 0,
+    estimatedTimeToNextStop: 0,
+    nextStopAddress: null,
   })
   const [locationHistory, setLocationHistory] = useState<LocationPoint[]>([])
   const [routeStartTime, setRouteStartTime] = useState<Date | null>(null)
@@ -458,7 +468,47 @@ export default function DespachoDriverPage() {
           // Estimar consumo de combustible (aproximado: 0.3L por km)
           const fuelConsumed = totalDistance * 0.3
 
-          // ✅ FIX: Convertir timestamp a string para compatibilidad
+          // Calculate distance and estimated time to next stop
+          let distanceToNextStop = 0
+          let estimatedTimeToNextStop = 0
+          let nextStopAddress: string | null = null
+
+          const currentTruckLocation = currentLocation || {
+            lat: lastLocation.latitude,
+            lng: lastLocation.longitude,
+          }
+
+          const firstPendingClientAssignment = assignments
+            .find((a) => a.status === "EN_RUTA") // Find an active assignment
+            ?.clientAssignments?.find((ca) => ca.status === "pending") // Find its first pending client assignment
+
+          if (
+            firstPendingClientAssignment &&
+            firstPendingClientAssignment.deliveryLatitude &&
+            firstPendingClientAssignment.deliveryLongitude &&
+            currentTruckLocation.lat &&
+            currentTruckLocation.lng
+          ) {
+            distanceToNextStop = calculateDistance(
+              currentTruckLocation.lat,
+              currentTruckLocation.lng,
+              firstPendingClientAssignment.deliveryLatitude,
+              firstPendingClientAssignment.deliveryLongitude,
+            )
+            nextStopAddress =
+              firstPendingClientAssignment.customer.address || firstPendingClientAssignment.customer.companyname
+            if (currentSpeed > 5) {
+              // Only estimate time if speed is reasonable
+              estimatedTimeToNextStop = (distanceToNextStop / currentSpeed) * 60 // in minutes
+            } else if (distanceToNextStop > 0) {
+              // Fallback: if truck is stopped or very slow, assume a walking pace or general slow movement.
+              // e.g., 5 km/h if stopped, 30 km/h if very slow to prevent infinite time.
+              const assumedSpeed = 20 // km/h for estimation when currentSpeed is low
+              estimatedTimeToNextStop = (distanceToNextStop / assumedSpeed) * 60
+            }
+          }
+
+          // Convert timestamp to string for compatibility
           const formattedLocations = locations.map((loc) => ({
             id: loc.id,
             latitude: loc.latitude,
@@ -479,14 +529,17 @@ export default function DespachoDriverPage() {
             routeEfficiency: Number(routeEfficiency.toFixed(1)),
             lastLocationUpdate: new Date(lastLocation.timestamp),
             locations: formattedLocations,
+            distanceToNextStop: Number(distanceToNextStop.toFixed(1)),
+            estimatedTimeToNextStop: Number(estimatedTimeToNextStop.toFixed(0)), // Round to nearest minute
+            nextStopAddress,
           })
 
-          // Establecer hora de inicio de ruta si no está establecida
+          // Set route start time if not set
           if (!routeStartTime && activeAssignments.length > 0) {
             setRouteStartTime(new Date(firstLocation.timestamp))
           }
         } else {
-          // Si no hay suficientes ubicaciones, usar datos básicos de assignments
+          // If not enough locations, use basic assignment data
           const activeAssignments = assignments.filter((a) => a.status === "EN_RUTA" || a.status === "COMPLETADO")
           const completedStops = assignments.filter((a) => a.status === "COMPLETADO").length
           const totalStops = activeAssignments.length
@@ -497,12 +550,15 @@ export default function DespachoDriverPage() {
             totalStops,
             routeEfficiency: totalStops > 0 ? (completedStops / totalStops) * 100 : 0,
             locations: [],
+            distanceToNextStop: 0,
+            estimatedTimeToNextStop: 0,
+            nextStopAddress: null,
           }))
         }
       }
     } catch (error) {
       console.error("Error fetching route data:", error)
-      // En caso de error, usar datos básicos de assignments
+      // In case of error, use basic assignment data
       const activeAssignments = assignments.filter((a) => a.status === "EN_RUTA" || a.status === "COMPLETADO")
       const completedStops = assignments.filter((a) => a.status === "COMPLETADO").length
       const totalStops = activeAssignments.length
@@ -513,11 +569,14 @@ export default function DespachoDriverPage() {
         totalStops,
         routeEfficiency: totalStops > 0 ? (completedStops / totalStops) * 100 : 0,
         locations: [],
+        distanceToNextStop: 0,
+        estimatedTimeToNextStop: 0,
+        nextStopAddress: null,
       }))
     }
-  }, [driverId, isOnline, assignments, routeStartTime])
+  }, [driverId, isOnline, assignments, routeStartTime, currentLocation])
 
-  // Location Tracking (mejorado con mejor manejo de errores)
+  // Location Tracking (improved with better error handling)
   const getCurrentLocation = useCallback(() => {
     if (!navigator.geolocation) {
       console.warn("Geolocation not supported")
@@ -529,13 +588,23 @@ export default function DespachoDriverPage() {
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         try {
-          const { latitude, longitude, altitude, accuracy } = position.coords
-          const fetchedAddress = `Lat: ${latitude.toFixed(4)}°, Lng: ${longitude.toFixed(4)}°`
+          const { latitude, longitude, altitude, accuracy, speed, heading } = position.coords
+          // Reverse geocode to get a more human-readable address
+          let fetchedAddress: string | null = `Lat: ${latitude.toFixed(4)}°, Lng: ${longitude.toFixed(4)}°`
+          try {
+            const geoResponse = await axios.get(`/api/locations/reverse-geocode?lat=${latitude}&lon=${longitude}`)
+            if (geoResponse.data.success && geoResponse.data.address) {
+              fetchedAddress = geoResponse.data.address
+            }
+          } catch (geoError) {
+            console.warn("Reverse geocoding failed:", geoError)
+          }
+
           setCurrentLocation({ lat: latitude, lng: longitude, altitude, accuracy, address: fetchedAddress })
           setGpsPermissionDenied(false)
           setIsGettingLocation(false)
 
-          // Enviar ubicación al backend usando la funcionalidad existente
+          // Send location to backend using existing functionality
           if (user?.id && isOnline) {
             try {
               await axios.post("/api/locations", {
@@ -545,12 +614,12 @@ export default function DespachoDriverPage() {
                 longitude,
                 accuracy,
                 altitude,
-                speed: position.coords.speed,
-                heading: position.coords.heading,
+                speed,
+                heading,
               })
               console.log("✅ Ubicación del conductor enviada al backend.")
 
-              // Actualizar datos de ruta después de enviar ubicación
+              // Update route data after sending location
               fetchRouteData()
             } catch (apiError) {
               console.warn("⚠️ Error al enviar ubicación:", apiError)
@@ -1058,8 +1127,11 @@ export default function DespachoDriverPage() {
   // Formatear tiempo en formato legible
   const formatTime = (minutes: number): string => {
     const hours = Math.floor(minutes / 60)
-    const mins = minutes % 60
-    return hours > 0 ? `${hours}h ${mins}min` : `${mins}min`
+    const mins = Math.round(minutes % 60) // Round minutes
+    if (hours > 0 && mins > 0) return `${hours}h ${mins}min`
+    if (hours > 0) return `${hours}h`
+    if (mins > 0) return `${mins}min`
+    return "0min"
   }
 
   const pendingDeliveries = getAllPendingDeliveries()
@@ -1566,7 +1638,7 @@ export default function DespachoDriverPage() {
                 <div className="bg-white/10 rounded-lg p-3 backdrop-blur-sm">
                   <div className="flex items-center gap-2 mb-1">
                     <Navigation className="h-4 w-4 text-blue-200" />
-                    <p className="text-sm text-blue-100">Distancia recorrida</p>
+                    <p className="text-sm text-blue-100">Distancia Recorrida</p>
                   </div>
                   <p className="font-bold text-xl text-white">{routeData.totalDistance.toFixed(1)} km</p>
                 </div>
@@ -1574,7 +1646,7 @@ export default function DespachoDriverPage() {
                 <div className="bg-white/10 rounded-lg p-3 backdrop-blur-sm">
                   <div className="flex items-center gap-2 mb-1">
                     <Timer className="h-4 w-4 text-green-200" />
-                    <p className="text-sm text-green-100">Tiempo en ruta</p>
+                    <p className="text-sm text-green-100">Tiempo en Ruta</p>
                   </div>
                   <p className="font-bold text-xl text-white">{formatTime(routeData.totalTime)}</p>
                 </div>
@@ -1582,7 +1654,7 @@ export default function DespachoDriverPage() {
                 <div className="bg-white/10 rounded-lg p-3 backdrop-blur-sm">
                   <div className="flex items-center gap-2 mb-1">
                     <Target className="h-4 w-4 text-yellow-200" />
-                    <p className="text-sm text-yellow-100">Paradas realizadas</p>
+                    <p className="text-sm text-yellow-100">Paradas Realizadas</p>
                   </div>
                   <p className="font-bold text-xl text-white">
                     {routeData.completedStops} de {routeData.totalStops}
@@ -1592,11 +1664,33 @@ export default function DespachoDriverPage() {
                 <div className="bg-white/10 rounded-lg p-3 backdrop-blur-sm">
                   <div className="flex items-center gap-2 mb-1">
                     <TrendingUp className="h-4 w-4 text-purple-200" />
-                    <p className="text-sm text-purple-100">Velocidad promedio</p>
+                    <p className="text-sm text-purple-100">Velocidad Promedio</p>
                   </div>
                   <p className="font-bold text-xl text-white">{routeData.averageSpeed.toFixed(1)} km/h</p>
                 </div>
               </div>
+
+              {/* Distancia y tiempo a la próxima parada */}
+              {routeData.nextStopAddress && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white/10 rounded-lg p-3 backdrop-blur-sm">
+                    <div className="flex items-center gap-2 mb-1">
+                      <MapPin className="h-4 w-4 text-cyan-200" />
+                      <p className="text-sm text-cyan-100">Próxima Parada</p>
+                    </div>
+                    <p className="font-bold text-md text-white truncate">{routeData.nextStopAddress}</p>
+                  </div>
+                  <div className="bg-white/10 rounded-lg p-3 backdrop-blur-sm">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Clock className="h-4 w-4 text-pink-200" />
+                      <p className="text-sm text-pink-100">Distancia / Tiempo Est.</p>
+                    </div>
+                    <p className="font-bold text-md text-white">
+                      {routeData.distanceToNextStop.toFixed(1)} km / {formatTime(routeData.estimatedTimeToNextStop)}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Progreso de la ruta */}
               <div className="bg-white/10 rounded-lg p-4 backdrop-blur-sm">
@@ -1622,7 +1716,8 @@ export default function DespachoDriverPage() {
                 <div className="flex items-center gap-2">
                   <Fuel className="h-4 w-4 text-red-200" />
                   <span className="text-white/90">
-                    Combustible usado: <span className="font-semibold">{routeData.fuelConsumed.toFixed(1)}L</span>
+                    Combustible usado (est.):{" "}
+                    <span className="font-semibold">{routeData.fuelConsumed.toFixed(1)}L</span>
                   </span>
                 </div>
               </div>
