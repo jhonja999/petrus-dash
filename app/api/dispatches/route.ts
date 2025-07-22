@@ -42,7 +42,6 @@ export async function GET(request: Request) {
 
     // ✅ Procesar status correctamente - puede venir como string concatenado
     if (statusParam && statusParam.trim()) {
-      // Dividir por comas y limpiar espacios
       const statusArray = statusParam
         .split(",")
         .map((s) => s.trim())
@@ -50,10 +49,8 @@ export async function GET(request: Request) {
         .filter((s) => VALID_DISPATCH_STATUSES.includes(s as DispatchStatus))
 
       if (statusArray.length === 1) {
-        // Si es un solo status
         where.status = statusArray[0] as DispatchStatus
       } else if (statusArray.length > 1) {
-        // Si son múltiples status, usar el operador 'in'
         where.status = {
           in: statusArray as DispatchStatus[],
         }
@@ -62,7 +59,6 @@ export async function GET(request: Request) {
       console.log("🔍 Processed status filter:", where.status)
     }
 
-    // Filtrar por fecha si se proporciona
     if (scheduledDate) {
       const targetDate = new Date(scheduledDate)
       const startOfDay = new Date(targetDate.setHours(0, 0, 0, 0))
@@ -74,18 +70,15 @@ export async function GET(request: Request) {
       }
     }
 
-    // Filtrar por cliente si se proporciona
     if (customerId && !isNaN(Number(customerId))) {
       where.customerId = Number(customerId)
     }
 
     console.log("🔍 Final where clause:", JSON.stringify(where, null, 2))
 
-    // Calcular offset para paginación
     const offset = (page - 1) * limit
 
     try {
-      // Obtener despachos y total con manejo de errores mejorado
       const [dispatches, total] = await Promise.all([
         prisma.dispatch.findMany({
           where,
@@ -131,7 +124,6 @@ export async function GET(request: Request) {
 
       console.log(`✅ Found ${dispatches.length} dispatches (${total} total) for driver ${driverId}`)
 
-      // Calcular información de paginación
       const totalPages = Math.ceil(total / limit)
       const hasNextPage = page < totalPages
       const hasPrevPage = page > 1
@@ -151,7 +143,6 @@ export async function GET(request: Request) {
     } catch (prismaError) {
       console.error("❌ Prisma query error:", prismaError)
 
-      // Manejo específico de errores de Prisma
       if (prismaError instanceof Error) {
         if (prismaError.message.includes("Invalid") || prismaError.message.includes("validation")) {
           return NextResponse.json(
@@ -174,7 +165,7 @@ export async function GET(request: Request) {
         }
       }
 
-      throw prismaError // Re-lanzar si no es un error conocido
+      throw prismaError
     }
   } catch (error) {
     console.error("❌ Dispatches API Error:", error)
@@ -187,7 +178,6 @@ export async function GET(request: Request) {
       errorMessage = error.message
       errorDetails = error.stack || error.message
 
-      // Categorizar tipos de error
       if (error.message.includes("Invalid") || error.message.includes("validation")) {
         statusCode = 400
         errorMessage = "Error de validación en los parámetros"
@@ -211,7 +201,7 @@ export async function GET(request: Request) {
   }
 }
 
-// ✅ Agregar método POST para crear nuevos dispatches
+// ✅ Método POST
 export async function POST(request: Request) {
   try {
     const body = await request.json()
@@ -220,17 +210,37 @@ export async function POST(request: Request) {
       driverId,
       customerId,
       fuelType,
-      customFuelName, // Include customFuelName
+      customFuelName,
       quantity,
-      deliveryAddress,
-      deliveryLatitude,
-      deliveryLongitude,
+      address,
+      locationGPS,
+      locationManual,
+      locationMethod, // Se extrae desde body correctamente
       scheduledDate,
       priority = "NORMAL",
       notes,
+      photos,
+      loadingLocation,
     } = body
 
-    // Validaciones básicas
+    console.log("📝 Creating dispatch with data:", {
+      truckId,
+      driverId,
+      customerId,
+      fuelType,
+      customFuelName,
+      quantity,
+      address,
+      locationGPS,
+      locationManual,
+      locationMethod,
+      scheduledDate,
+      priority,
+      notes,
+      photos: photos ? photos.length : 0,
+      loadingLocation,
+    })
+
     if (!truckId || !driverId || !customerId || !quantity) {
       return NextResponse.json(
         {
@@ -241,7 +251,16 @@ export async function POST(request: Request) {
       )
     }
 
-    // Validate custom fuel name if fuelType is PERSONALIZADO
+    if (!address) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "La dirección de entrega es requerida",
+        },
+        { status: 400 },
+      )
+    }
+
     if (fuelType === "PERSONALIZADO" && (!customFuelName || customFuelName.trim().length < 3)) {
       return NextResponse.json(
         {
@@ -252,27 +271,45 @@ export async function POST(request: Request) {
       )
     }
 
-    // Generate unique dispatch number using the centralized function
     const dispatchNumber = await generateDispatchNumber()
 
-    // Crear el despacho
+    let deliveryLatitude: number | null = null
+    let deliveryLongitude: number | null = null
+
+    if (locationGPS && typeof locationGPS === "string") {
+      const coords = locationGPS.split(",").map((coord: string) => Number.parseFloat(coord.trim()))
+      if (coords.length === 2 && !isNaN(coords[0]) && !isNaN(coords[1])) {
+        deliveryLatitude = coords[0]
+        deliveryLongitude = coords[1]
+      }
+    }
+
+    const loadingAddress = loadingLocation?.address || null
+    const loadingLatitude = loadingLocation?.latitude || null
+    const loadingLongitude = loadingLocation?.longitude || null
+
     const newDispatch = await prisma.dispatch.create({
       data: {
         dispatchNumber,
-        year: new Date().getFullYear(), // Year is derived from the dispatch number
+        year: new Date().getFullYear(),
         truckId: Number(truckId),
         driverId: Number(driverId),
         customerId: Number(customerId),
         fuelType,
-        customFuelName: fuelType === "PERSONALIZADO" ? customFuelName : null, // Store custom fuel name
+        customFuelName: fuelType === "PERSONALIZADO" ? customFuelName : null,
         quantity: Number(quantity),
-        deliveryAddress,
-        deliveryLatitude: deliveryLatitude ? Number(deliveryLatitude) : null,
-        deliveryLongitude: deliveryLongitude ? Number(deliveryLongitude) : null,
+        deliveryAddress: address,
+        deliveryLatitude,
+        deliveryLongitude,
+        locationMethod: locationMethod || (locationManual ? "MANUAL" : "GPS"),
         scheduledDate: new Date(scheduledDate),
         priority,
         status: "PROGRAMADO",
-        notes,
+        notes: notes || null,
+        photos: photos || [],
+        pickupAddress: loadingAddress,
+        pickupLatitude: loadingLatitude,
+        pickupLongitude: loadingLongitude,
       },
       include: {
         truck: true,
@@ -301,7 +338,7 @@ export async function POST(request: Request) {
   }
 }
 
-// ✅ Método PUT para actualizar dispatches
+// ✅ Método PUT
 export async function PUT(request: Request) {
   try {
     const body = await request.json()
@@ -317,7 +354,6 @@ export async function PUT(request: Request) {
       )
     }
 
-    // Actualizar timestamps según el status
     if (updateData.status) {
       const now = new Date()
       switch (updateData.status) {

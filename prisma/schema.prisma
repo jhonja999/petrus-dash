@@ -239,43 +239,41 @@ model Assignment {
 // Modelo mejorado para el sistema de despachos con ubicaciones específicas
 model Dispatch {
   id                Int             @id @default(autoincrement())
-  dispatchNumber    String          @unique // PE-000001-2025
-  year              Int             // Año del despacho
+  dispatchNumber    String          @unique
+  year              Int
   truckId           Int
   driverId          Int
   customerId        Int
   fuelType          FuelType
-  customFuelName    String?         // Para combustibles personalizados
-  quantity          Int             // Cantidad en galones
+  customFuelName    String?
+  quantity          Int
   status            DispatchStatus  @default(PROGRAMADO)
   priority          DispatchPriority @default(NORMAL)
 
-  // Ubicaciones
-  pickupAddress     String?         // Dirección de carga
-  pickupLatitude    Float?          // Coordenadas de carga
-  pickupLongitude   Float?          // Coordenadas de carga
-  deliveryAddress   String          // Dirección de entrega
-  deliveryLatitude  Float?          // Coordenadas de entrega
-  deliveryLongitude Float?          // Coordenadas de entrega
-  locationMethod    LocationMethod? // Método de captura
+  pickupAddress     String?
+  pickupLatitude    Float?
+  pickupLongitude   Float?
+  deliveryAddress   String
+  deliveryLatitude  Float?
+  deliveryLongitude Float?
+  locationMethod    LocationMethod?
 
-  // Fechas y tiempos
-  scheduledDate     DateTime        // Fecha programada
-  startedAt         DateTime?       // Inicio de carga
-  loadedAt          DateTime?       // Terminó carga
-  arrivedAt         DateTime?       // Llegó a destino
-  completedAt       DateTime?       // Completó entrega
+  scheduledDate     DateTime
+  startedAt         DateTime?
+  loadedAt          DateTime?
+  arrivedAt         DateTime?
+  completedAt       DateTime?
 
-  // Metadatos
-  notes             String?         // Observaciones
+  notes             String?
+  photos            Json?               // ⬅️ Campo nuevo
+
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
-  // Relaciones
-  truck    Truck    @relation(fields: [truckId], references: [id])
-  driver   User     @relation(fields: [driverId], references: [id])
-  customer Customer @relation(fields: [customerId], references: [id])
-  locations DispatchLocation[]
+  truck             Truck           @relation(fields: [truckId], references: [id])
+  driver            User            @relation(fields: [driverId], references: [id])
+  customer          Customer        @relation(fields: [customerId], references: [id])
+  locations         DispatchLocation[]
   partialDeliveries PartialDelivery[]
 
   @@map("dispatches")
@@ -288,6 +286,7 @@ model Dispatch {
   @@index([customerId])
   @@index([deliveryLatitude, deliveryLongitude])
 }
+
 
 // Historial de ubicaciones por despacho (para seguimiento en tiempo real)
 model DispatchLocation {

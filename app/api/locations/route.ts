@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { verifyToken } from "@/lib/jwt"
 import { cookies } from "next/headers"
 
+const MAPBOX_ACCESS_TOKEN = process.env.MAPBOX_ACCESS_TOKEN
 // Endpoint para búsqueda inteligente de ubicaciones
 export async function PUT(request: NextRequest) {
   try {
@@ -175,6 +176,41 @@ export async function PUT(request: NextRequest) {
           },
           { status: 503 },
         )
+      }
+    }
+
+    if (action === "reverse-geocode") {
+      // Convert coordinates to address
+      if (!coordinates || !coordinates.latitude || !coordinates.longitude) {
+        return NextResponse.json(
+          { success: false, error: "Coordinates are required for reverse geocoding" },
+          { status: 400 },
+        )
+      }
+
+      const { latitude, longitude } = coordinates
+      const response = await fetch(
+        `https://api.mapbox.com/geocoding/v5/mapbox.places/${longitude},${latitude}.json?access_token=${MAPBOX_ACCESS_TOKEN}&limit=1`,
+      )
+
+      if (!response.ok) {
+        throw new Error("Failed to reverse geocode coordinates")
+      }
+
+      const data = await response.json()
+
+      if (data.features && data.features.length > 0) {
+        const feature = data.features[0]
+        return NextResponse.json({
+          success: true,
+          data: {
+            address: feature.place_name,
+            latitude,
+            longitude,
+          },
+        })
+      } else {
+        return NextResponse.json({ success: false, error: "Location not found" }, { status: 404 })
       }
     }
 

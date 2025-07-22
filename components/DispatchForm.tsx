@@ -73,6 +73,14 @@ export function DispatchForm({ trucks, drivers, customers }: DispatchFormProps) 
   const [selectedTruck, setSelectedTruck] = useState<TruckType | null>(null)
   const [useGPS, setUseGPS] = useState(true)
   const [isGettingLocation, setIsGettingLocation] = useState(false)
+  const [routeInfo, setRouteInfo] = useState<{
+    distance: number
+    duration: number
+    fuelConsumption: number
+    origin: string
+    destination: string
+  } | null>(null)
+  const [isCalculatingRoute, setIsCalculatingRoute] = useState(false)
 
   // Cargar el próximo número de despacho
   useEffect(() => {
@@ -106,6 +114,92 @@ export function DispatchForm({ trucks, drivers, customers }: DispatchFormProps) 
     }
   }
 
+  const calculateRoute = async (originCoords: string, destinationAddress: string) => {
+    if (!originCoords || !destinationAddress) return
+
+    setIsCalculatingRoute(true)
+    try {
+      // Primero geocodificar la dirección de destino
+      const geocodeResponse = await fetch(`/api/locations`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "geocode",
+          address: destinationAddress,
+        }),
+      })
+
+      const geocodeData = await geocodeResponse.json()
+      if (!geocodeData.success) {
+        throw new Error("No se pudo geocodificar la dirección de destino")
+      }
+
+      const { latitude: destLat, longitude: destLng } = geocodeData.data
+      const [originLat, originLng] = originCoords.split(",").map((coord) => Number.parseFloat(coord.trim()))
+
+      // Verificar que tenemos el token de Mapbox
+      const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN
+      if (!mapboxToken) {
+        throw new Error("Mapbox access token not configured")
+      }
+
+      // Calcular ruta usando Mapbox Directions API
+      const directionsUrl = `https://api.mapbox.com/directions/v5/mapbox/driving/${originLng},${originLat};${destLng},${destLat}?access_token=${mapboxToken}&geometries=geojson&overview=full`
+
+      const directionsResponse = await fetch(directionsUrl)
+      const directionsData = await directionsResponse.json()
+
+      if (directionsData.routes && directionsData.routes.length > 0) {
+        const route = directionsData.routes[0]
+        const distanceKm = Math.round(route.distance / 1000)
+        const durationHours = Math.round((route.duration / 3600) * 10) / 10
+
+        // Calcular consumo estimado de combustible (asumiendo 3.5 km/L promedio para camiones)
+        const fuelConsumptionL = Math.round(distanceKm / 3.5)
+
+        // Obtener nombres de ubicaciones
+        const originName = await reverseGeocode(originLat, originLng)
+        const destinationName = geocodeData.data.address
+
+        setRouteInfo({
+          distance: distanceKm,
+          duration: durationHours,
+          fuelConsumption: fuelConsumptionL,
+          origin: originName || `${originLat.toFixed(4)}, ${originLng.toFixed(4)}`,
+          destination: destinationName,
+        })
+      }
+    } catch (error) {
+      console.error("Error calculating route:", error)
+      toast({
+        title: "Error",
+        description: "No se pudo calcular la información de ruta",
+        variant: "destructive",
+      })
+    } finally {
+      setIsCalculatingRoute(false)
+    }
+  }
+
+  const reverseGeocode = async (lat: number, lng: number): Promise<string | null> => {
+    try {
+      const response = await fetch(`/api/locations`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "reverse-geocode",
+          coordinates: { latitude: lat, longitude: lng },
+        }),
+      })
+
+      const data = await response.json()
+      return data.success ? data.data.address : null
+    } catch (error) {
+      console.error("Error reverse geocoding:", error)
+      return null
+    }
+  }
+
   const getCurrentLocation = () => {
     if (!navigator.geolocation) {
       toast({
@@ -127,6 +221,11 @@ export function DispatchForm({ trucks, drivers, customers }: DispatchFormProps) 
           title: "Ubicación obtenida",
           description: `Coordenadas: ${gpsString}`,
         })
+
+        // Calcular ruta si ya hay dirección
+        if (formData.address) {
+          calculateRoute(gpsString, formData.address)
+        }
       },
       (error) => {
         setIsGettingLocation(false)
@@ -198,15 +297,29 @@ export function DispatchForm({ trucks, drivers, customers }: DispatchFormProps) 
     setIsSubmitting(true)
 
     try {
+      const submitData = {
+        truckId: formData.truckId,
+        driverId: formData.driverId,
+        customerId: formData.customerId,
+        fuelType: formData.fuelType,
+        customFuelName: formData.customFuelName || null,
+        quantity: formData.quantity,
+        address: formData.address, // This will be used as deliveryAddress
+        locationGPS: useGPS ? formData.locationGPS || null : null,
+        locationManual: !useGPS ? formData.locationManual || null : null,
+        scheduledDate: formData.scheduledDate.toISOString(),
+        priority: formData.priority,
+        notes: formData.notes || null,
+      }
+
+      console.log("Submitting dispatch data:", submitData)
+
       const response = await fetch("/api/dispatches", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          ...formData,
-          scheduledDate: formData.scheduledDate.toISOString(),
-        }),
+        body: JSON.stringify(submitData),
       })
 
       const data = await response.json()
@@ -251,6 +364,7 @@ export function DispatchForm({ trucks, drivers, customers }: DispatchFormProps) 
     })
     setErrors({})
     setSelectedTruck(null)
+    setRouteInfo(null)
     // Re-fetch the next dispatch number after reset
     getNextDispatchNumber().then(setNextDispatchNumber)
   }
@@ -274,6 +388,21 @@ export function DispatchForm({ trucks, drivers, customers }: DispatchFormProps) 
       isOverCapacity: currentLoad > totalCapacity,
     }
   }
+
+  // Recalcular ruta cuando cambien las coordenadas GPS o la dirección
+  useEffect(() => {
+  const { locationGPS, address } = formData
+
+  if (useGPS && typeof locationGPS === 'string' && typeof address === 'string') {
+    const timeoutId = setTimeout(() => {
+      calculateRoute(locationGPS, address)
+    }, 1000)
+
+    return () => clearTimeout(timeoutId)
+  } else {
+    setRouteInfo(null)
+  }
+}, [formData.locationGPS, formData.address, useGPS])
 
   return (
     <div className="space-y-6">
@@ -633,6 +762,61 @@ export function DispatchForm({ trucks, drivers, customers }: DispatchFormProps) 
             </div>
           </CardContent>
         </Card>
+
+        {/* Información de Ruta */}
+        {routeInfo && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MapPin className="h-5 w-5" />
+                Información de Ruta
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <div className="text-sm font-medium text-gray-600">Distancia</div>
+                  <div className="text-2xl font-bold text-blue-600">{routeInfo.distance} km</div>
+                  <div className="text-xs text-gray-500">Distancia total</div>
+                </div>
+                <div className="space-y-2">
+                  <div className="text-sm font-medium text-gray-600">Tiempo Estimado</div>
+                  <div className="text-2xl font-bold text-green-600">{routeInfo.duration} hrs</div>
+                  <div className="text-xs text-gray-500">Tiempo de viaje</div>
+                </div>
+                <div className="space-y-2">
+                  <div className="text-sm font-medium text-gray-600">Consumo Estimado</div>
+                  <div className="text-2xl font-bold text-orange-600">{routeInfo.fuelConsumption} L</div>
+                  <div className="text-xs text-gray-500">Combustible necesario</div>
+                </div>
+              </div>
+
+              <Separator className="my-4" />
+
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                  <div className="text-sm">
+                    <span className="font-medium">Punto de Origen:</span> {routeInfo.origin}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                  <div className="text-sm">
+                    <span className="font-medium">Punto de Descarga:</span> {routeInfo.destination}
+                  </div>
+                </div>
+              </div>
+
+              {isCalculatingRoute && (
+                <div className="flex items-center gap-2 mt-4 text-sm text-gray-600">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                  Calculando información de ruta...
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Estado y Programación */}
         <Card>

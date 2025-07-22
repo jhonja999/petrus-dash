@@ -45,7 +45,7 @@ interface DispatchFormData {
   deliveryAddress: string
   deliveryLatitude?: number
   deliveryLongitude?: number
-  locationGPS?: { latitude: number; longitude: number }
+  locationGPS?: { latitude: number; longitude: number } // This will be converted to string for API
   locationManual?: boolean
   clientName: string
   clientRuc: string
@@ -216,17 +216,20 @@ export default function NewDispatchPage() {
       setDeliveryLocationData(location)
       updateFormData("deliveryAddress", location.address)
 
+      // The locationGPS field in formData is an object, but we'll convert it to a string for the API call
       if (location.latitude && location.longitude) {
-        updateFormData("deliveryLatitude", location.latitude)
-        updateFormData("deliveryLongitude", location.longitude)
         updateFormData("locationGPS", {
           latitude: location.latitude,
           longitude: location.longitude,
         })
+      } else {
+        updateFormData("locationGPS", undefined)
       }
 
       if (location.method === "GPS_MANUAL") {
         updateFormData("locationManual", true)
+      } else {
+        updateFormData("locationManual", false)
       }
     }
   }
@@ -309,14 +312,13 @@ export default function NewDispatchPage() {
         priority: formData.priority,
         scheduledDate: new Date(`${formData.scheduledDate}T${formData.scheduledTime || "08:00"}:00`).toISOString(),
         address: deliveryLocationData.address,
+        // Convert locationGPS object to a string "latitude,longitude" for the API
         locationGPS:
           deliveryLocationData.latitude && deliveryLocationData.longitude
-            ? {
-                latitude: deliveryLocationData.latitude,
-                longitude: deliveryLocationData.longitude,
-              }
+            ? `${deliveryLocationData.latitude},${deliveryLocationData.longitude}`
             : undefined,
-        locationManual: deliveryLocationData.method === "SEARCH_SELECTED",
+        locationManual:
+          deliveryLocationData.method === "GPS_MANUAL" || deliveryLocationData.method === "SEARCH_SELECTED",
         notes: formData.observations,
         photos: formData.photos.map((file) => ({
           public_id: file.public_id,
