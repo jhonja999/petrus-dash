@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
-import { Role } from "@prisma/client" // Import Prisma Role enum
+import { Role } from "@prisma/client"
 
 export async function GET(request: Request) {
   try {
@@ -9,23 +9,27 @@ export async function GET(request: Request) {
     const state = searchParams.get("state")
     const search = searchParams.get("search")
 
+    console.log("🔍 Users API called with params:", { role, state, search })
+
     const whereClause: any = {}
 
     if (role) {
       const upperCaseRole = (role as string).toUpperCase()
+      console.log("🎯 Filtering by role:", upperCaseRole)
+
       // Ensure the role from query is a valid enum value
       const validRoles = Object.values(Role)
       if (validRoles.includes(upperCaseRole as Role)) {
         whereClause.role = upperCaseRole as Role
       } else {
-        console.warn(`Invalid role query parameter: ${role}`)
-        // Optionally, return an error or ignore the invalid filter
+        console.warn(`❌ Invalid role query parameter: ${role}`)
         return NextResponse.json({ error: "Invalid role filter" }, { status: 400 })
       }
     }
 
     if (state) {
       whereClause.state = state
+      console.log("🎯 Filtering by state:", state)
     }
 
     if (search) {
@@ -37,6 +41,8 @@ export async function GET(request: Request) {
       ]
     }
 
+    console.log("📋 Final where clause:", JSON.stringify(whereClause, null, 2))
+
     const users = await prisma.user.findMany({
       where: whereClause,
       select: {
@@ -47,12 +53,21 @@ export async function GET(request: Request) {
         dni: true,
         role: true,
         state: true,
+        createdAt: true,
+        updatedAt: true,
       },
+      orderBy: [{ name: "asc" }, { lastname: "asc" }],
     })
+
+    console.log(`✅ Found ${users.length} users matching criteria`)
+    console.log(
+      "👥 Users found:",
+      users.map((u) => ({ id: u.id, name: `${u.name} ${u.lastname}`, role: u.role, state: u.state })),
+    )
 
     return NextResponse.json(users)
   } catch (error) {
-    console.error("Error fetching users:", error)
+    console.error("❌ Error fetching users:", error)
     return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 })
   }
 }
@@ -86,15 +101,17 @@ export async function POST(request: Request) {
         lastname,
         email,
         dni,
-        role: finalRole, // Use the validated and uppercased role
+        role: finalRole,
         password, // In a real app, hash this password!
         state,
       },
     })
 
+    console.log("✅ New user created:", { id: newUser.id, name: newUser.name, role: newUser.role })
+
     return NextResponse.json(newUser, { status: 201 })
   } catch (error) {
-    console.error("Error creating user:", error)
+    console.error("❌ Error creating user:", error)
     return NextResponse.json({ error: "Failed to create user" }, { status: 500 })
   }
 }

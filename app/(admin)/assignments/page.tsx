@@ -21,6 +21,7 @@ export default function AssignmentsPage() {
   const trucksData = useTruckState()
   const [mounted, setMounted] = useState(false)
   const [drivers, setDrivers] = useState<User[]>([])
+  const [driversLoading, setDriversLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
@@ -46,29 +47,46 @@ export default function AssignmentsPage() {
     if (!mounted) return
 
     const fetchDrivers = async () => {
+      setDriversLoading(true)
+      console.log("🔄 Fetching drivers for assignments page...")
+
       try {
-        // ✅ FIX: Cambiar el endpoint para obtener conductores
+        // First try to get OPERADOR users specifically
         const response = await axios.get("/api/users", {
           params: { role: "OPERADOR" },
         })
-        setDrivers(response.data as User[])
-      } catch (error) {
-        console.error("Error al obtener conductores:", error)
-        // ✅ FIX: Fallback si falla la petición
-        try {
-          // Intentar obtener todos los usuarios y filtrar por rol
+
+        console.log("📋 Drivers API response:", response.data)
+
+        if (Array.isArray(response.data) && response.data.length > 0) {
+          setDrivers(response.data)
+          console.log("✅ Successfully loaded drivers:", response.data.length)
+        } else {
+          console.log("⚠️ No OPERADOR users found, trying fallback...")
+
+          // Fallback: get all users and filter by role
           const allUsersResponse = await axios.get("/api/users")
           const allUsers = allUsersResponse.data as User[]
-          const conductores = Array.isArray(allUsers) ? allUsers.filter((user) => user.role === "OPERADOR") : []
-          setDrivers(conductores)
-        } catch (fallbackError) {
-          console.error("Error en fallback para obtener conductores:", fallbackError)
-          setDrivers([])
+          const operadores = Array.isArray(allUsers) ? allUsers.filter((user) => user.role === "OPERADOR") : []
+
+          console.log("📋 Fallback - All users:", allUsers.length, "Operadores found:", operadores.length)
+          setDrivers(operadores)
         }
+      } catch (error) {
+        console.error("❌ Error fetching drivers:", error)
+        setDrivers([])
+        toast({
+          title: "Error",
+          description: "Error al cargar la lista de conductores",
+          variant: "destructive",
+        })
+      } finally {
+        setDriversLoading(false)
       }
     }
+
     fetchDrivers()
-  }, [mounted])
+  }, [mounted, toast])
 
   // Add this useEffect after the existing ones
   useEffect(() => {
@@ -106,6 +124,12 @@ export default function AssignmentsPage() {
       // Then refresh both trucks and assignments data
       await Promise.all([refreshTrucks(), refreshAssignments()])
 
+      // Also refresh drivers
+      const driversResponse = await axios.get("/api/users", {
+        params: { role: "OPERADOR" },
+      })
+      setDrivers(driversResponse.data)
+
       toast({
         title: "Estados actualizados",
         description: statusResponse.data.message,
@@ -135,7 +159,7 @@ export default function AssignmentsPage() {
     )
   }
 
-  if (isLoading || assignmentsLoading) {
+  if (isLoading || assignmentsLoading || driversLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
