@@ -279,6 +279,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Todos los campos son requeridos" }, { status: 400 })
     }
 
+    // Validate fuel type
+    const validFuelTypes = [
+      "DIESEL_B5",
+      "DIESEL_B500",
+      "GASOLINA_PREMIUM_95",
+      "GASOLINA_REGULAR_90",
+      "GASOHOL_84",
+      "GASOHOL_90",
+      "GASOHOL_95",
+      "SOLVENTE",
+      "GASOL",
+      "PERSONALIZADO",
+    ]
+
+    if (!validFuelTypes.includes(fuelType)) {
+      return NextResponse.json({ error: "Tipo de combustible inválido" }, { status: 400 })
+    }
+
     // Clients are optional for initial assignment creation
     const clientsArray = clients || []
 

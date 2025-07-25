@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate typefuel against FuelType enum
+    // Updated fuel type validation to match the current enum
     const validFuelTypes = [
       "DIESEL_B5",
       "DIESEL_B500",
@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
       "GASOL",
       "PERSONALIZADO",
     ]
+
     if (!validFuelTypes.includes(typefuel)) {
       return NextResponse.json({ error: "Tipo de combustible inválido" }, { status: 400 })
     }

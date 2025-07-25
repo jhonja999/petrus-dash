@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Truck, User, AlertCircle, Plus, Loader2 } from "lucide-react"
+import { Truck, User, AlertCircle, Plus, Loader2, Info } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import axios from "axios"
 import type { FuelType } from "@/types/globals"
@@ -77,33 +77,38 @@ export function AssignmentForm({ trucks, drivers, onSuccess, refreshing }: Assig
 
   const [errors, setErrors] = useState<Record<string, string>>({})
 
+  // When truck is selected, set default fuel type from truck
+  useEffect(() => {
+    if (formData.truckId) {
+      const truck = trucks.find((t) => t.id === Number(formData.truckId))
+      if (truck) {
+        setSelectedTruck(truck)
+        // Set default fuel type from truck if not already set
+        if (!formData.fuelType) {
+          setFormData((prev) => ({ ...prev, fuelType: truck.typefuel }))
+        }
+      }
+    } else {
+      setSelectedTruck(null)
+    }
+  }, [formData.truckId, trucks])
+
+  // Filter available trucks based on selected fuel type
   useEffect(() => {
     if (formData.fuelType && formData.fuelType !== "PERSONALIZADO") {
-      const filtered = trucks.filter((truck) => truck.typefuel === formData.fuelType && truck.state === "Activo")
+      // Show all active trucks, but highlight compatible ones
+      const filtered = trucks.filter((truck) => truck.state === "Activo")
       setAvailableTrucks(filtered)
-
-      // Reset truck selection if current truck doesn't match fuel type
-      if (selectedTruck && selectedTruck.typefuel !== formData.fuelType) {
-        setSelectedTruck(null)
-        setFormData((prev) => ({ ...prev, truckId: "" }))
-      }
     } else if (formData.fuelType === "PERSONALIZADO") {
       // Para combustible personalizado, mostrar todos los camiones activos
       const filtered = trucks.filter((truck) => truck.state === "Activo")
       setAvailableTrucks(filtered)
     } else {
-      setAvailableTrucks([])
+      // Show all active trucks when no fuel type is selected
+      const filtered = trucks.filter((truck) => truck.state === "Activo")
+      setAvailableTrucks(filtered)
     }
   }, [formData.fuelType, trucks])
-
-  useEffect(() => {
-    if (formData.truckId) {
-      const truck = trucks.find((t) => t.id === Number(formData.truckId))
-      setSelectedTruck(truck || null)
-    } else {
-      setSelectedTruck(null)
-    }
-  }, [formData.truckId, trucks])
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
@@ -146,6 +151,8 @@ export function AssignmentForm({ trucks, drivers, onSuccess, refreshing }: Assig
         fuelType: formData.fuelType === "PERSONALIZADO" ? formData.customFuelType : formData.fuelType,
         notes: formData.notes || null,
       }
+
+      console.log("Sending assignment payload:", payload)
 
       await axios.post("/api/assignments", payload)
 
@@ -205,69 +212,13 @@ export function AssignmentForm({ trucks, drivers, onSuccess, refreshing }: Assig
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Fuel Type Selection */}
-          <div className="space-y-2">
-            <Label htmlFor="fuelType">Tipo de Combustible *</Label>
-            <Select value={formData.fuelType} onValueChange={(value: FuelType) => handleInputChange("fuelType", value)}>
-              <SelectTrigger className={errors.fuelType ? "border-red-500" : ""}>
-                <SelectValue placeholder="Selecciona el tipo de combustible" />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(fuelTypeLabels).map(([key, label]) => (
-                  <SelectItem key={key} value={key}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {errors.fuelType && (
-              <p className="text-sm text-red-500 flex items-center gap-1">
-                <AlertCircle className="h-3 w-3" />
-                {errors.fuelType}
-              </p>
-            )}
-          </div>
-
-          {/* Custom Fuel Type Input */}
-          {formData.fuelType === "PERSONALIZADO" && (
-            <div className="space-y-2">
-              <Label htmlFor="customFuelType">Especificar Combustible Personalizado *</Label>
-              <Input
-                id="customFuelType"
-                value={formData.customFuelType}
-                onChange={(e) => handleInputChange("customFuelType", e.target.value)}
-                placeholder="Ej: Diésel Especial, Combustible Industrial, etc."
-                className={errors.customFuelType ? "border-red-500" : ""}
-              />
-              {errors.customFuelType && (
-                <p className="text-sm text-red-500 flex items-center gap-1">
-                  <AlertCircle className="h-3 w-3" />
-                  {errors.customFuelType}
-                </p>
-              )}
-              <p className="text-xs text-gray-500">
-                Especifica el tipo exacto de combustible personalizado que se va a cargar
-              </p>
-            </div>
-          )}
-
-          {/* Truck Selection */}
+          {/* Truck Selection First */}
           <div className="space-y-2">
             <Label htmlFor="truckId">Camión *</Label>
-            <Select
-              value={formData.truckId}
-              onValueChange={(value) => handleInputChange("truckId", value)}
-              disabled={!formData.fuelType}
-            >
+            <Select value={formData.truckId} onValueChange={(value) => handleInputChange("truckId", value)}>
               <SelectTrigger className={errors.truckId ? "border-red-500" : ""}>
                 <SelectValue
-                  placeholder={
-                    !formData.fuelType
-                      ? "Primero selecciona el tipo de combustible"
-                      : availableTrucks.length === 0
-                        ? "No hay camiones disponibles"
-                        : "Selecciona un camión"
-                  }
+                  placeholder={availableTrucks.length === 0 ? "No hay camiones disponibles" : "Selecciona un camión"}
                 />
               </SelectTrigger>
               <SelectContent>
@@ -293,6 +244,72 @@ export function AssignmentForm({ trucks, drivers, onSuccess, refreshing }: Assig
               </p>
             )}
           </div>
+
+          {/* Fuel Type Selection - Auto-populated from truck */}
+          <div className="space-y-2">
+            <Label htmlFor="fuelType">Tipo de Combustible *</Label>
+            <Select value={formData.fuelType} onValueChange={(value: FuelType) => handleInputChange("fuelType", value)}>
+              <SelectTrigger className={errors.fuelType ? "border-red-500" : ""}>
+                <SelectValue placeholder="Selecciona el tipo de combustible" />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(fuelTypeLabels).map(([key, label]) => (
+                  <SelectItem key={key} value={key}>
+                    <div className="flex items-center justify-between w-full">
+                      <span>{label}</span>
+                      {selectedTruck && selectedTruck.typefuel === key && (
+                        <Badge variant="secondary" className="text-xs ml-2">
+                          Predeterminado
+                        </Badge>
+                      )}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.fuelType && (
+              <p className="text-sm text-red-500 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                {errors.fuelType}
+              </p>
+            )}
+            {selectedTruck &&
+              formData.fuelType &&
+              formData.fuelType !== selectedTruck.typefuel &&
+              formData.fuelType !== "PERSONALIZADO" && (
+                <Alert>
+                  <Info className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Nota:</strong> El combustible seleccionado (
+                    {getFuelTypeLabel(formData.fuelType as FuelType)}) es diferente al tipo predeterminado del camión (
+                    {getFuelTypeLabel(selectedTruck.typefuel)}). Esto se actualizará cuando se complete el despacho.
+                  </AlertDescription>
+                </Alert>
+              )}
+          </div>
+
+          {/* Custom Fuel Type Input */}
+          {formData.fuelType === "PERSONALIZADO" && (
+            <div className="space-y-2">
+              <Label htmlFor="customFuelType">Especificar Combustible Personalizado *</Label>
+              <Input
+                id="customFuelType"
+                value={formData.customFuelType}
+                onChange={(e) => handleInputChange("customFuelType", e.target.value)}
+                placeholder="Ej: Diésel Especial, Combustible Industrial, etc."
+                className={errors.customFuelType ? "border-red-500" : ""}
+              />
+              {errors.customFuelType && (
+                <p className="text-sm text-red-500 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {errors.customFuelType}
+                </p>
+              )}
+              <p className="text-xs text-gray-500">
+                Especifica el tipo exacto de combustible personalizado que se va a cargar
+              </p>
+            </div>
+          )}
 
           {/* Truck Details */}
           {selectedTruck && (
