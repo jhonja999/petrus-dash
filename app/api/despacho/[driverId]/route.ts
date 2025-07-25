@@ -1,134 +1,109 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { verifyToken } from "@/lib/jwt"
+import { generateValeNumber } from "@/lib/correlative"
 
-export async function POST(request: Request, context: { params: { driverId: string } }) {
-  const params = await context.params
-  const driverId = params.driverId
-
-  if (!driverId) {
-    return NextResponse.json({ error: "ID del conductor requerido" }, { status: 400 })
-  }
-
+export async function POST(request: NextRequest, { params }: { params: { driverId: string } }) {
   try {
+    const token = request.cookies.get("token")?.value
+    if (!token) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+    }
+
+    const payload = verifyToken(token)
+    if (!payload) {
+      return NextResponse.json({ error: "Token inválido" }, { status: 401 })
+    }
+
+    const driverId = Number.parseInt(params.driverId)
+    if (isNaN(driverId)) {
+      return NextResponse.json({ error: "ID de conductor inválido" }, { status: 400 })
+    }
+
     const body = await request.json()
-    const { assignmentId, customerId, totalDischarged, marcadorInicial } = body
+    const {
+      assignmentId,
+      customerId,
+      totalDischarged,
+      marcadorInicial,
+      marcadorFinal,
+      operatorEmail,
+      kilometraje,
+      ubicacion,
+      observaciones,
+      photoUrls = [],
+    } = body
 
-    // Validaciones básicas
+    // Validate required fields
     if (!assignmentId || !customerId || !totalDischarged) {
-      return NextResponse.json(
-        { error: "Faltan campos requeridos (assignmentId, customerId, totalDischarged)" },
-        { status: 400 },
-      )
+      return NextResponse.json({ error: "Faltan campos requeridos" }, { status: 400 })
     }
 
-    if (isNaN(totalDischarged) || totalDischarged <= 0) {
-      return NextResponse.json({ error: "La cantidad despachada debe ser un número positivo" }, { status: 400 })
-    }
-
-    // Verificar que la asignación existe y pertenece al conductor
-    const assignment = await prisma.assignment.findUnique({
-      where: { id: Number.parseInt(assignmentId) },
+    // Verify assignment exists and belongs to driver
+    const assignment = await prisma.assignment.findFirst({
+      where: {
+        id: assignmentId,
+        driverId: driverId,
+      },
       include: {
         truck: true,
         driver: true,
       },
     })
 
-    if (!assignment || assignment.driverId !== Number.parseInt(driverId)) {
-      return NextResponse.json({ error: "Asignación no encontrada o no coincide con el conductor" }, { status: 404 })
+    if (!assignment) {
+      return NextResponse.json({ error: "Asignación no encontrada o no autorizada" }, { status: 404 })
     }
 
-    // Verificar que hay suficiente combustible
-    if (totalDischarged > Number(assignment.totalRemaining)) {
-      return NextResponse.json(
-        { error: `No hay suficiente combustible. Disponible: ${assignment.totalRemaining} gal` },
-        { status: 400 },
-      )
-    }
-
-    // Verificar que el cliente existe
+    // Verify customer exists
     const customer = await prisma.customer.findUnique({
-      where: { id: Number.parseInt(customerId) },
+      where: { id: customerId },
     })
 
     if (!customer) {
       return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 })
     }
 
-    // Crear el despacho con marcador inicial
-    const newDischarge = await prisma.discharge.create({
-      data: {
-        totalDischarged: Number.parseFloat(totalDischarged),
-        assignmentId: Number.parseInt(assignmentId),
-        customerId: Number.parseInt(customerId),
-        status: "pendiente",
-        marcadorInicial: marcadorInicial ? Number.parseFloat(marcadorInicial) : null,
-        startTime: new Date(),
-      },
-      include: {
-        customer: true,
-        assignment: {
-          include: {
-            truck: true,
-            driver: true,
-          },
-        },
-      },
-    })
+    // Validate discharge amount
+    const dischargeAmount = Number.parseFloat(totalDischarged.toString())
+    const currentRemaining = Number.parseFloat(assignment.totalRemaining.toString())
 
-    // Actualizar el combustible restante en la asignación
-    const updatedAssignment = await prisma.assignment.update({
-      where: { id: Number.parseInt(assignmentId) },
-      data: {
-        totalRemaining: {
-          decrement: Number.parseFloat(totalDischarged),
-        },
-      },
-    })
-
-    // Verificar si la asignación debe marcarse como completada
-    if (Number(updatedAssignment.totalRemaining) <= 0) {
-      await prisma.assignment.update({
-        where: { id: Number.parseInt(assignmentId) },
-        data: {
-          isCompleted: true,
-          completedAt: new Date(),
-        },
-      })
+    if (dischargeAmount <= 0) {
+      return NextResponse.json({ error: "La cantidad descargada debe ser mayor a 0" }, { status: 400 })
     }
 
-    return NextResponse.json(newDischarge, { status: 201 })
-  } catch (error) {
-    console.error("Error al crear el despacho:", error)
-    const errorMessage = error instanceof Error ? error.message : "Error desconocido"
-    return NextResponse.json({ error: "Error interno del servidor", details: errorMessage }, { status: 500 })
-  }
-}
-
-export async function GET(_request: Request, context: { params: { driverId: string } }) {
-  const params = await context.params
-  const driverId = params.driverId
-  console.log(driverId, "id del conductor")
-
-  if (!driverId) {
-    return NextResponse.json({ error: "ID del conductor requerido" }, { status: 400 })
-  }
-
-  try {
-    // Obtener la fecha de hoy
-    const today = new Date()
-    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1)
-
-    const despachos = await prisma.discharge.findMany({
-      where: {
-        assignment: {
-          driverId: Number.parseInt(driverId),
+    if (dischargeAmount > currentRemaining) {
+      return NextResponse.json(
+        {
+          error: "La cantidad descargada no puede ser mayor al combustible disponible",
+          details: `Disponible: ${currentRemaining} gal, Solicitado: ${dischargeAmount} gal`,
         },
-        createdAt: {
-          gte: startOfDay,
-          lt: endOfDay,
-        },
+        { status: 400 },
+      )
+    }
+
+    // Generate correlative vale number
+    const valeNumber = await generateValeNumber()
+
+    // Create discharge with correlative numbering
+    const discharge = await prisma.discharge.create({
+      data: {
+        valeNumber,
+        assignmentId,
+        customerId,
+        totalDischarged: dischargeAmount,
+        status: "finalizado",
+        marcadorInicial: marcadorInicial ? Number.parseFloat(marcadorInicial.toString()) : null,
+        marcadorFinal: marcadorFinal ? Number.parseFloat(marcadorFinal.toString()) : null,
+        cantidadReal: dischargeAmount,
+        operatorEmail: operatorEmail || assignment.driver.email,
+        kilometraje: kilometraje ? Number.parseFloat(kilometraje.toString()) : null,
+        ubicacion,
+        tipoUnidad: "galones",
+        observaciones,
+        photoUrls,
+        startTime: new Date(),
+        endTime: new Date(),
       },
       include: {
         customer: true,
@@ -139,15 +114,35 @@ export async function GET(_request: Request, context: { params: { driverId: stri
           },
         },
       },
-      orderBy: {
-        createdAt: "desc",
+    })
+
+    // Update assignment remaining fuel
+    const newRemaining = currentRemaining - dischargeAmount
+    await prisma.assignment.update({
+      where: { id: assignmentId },
+      data: {
+        totalRemaining: newRemaining,
+        updatedAt: new Date(),
       },
     })
 
-    console.log(despachos, "despachos del día")
-    return NextResponse.json(despachos)
+    // Update truck's last remaining fuel
+    await prisma.truck.update({
+      where: { id: assignment.truckId },
+      data: {
+        lastRemaining: newRemaining,
+        state: newRemaining <= 0 ? "Activo" : "Descarga",
+      },
+    })
+
+    return NextResponse.json({
+      success: true,
+      discharge,
+      valeNumber,
+      message: `Despacho ${valeNumber} creado exitosamente`,
+    })
   } catch (error) {
-    console.error("Error al obtener los despachos:", error)
+    console.error("Error creating discharge:", error)
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }
 }

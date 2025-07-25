@@ -2,26 +2,45 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Info, RefreshCw } from "lucide-react"
+import { Truck, User, AlertCircle, Plus, Loader2 } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 import axios from "axios"
-import type { Truck, User } from "@/types/globals"
+import type { FuelType } from "@/types/globals"
 
-interface AssignmentFormProps {
-  trucks: Truck[]
-  drivers: User[]
-  onSuccess?: () => void
-  refreshing?: boolean
+interface Driver {
+  id: number
+  name: string
+  lastname: string
+  dni: string
+  email: string
+  state: string
 }
 
-const fuelTypeLabels = {
+interface TruckData {
+  id: number
+  placa: string
+  typefuel: FuelType
+  capacitygal: number
+  lastRemaining: number
+  state: string
+}
+
+interface AssignmentFormProps {
+  onSuccess?: () => void
+  onCancel?: () => void
+}
+
+// Properly typed fuel type labels
+const fuelTypeLabels: Record<FuelType, string> = {
   DIESEL_B5: "Diésel B5",
   DIESEL_B500: "Diésel B500",
   GASOLINA_PREMIUM_95: "Gasolina Premium 95",
@@ -34,296 +53,394 @@ const fuelTypeLabels = {
   PERSONALIZADO: "Personalizado",
 }
 
-export function AssignmentForm({ trucks, drivers, onSuccess, refreshing = false }: AssignmentFormProps) {
+// Helper function to safely get fuel type label
+const getFuelTypeLabel = (fuelType: FuelType): string => {
+  return fuelTypeLabels[fuelType] || fuelType
+}
+
+export function AssignmentForm({ onSuccess, onCancel }: AssignmentFormProps) {
+  const { toast } = useToast()
   const [loading, setLoading] = useState(false)
-  const [localTrucks, setLocalTrucks] = useState<Truck[]>(trucks)
-  const [manualRefreshing, setManualRefreshing] = useState(false)
-  const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const [drivers, setDrivers] = useState<Driver[]>([])
+  const [trucks, setTrucks] = useState<TruckData[]>([])
+  const [availableTrucks, setAvailableTrucks] = useState<TruckData[]>([])
+  const [selectedTruck, setSelectedTruck] = useState<TruckData | null>(null)
+
   const [formData, setFormData] = useState({
     truckId: "",
     driverId: "",
     totalLoaded: "",
-    fuelType: "",
+    fuelType: "" as FuelType | "",
     notes: "",
   })
 
-  // Update local trucks when props change
-  useEffect(() => {
-    setLocalTrucks(trucks)
-  }, [trucks])
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
-  // Cleanup on unmount
   useEffect(() => {
-    return () => {
-      if (refreshTimeoutRef.current) {
-        clearTimeout(refreshTimeoutRef.current)
-      }
-    }
+    fetchDrivers()
+    fetchTrucks()
   }, [])
 
-  const selectedTruck = localTrucks.find((t) => t.id === Number.parseInt(formData.truckId))
-  const previousRemaining = selectedTruck?.lastRemaining || 0
-  const totalLoaded = Number.parseFloat(formData.totalLoaded) || 0
-  const totalAvailable = Number(previousRemaining) + totalLoaded
+  useEffect(() => {
+    if (formData.fuelType) {
+      const filtered = trucks.filter((truck) => truck.typefuel === formData.fuelType && truck.state === "Activo")
+      setAvailableTrucks(filtered)
+
+      // Reset truck selection if current truck doesn't match fuel type
+      if (selectedTruck && selectedTruck.typefuel !== formData.fuelType) {
+        setSelectedTruck(null)
+        setFormData((prev) => ({ ...prev, truckId: "" }))
+      }
+    } else {
+      setAvailableTrucks([])
+    }
+  }, [formData.fuelType, trucks])
+
+  useEffect(() => {
+    if (formData.truckId) {
+      const truck = trucks.find((t) => t.id === Number(formData.truckId))
+      setSelectedTruck(truck || null)
+    } else {
+      setSelectedTruck(null)
+    }
+  }, [formData.truckId, trucks])
+
+  const fetchDrivers = async () => {
+    try {
+      const response = await axios.get("/api/users?role=Operador&state=Activo")
+      setDrivers(response.data)
+    } catch (error) {
+      console.error("Error fetching drivers:", error)
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los conductores",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const fetchTrucks = async () => {
+    try {
+      const response = await axios.get("/api/trucks")
+      setTrucks(response.data)
+    } catch (error) {
+      console.error("Error fetching trucks:", error)
+      toast({
+        title: "Error",
+        description: "No se pudieron cargar los camiones",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {}
+
+    if (!formData.truckId) newErrors.truckId = "Selecciona un camión"
+    if (!formData.driverId) newErrors.driverId = "Selecciona un conductor"
+    if (!formData.totalLoaded) newErrors.totalLoaded = "Ingresa la cantidad cargada"
+    if (!formData.fuelType) newErrors.fuelType = "Selecciona el tipo de combustible"
+
+    const totalLoaded = Number.parseFloat(formData.totalLoaded)
+    if (totalLoaded <= 0) {
+      newErrors.totalLoaded = "La cantidad debe ser mayor a 0"
+    }
+
+    if (selectedTruck && totalLoaded > selectedTruck.capacitygal) {
+      newErrors.totalLoaded = `La cantidad no puede exceder la capacidad del camión (${selectedTruck.capacitygal} gal)`
+    }
+
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (!validateForm()) return
+
     setLoading(true)
 
     try {
-      // Check if selected truck is active
-      if (selectedTruck && selectedTruck.state !== "Activo") {
-        alert("El camión seleccionado no está en estado Activo y no puede ser asignado.")
-        setLoading(false)
-        return
+      const payload = {
+        truckId: Number(formData.truckId),
+        driverId: Number(formData.driverId),
+        totalLoaded: Number.parseFloat(formData.totalLoaded),
+        fuelType: formData.fuelType,
+        notes: formData.notes || null,
       }
 
-      await axios.post("/api/assignments", {
-        truckId: Number.parseInt(formData.truckId),
-        driverId: Number.parseInt(formData.driverId),
-        totalLoaded: totalLoaded,
-        fuelType: selectedTruck?.typefuel || formData.fuelType,
-        clients: [], // Add empty clients array for initial assignment
-        notes: formData.notes || undefined,
+      await axios.post("/api/assignments", payload)
+
+      toast({
+        title: "Asignación creada",
+        description: "La asignación se ha creado exitosamente",
       })
-
-      // Update truck state to 'Asignado' after successful assignment creation
-      if (selectedTruck) {
-        await axios.put(`/api/trucks/${selectedTruck.id}`, {
-          state: "Asignado",
-        })
-        console.log(`🚛 Truck ${selectedTruck.placa} status updated to Asignado`)
-
-        // Update local state immediately
-        setLocalTrucks((prev) =>
-          prev.map((truck) => (truck.id === selectedTruck.id ? { ...truck, state: "Asignado" as any } : truck)),
-        )
-      }
 
       // Reset form
       setFormData({
         truckId: "",
         driverId: "",
         totalLoaded: "",
-        fuelType: "",
+        fuelType: "" as FuelType | "",
         notes: "",
       })
+      setErrors({})
+      setSelectedTruck(null)
 
       onSuccess?.()
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating assignment:", error)
-      alert("Error al crear la asignación")
+
+      let errorMessage = "Error al crear la asignación"
+      if (error.response?.data?.error) {
+        errorMessage = error.response.data.error
+      }
+
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
   }
 
-  const handleRefreshTrucks = async () => {
-    if (manualRefreshing) return
-
-    setManualRefreshing(true)
-    console.log("👤 Manual truck refresh initiated")
-
-    try {
-      const response = await axios.get("/api/trucks")
-      setLocalTrucks(response.data)
-      console.log("✅ Trucks refreshed manually")
-    } catch (error) {
-      console.error("Error refreshing trucks:", error)
-    } finally {
-      // Reset refresh state after delay
-      refreshTimeoutRef.current = setTimeout(() => {
-        setManualRefreshing(false)
-      }, 2000)
+  const handleInputChange = (field: string, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }))
+    if (errors[field]) {
+      setErrors((prev) => ({ ...prev, [field]: "" }))
     }
   }
 
-  // Filter only active trucks for assignment
-  const availableTrucks = localTrucks.filter((truck) => truck.state === "Activo")
-  // Corrected role comparison: "Operador" instead of "conductor"
-  const availableDrivers = drivers.filter((driver) => driver.role === "Operador" && driver.state === "Activo")
-
-  const isRefreshDisabled = refreshing || manualRefreshing
+  const selectedDriver = drivers.find((d) => d.id === Number(formData.driverId))
 
   return (
-    <Card>
+    <Card className="w-full max-w-2xl mx-auto">
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <div className="flex-1">
-            <CardTitle className="text-lg">Nueva Asignación Diaria</CardTitle>
-            <CardDescription className="text-sm">Asignar camión y combustible a un conductor</CardDescription>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleRefreshTrucks}
-            disabled={isRefreshDisabled}
-            className="flex items-center gap-1 hover:bg-gray-100 transition-all duration-200 px-2 py-1"
-          >
-            <RefreshCw className={`h-3 w-3 ${isRefreshDisabled ? "animate-spin" : ""}`} />
-            <span className="text-xs">{isRefreshDisabled ? "..." : "Actualizar"}</span>
-          </Button>
-        </div>
+        <CardTitle className="flex items-center gap-2">
+          <Plus className="h-5 w-5 text-blue-600" />
+          Nueva Asignación
+        </CardTitle>
+        <CardDescription>Asigna un camión y conductor para una nueva carga de combustible</CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="truck">Camión</Label>
-              <Select
-                value={formData.truckId}
-                onValueChange={(value) => setFormData((prev) => ({ ...prev, truckId: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar camión" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableTrucks.length === 0 ? (
-                    <SelectItem value="no-trucks" disabled>
-                      No hay camiones activos disponibles
-                    </SelectItem>
-                  ) : (
-                    availableTrucks.map((truck) => (
-                      <SelectItem key={truck.id} value={truck.id.toString()}>
-                        {truck.placa} - {fuelTypeLabels[truck.typefuel]} (Cap: {truck.capacitygal.toString()})
-                        {Number(truck.lastRemaining) > 0 && (
-                          <span className="text-blue-600 ml-2">(Remanente: {truck.lastRemaining.toString()})</span>
-                        )}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-              {availableTrucks.length === 0 && (
-                <div className="space-y-2">
-                  <p className="text-sm text-amber-600 bg-amber-50 p-2 rounded border">
-                    No hay camiones activos disponibles
-                  </p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRefreshTrucks}
-                    className="w-full flex items-center gap-2 hover:bg-gray-50 transition-colors bg-transparent"
-                    disabled={isRefreshDisabled}
-                  >
-                    <RefreshCw className={`h-4 w-4 ${isRefreshDisabled ? "animate-spin" : ""}`} />
-                    {isRefreshDisabled ? "Actualizando..." : "Actualizar Lista"}
-                  </Button>
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="driver">Conductor</Label>
-              <Select
-                value={formData.driverId}
-                onValueChange={(value) => setFormData((prev) => ({ ...prev, driverId: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar conductor" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableDrivers.map((driver) => (
-                    <SelectItem key={driver.id} value={driver.id.toString()}>
-                      {driver.name} {driver.lastname} - {driver.dni}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Fuel Type Selection */}
+          <div className="space-y-2">
+            <Label htmlFor="fuelType">Tipo de Combustible *</Label>
+            <Select value={formData.fuelType} onValueChange={(value: FuelType) => handleInputChange("fuelType", value)}>
+              <SelectTrigger className={errors.fuelType ? "border-red-500" : ""}>
+                <SelectValue placeholder="Selecciona el tipo de combustible" />
+              </SelectTrigger>
+              <SelectContent>
+                {Object.entries(fuelTypeLabels).map(([key, label]) => (
+                  <SelectItem key={key} value={key}>
+                    {label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.fuelType && (
+              <p className="text-sm text-red-500 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                {errors.fuelType}
+              </p>
+            )}
           </div>
 
-          {selectedTruck && Number(previousRemaining) > 0 && (
+          {/* Truck Selection */}
+          <div className="space-y-2">
+            <Label htmlFor="truckId">Camión *</Label>
+            <Select
+              value={formData.truckId}
+              onValueChange={(value) => handleInputChange("truckId", value)}
+              disabled={!formData.fuelType}
+            >
+              <SelectTrigger className={errors.truckId ? "border-red-500" : ""}>
+                <SelectValue
+                  placeholder={
+                    !formData.fuelType
+                      ? "Primero selecciona el tipo de combustible"
+                      : availableTrucks.length === 0
+                        ? "No hay camiones disponibles para este combustible"
+                        : "Selecciona un camión"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {availableTrucks.map((truck) => (
+                  <SelectItem key={truck.id} value={truck.id.toString()}>
+                    <div className="flex items-center justify-between w-full">
+                      <span className="font-medium">{truck.placa}</span>
+                      <div className="flex items-center gap-2 ml-4">
+                        <Badge variant="outline" className="text-xs">
+                          {getFuelTypeLabel(truck.typefuel)}
+                        </Badge>
+                        <span className="text-xs text-gray-500">{truck.capacitygal} gal</span>
+                      </div>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.truckId && (
+              <p className="text-sm text-red-500 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                {errors.truckId}
+              </p>
+            )}
+          </div>
+
+          {/* Truck Details */}
+          {selectedTruck && (
             <Alert>
-              <Info className="h-4 w-4" />
+              <Truck className="h-4 w-4" />
               <AlertDescription>
-                Este camión tiene <strong>{previousRemaining.toString()} galones</strong> remanentes del día anterior.
-                Se sumarán automáticamente a la nueva carga.
+                <div className="space-y-1">
+                  <p>
+                    <strong>Camión seleccionado:</strong> {selectedTruck.placa}
+                  </p>
+                  <p>
+                    <strong>Capacidad:</strong> {selectedTruck.capacitygal} galones
+                  </p>
+                  <p>
+                    <strong>Combustible restante:</strong> {selectedTruck.lastRemaining} galones
+                  </p>
+                  <p>
+                    <strong>Tipo de combustible:</strong> {getFuelTypeLabel(selectedTruck.typefuel)}
+                  </p>
+                </div>
               </AlertDescription>
             </Alert>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="totalLoaded">Combustible a Cargar (Galones)</Label>
-              <Input
-                id="totalLoaded"
-                type="number"
-                step="0.01"
-                max="15000"
-                value={formData.totalLoaded}
-                onChange={(e) => {
-                  const value = Number.parseFloat(e.target.value) || 0
-                  if (value <= 15000) {
-                    setFormData((prev) => ({ ...prev, totalLoaded: e.target.value }))
-                  }
-                }}
-                placeholder="0.00 (Máximo: 15,000)"
-                required
-              />
-              {selectedTruck && totalLoaded > 0 && (
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span>Capacidad utilizada:</span>
-                    <span>
-                      {((totalAvailable / Number.parseFloat(selectedTruck.capacitygal.toString())) * 100).toFixed(1)}%
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                      style={{
-                        width: `${Math.min((totalAvailable / Number.parseFloat(selectedTruck.capacitygal.toString())) * 100, 100)}%`,
-                      }}
-                    ></div>
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    {totalAvailable.toFixed(2)} / {selectedTruck.capacitygal.toString()} galones
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="fuelType">Tipo de Combustible</Label>
-              <Input
-                value={selectedTruck ? fuelTypeLabels[selectedTruck.typefuel] : ""}
-                disabled
-                placeholder="Seleccione un camión primero"
-              />
-            </div>
+          {/* Driver Selection */}
+          <div className="space-y-2">
+            <Label htmlFor="driverId">Conductor *</Label>
+            <Select value={formData.driverId} onValueChange={(value) => handleInputChange("driverId", value)}>
+              <SelectTrigger className={errors.driverId ? "border-red-500" : ""}>
+                <SelectValue placeholder="Selecciona un conductor" />
+              </SelectTrigger>
+              <SelectContent>
+                {drivers.map((driver) => (
+                  <SelectItem key={driver.id} value={driver.id.toString()}>
+                    <div className="flex items-center justify-between w-full">
+                      <span className="font-medium">
+                        {driver.name} {driver.lastname}
+                      </span>
+                      <div className="flex items-center gap-2 ml-4">
+                        <Badge variant="outline" className="text-xs">
+                          DNI: {driver.dni}
+                        </Badge>
+                        <Badge
+                          className={`text-xs ${
+                            driver.state === "Activo" ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
+                          }`}
+                        >
+                          {driver.state}
+                        </Badge>
+                      </div>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.driverId && (
+              <p className="text-sm text-red-500 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                {errors.driverId}
+              </p>
+            )}
           </div>
 
+          {/* Driver Details */}
+          {selectedDriver && (
+            <Alert>
+              <User className="h-4 w-4" />
+              <AlertDescription>
+                <div className="space-y-1">
+                  <p>
+                    <strong>Conductor seleccionado:</strong> {selectedDriver.name} {selectedDriver.lastname}
+                  </p>
+                  <p>
+                    <strong>DNI:</strong> {selectedDriver.dni}
+                  </p>
+                  <p>
+                    <strong>Email:</strong> {selectedDriver.email}
+                  </p>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* Total Loaded */}
+          <div className="space-y-2">
+            <Label htmlFor="totalLoaded">Cantidad Cargada (Galones) *</Label>
+            <Input
+              id="totalLoaded"
+              type="number"
+              step="0.01"
+              min="0"
+              max={selectedTruck?.capacitygal || undefined}
+              value={formData.totalLoaded}
+              onChange={(e) => handleInputChange("totalLoaded", e.target.value)}
+              placeholder="Ej: 2500.00"
+              className={errors.totalLoaded ? "border-red-500" : ""}
+            />
+            {selectedTruck && (
+              <p className="text-xs text-gray-500">Capacidad máxima: {selectedTruck.capacitygal} galones</p>
+            )}
+            {errors.totalLoaded && (
+              <p className="text-sm text-red-500 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                {errors.totalLoaded}
+              </p>
+            )}
+          </div>
+
+          {/* Notes */}
           <div className="space-y-2">
             <Label htmlFor="notes">Notas (Opcional)</Label>
             <Textarea
               id="notes"
               value={formData.notes}
-              onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
-              placeholder="Instrucciones especiales, rutas, etc."
+              onChange={(e) => handleInputChange("notes", e.target.value)}
+              placeholder="Instrucciones especiales, destino, observaciones..."
               rows={3}
             />
           </div>
 
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={
-              loading ||
-              !formData.truckId ||
-              !formData.driverId ||
-              !formData.totalLoaded ||
-              availableTrucks.length === 0 ||
-              refreshing
-            }
-          >
-            {loading ? "Creando Asignación..." : "Crear Asignación"}
-          </Button>
+          {/* Form Actions */}
+          <div className="flex gap-3 pt-4">
+            {onCancel && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onCancel}
+                className="flex-1 bg-transparent"
+                disabled={loading}
+              >
+                Cancelar
+              </Button>
+            )}
+            <Button type="submit" disabled={loading} className="flex-1">
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Creando...
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Crear Asignación
+                </>
+              )}
+            </Button>
+          </div>
         </form>
       </CardContent>
     </Card>
   )
 }
-
-export default AssignmentForm

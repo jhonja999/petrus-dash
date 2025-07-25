@@ -33,10 +33,6 @@ enum TruckState {
 enum FuelType {
   DIESEL_B5
   DIESEL_B500
-  GASOLINA_90
-  GASOLINA_95
-  GLP
-  ELECTRICA
   GASOLINA_PREMIUM_95
   GASOLINA_REGULAR_90
   GASOHOL_84
@@ -125,16 +121,25 @@ model Assignment {
 
 model Discharge {
   id              Int             @id @default(autoincrement())
+  valeNumber      String          @unique // PE-000001-2025 format
   assignmentId    Int
   customerId      Int
   totalDischarged Decimal
-  status          DischargeStatus @default(pendiente) // Cambio a enum
+  status          DischargeStatus @default(pendiente)
   marcadorInicial Decimal?
   marcadorFinal   Decimal?
   cantidadReal    Decimal?
-  startTime       DateTime?       // Nueva columna para hora de inicio
-  endTime         DateTime?       // Nueva columna para hora de finalización
-
+  startTime       DateTime?
+  endTime         DateTime?
+  
+  // Additional fields for complete dispatch system
+  operatorEmail   String?         // Email del operario
+  kilometraje     Decimal?        // Kilometraje del vehículo
+  ubicacion       String?         // Ubicación del despacho
+  tipoUnidad      String?         // Tipo de unidad (galones, litros, etc.)
+  observaciones   String?         // Observaciones adicionales
+  photoUrls       String[]        // URLs de fotos adjuntas
+  
   assignment Assignment @relation(fields: [assignmentId], references: [id])
   customer   Customer   @relation(fields: [customerId], references: [id])
 
@@ -146,6 +151,7 @@ model Discharge {
   @@index([customerId])
   @@index([status])
   @@index([createdAt])
+  @@index([valeNumber])
 }
 
 model ClientAssignment {

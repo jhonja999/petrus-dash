@@ -61,15 +61,25 @@ export interface Assignment {
 
 export interface Discharge {
   id: number
+  valeNumber: string // PE-000001-2025 format
   assignmentId: number
   customerId: number
   totalDischarged: Decimal
-  status: DischargeStatus // Cambiado a enum: "pendiente" | "en_proceso" | "finalizado" | "cancelado"
+  status: DischargeStatus // "pendiente" | "en_proceso" | "finalizado" | "cancelado"
   marcadorInicial?: Decimal | null
   marcadorFinal?: Decimal | null
   cantidadReal?: Decimal | null
-  startTime?: Date | null // Nueva columna para hora de inicio
-  endTime?: Date | null // Nueva columna para hora de finalización
+  startTime?: Date | null
+  endTime?: Date | null
+
+  // Additional fields for complete dispatch system
+  operatorEmail?: string | null
+  kilometraje?: Decimal | null
+  ubicacion?: string | null
+  tipoUnidad?: string | null
+  observaciones?: string | null
+  photoUrls?: string[]
+
   assignment: Assignment
   customer: Customer
   createdAt: Date
