@@ -26,7 +26,6 @@ interface TruckFormData {
   capacitygal: string
   lastRemaining: string
   state: TruckState
-  customFuelName: string
 }
 
 interface TruckFormErrors {
@@ -35,20 +34,14 @@ interface TruckFormErrors {
   capacitygal?: string
   lastRemaining?: string
   state?: string
-  customFuelName?: string
 }
 
 const FUEL_TYPES: { value: FuelType; label: string }[] = [
-  { value: "DIESEL_B5", label: "Diésel B5" },
-  { value: "DIESEL_B500", label: "Diésel B500" },
-  { value: "GASOLINA_PREMIUM_95", label: "Gasolina Premium 95" },
-  { value: "GASOLINA_REGULAR_90", label: "Gasolina Regular 90" },
-  { value: "GASOHOL_84", label: "Gasohol 84" },
-  { value: "GASOHOL_90", label: "Gasohol 90" },
-  { value: "GASOHOL_95", label: "Gasohol 95" },
-  { value: "SOLVENTE", label: "Solvente Industrial" },
-  { value: "GASOL", label: "Gasol" },
-  { value: "PERSONALIZADO", label: "Personalizado" },
+  { value: "DIESEL_B5", label: "Diesel B5" },
+  { value: "GASOLINA_90", label: "Gasolina 90" },
+  { value: "GASOLINA_95", label: "Gasolina 95" },
+  { value: "GLP", label: "GLP" },
+  { value: "ELECTRICA", label: "Eléctrica" },
 ]
 
 const TRUCK_STATES: { value: TruckState; label: string; color: string }[] = [
@@ -70,7 +63,6 @@ export function TruckEditForm({ truck }: TruckEditFormProps) {
     capacitygal: truck.capacitygal.toString(),
     lastRemaining: truck.lastRemaining.toString(),
     state: truck.state,
-    customFuelName: truck.customFuelType || "",
   })
 
   const [originalData, setOriginalData] = useState<TruckFormData>({
@@ -79,7 +71,6 @@ export function TruckEditForm({ truck }: TruckEditFormProps) {
     capacitygal: truck.capacitygal.toString(),
     lastRemaining: truck.lastRemaining.toString(),
     state: truck.state,
-    customFuelName: truck.customFuelType || "",
   })
 
   const [errors, setErrors] = useState<TruckFormErrors>({})
@@ -109,23 +100,12 @@ export function TruckEditForm({ truck }: TruckEditFormProps) {
       newErrors.typefuel = "El tipo de combustible es requerido"
     }
 
-    // Add this validation after the typefuel validation
-    if (formData.typefuel === "PERSONALIZADO") {
-      if (!formData.customFuelName.trim()) {
-        newErrors.customFuelName = "El nombre del combustible personalizado es requerido"
-      } else if (formData.customFuelName.trim().length < 3) {
-        newErrors.customFuelName = "El nombre debe tener al menos 3 caracteres"
-      }
-    }
-
     // Validar capacidad
     const capacity = Number.parseFloat(formData.capacitygal)
     if (!formData.capacitygal || isNaN(capacity)) {
       newErrors.capacitygal = "La capacidad es requerida y debe ser un número"
-    } else if (capacity < 1500) {
-      newErrors.capacitygal = "La capacidad mínima es 1,500 galones"
-    } else if (capacity > 15000) {
-      newErrors.capacitygal = "La capacidad máxima es 15,000 galones"
+    } else if (capacity <= 0) {
+      newErrors.capacitygal = "La capacidad debe ser mayor a 0"
     }
 
     // Validar remanente
@@ -191,7 +171,6 @@ export function TruckEditForm({ truck }: TruckEditFormProps) {
           capacitygal: Number.parseFloat(formData.capacitygal),
           lastRemaining: Number.parseFloat(formData.lastRemaining) || 0,
           state: formData.state,
-          customFuelType: formData.typefuel === "PERSONALIZADO" ? formData.customFuelName.trim() : null,
         }),
       })
 
@@ -309,25 +288,6 @@ export function TruckEditForm({ truck }: TruckEditFormProps) {
                 {errors.typefuel && <p className="text-sm text-red-500">{errors.typefuel}</p>}
               </div>
 
-              {/* Custom Fuel Type Input - Add this after the fuel type Select */}
-              {formData.typefuel === "PERSONALIZADO" && (
-                <div className="space-y-2 md:col-span-2">
-                  <Label htmlFor="customFuelName">
-                    Nombre del Combustible Personalizado <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="customFuelName"
-                    type="text"
-                    placeholder="Ej: Combustible Especial XYZ"
-                    value={formData.customFuelName}
-                    onChange={(e) => handleInputChange("customFuelName", e.target.value)}
-                    className={errors.customFuelName ? "border-red-500" : ""}
-                  />
-                  {errors.customFuelName && <p className="text-sm text-red-500">{errors.customFuelName}</p>}
-                  <p className="text-sm text-gray-500">Especifica el nombre del combustible personalizado</p>
-                </div>
-              )}
-
               {/* Capacidad */}
               <div className="space-y-2">
                 <Label htmlFor="capacitygal">
@@ -336,16 +296,14 @@ export function TruckEditForm({ truck }: TruckEditFormProps) {
                 <Input
                   id="capacitygal"
                   type="number"
-                  step="1"
-                  min="1500"
-                  max="15000"
-                  placeholder="Ej: 3000"
+                  step="0.01"
+                  min="0"
+                  placeholder="Ej: 1000"
                   value={formData.capacitygal}
                   onChange={(e) => handleInputChange("capacitygal", e.target.value)}
                   className={errors.capacitygal ? "border-red-500" : ""}
                 />
                 {errors.capacitygal && <p className="text-sm text-red-500">{errors.capacitygal}</p>}
-                <p className="text-sm text-muted-foreground">Rango permitido: 1,500 - 15,000 galones</p>
               </div>
 
               {/* Remanente */}

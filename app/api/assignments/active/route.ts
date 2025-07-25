@@ -1,51 +1,42 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { verifyToken } from "@/lib/jwt"
+import { cookies } from "next/headers"
 
 export async function GET(request: Request) {
   try {
+    // Verificar autenticación
+    const cookieStore = await cookies()
+    const token = cookieStore.get("token")?.value
+
+    if (!token) {
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 })
+    }
+
+    const user = await verifyToken(token)
+    if (!user) {
+      return NextResponse.json({ error: "Token inválido" }, { status: 401 })
+    }
+
+    // Obtener parámetros de consulta
     const { searchParams } = new URL(request.url)
     const driverId = searchParams.get("driverId")
-    const date = searchParams.get("date")
 
-    console.log("🔍 Active Assignments: Fetching for driver", driverId)
+    console.log(`🔍 Active Assignments: Fetching for driver ${driverId}`)
 
-    if (!driverId || isNaN(Number(driverId))) {
-      return NextResponse.json({ error: "ID de conductor requerido y válido" }, { status: 400 })
-    }
-
-    // Base where clause
+    // Construir la consulta
     const where: any = {
-      driverId: Number(driverId),
-      // ✅ Usar status en lugar de isCompleted (que no existe en el schema)
-      status: {
-        not: "COMPLETADO" // Obtener todas las asignaciones que no estén completadas
-      },
-      totalRemaining: {
-        gt: 0 // Solo asignaciones con combustible restante
-      }
+      isCompleted: false,
     }
 
-    // Si se especifica una fecha, filtrar por fecha de creación
-    if (date) {
-      const targetDate = new Date(date)
-      const startOfDay = new Date(targetDate.setHours(0, 0, 0, 0))
-      const endOfDay = new Date(targetDate.setHours(23, 59, 59, 999))
-      
-      where.createdAt = {
-        gte: startOfDay,
-        lte: endOfDay
-      }
-    } else {
-      // Si no se especifica fecha, obtener las de los últimos 7 días para asegurar que se muestren las activas
-      const sevenDaysAgo = new Date()
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-      
-      where.createdAt = {
-        gte: sevenDaysAgo
+    // Filtrar por conductor si se proporciona un ID
+    if (driverId) {
+      where.driverId = Number.parseInt(driverId)
+      // Solo incluir asignaciones con combustible restante
+      where.totalRemaining = {
+        gt: 0,
       }
     }
-
-    console.log("🔍 Where clause:", JSON.stringify(where, null, 2))
 
     // Obtener asignaciones activas
     const activeAssignments = await prisma.assignment.findMany({
@@ -59,8 +50,7 @@ export async function GET(request: Request) {
             lastRemaining: true,
             state: true,
             typefuel: true,
-            currentLoad: true // Agregar currentLoad
-          }
+          },
         },
         driver: {
           select: {
@@ -68,8 +58,8 @@ export async function GET(request: Request) {
             name: true,
             lastname: true,
             email: true,
-            role: true
-          }
+            role: true,
+          },
         },
         clientAssignments: {
           include: {
@@ -78,13 +68,13 @@ export async function GET(request: Request) {
                 id: true,
                 companyname: true,
                 ruc: true,
-                address: true
-              }
-            }
+                address: true,
+              },
+            },
           },
           orderBy: {
-            id: "asc"
-          }
+            id: "asc",
+          },
         },
         discharges: {
           include: {
@@ -92,56 +82,47 @@ export async function GET(request: Request) {
               select: {
                 id: true,
                 companyname: true,
-                ruc: true
-              }
-            }
+                ruc: true,
+              },
+            },
           },
           where: {
             status: {
-              in: ["pendiente", "en_proceso"]
-            }
+              in: ["pendiente", "en_proceso"],
+            },
           },
           orderBy: {
-            createdAt: "desc"
-          }
-        }
+            createdAt: "desc",
+          },
+        },
       },
       orderBy: {
-        createdAt: "desc"
-      }
+        createdAt: "desc",
+      },
     })
 
-    console.log(`✅ Found ${activeAssignments.length} active assignments for driver ${driverId}`)
+    console.log(`✅ Active Assignments: Found ${activeAssignments.length} active assignments`)
 
-    // ✅ Agregar campo isCompleted calculado para compatibilidad con el frontend
-    const assignmentsWithCompatibility = activeAssignments.map(assignment => ({
-      ...assignment,
-      isCompleted: assignment.status === "COMPLETADO" || Number(assignment.totalRemaining) <= 0
-    }))
+    // Log details for debugging
+    activeAssignments.forEach((assignment) => {
+      console.log(`📋 Assignment #${assignment.id}:`, {
+        truck: assignment.truck.placa,
+        remaining: assignment.totalRemaining,
+        completed: assignment.isCompleted,
+        clientAssignments: assignment.clientAssignments.length,
+        activeDischarges: assignment.discharges.length,
+      })
+    })
 
-    return NextResponse.json(assignmentsWithCompatibility)
+    return NextResponse.json(activeAssignments)
   } catch (error) {
     console.error("❌ Active Assignments Error:", error)
-    
-    let errorMessage = "Error interno del servidor"
-    let statusCode = 500
-    
-    if (error instanceof Error) {
-      // Error específico de Prisma o validación
-      if (error.message.includes("Invalid") || error.message.includes("validation")) {
-        errorMessage = "Error de validación en la consulta de base de datos"
-        statusCode = 400
-      } else if (error.message.includes("connect") || error.message.includes("timeout")) {
-        errorMessage = "Error de conexión a la base de datos"
-        statusCode = 503
-      } else {
-        errorMessage = error.message
-      }
-    }
-    
-    return NextResponse.json({ 
-      error: errorMessage,
-      details: error instanceof Error ? error.message : "Error desconocido"
-    }, { status: statusCode })
+    return NextResponse.json(
+      {
+        error: "Error interno del servidor",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    )
   }
 }

@@ -8,7 +8,6 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "Petrus - Sistema de Gestión de Combustible", 
   description: "Sistema completo de gestión de despachos de combustible",
-    generator: 'v0.dev'
 }
 
 export default function RootLayout({

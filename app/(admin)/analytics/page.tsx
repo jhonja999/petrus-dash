@@ -1,32 +1,13 @@
-"use client";
+"use client"
 
-import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useState, useEffect, useCallback } from "react"
+import { useRouter } from "next/navigation"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   FileText,
   Download,
@@ -38,269 +19,235 @@ import {
   AlertCircle,
   Users,
   Truck,
-} from "lucide-react";
-import Link from "next/link";
-import { useAuth } from "@/hooks/useAuth";
-import { toast } from "sonner";
-import axios from "axios";
+} from "lucide-react"
+import Link from "next/link"
+import { useAuth } from "@/hooks/useAuth"
+import { toast } from "sonner"
+import axios from "axios"
 
 interface Assignment {
-  id: number;
-  truckId: number;
-  driverId: number;
-  totalLoaded: string | number;
-  totalRemaining: string | number;
-  fuelType: string;
-  isCompleted: boolean;
-  completedAt: string | null;
-  notes: string | null;
-  createdAt: string;
-  updatedAt: string;
+  id: number
+  truckId: number
+  driverId: number
+  totalLoaded: string | number
+  totalRemaining: string | number
+  fuelType: string
+  isCompleted: boolean
+  completedAt: string | null
+  notes: string | null
+  createdAt: string
+  updatedAt: string
   truck: {
-    id: number;
-    placa: string;
-    typefuel: string;
-    capacitygal: string | number;
-  };
+    id: number
+    placa: string
+    typefuel: string
+    capacitygal: string | number
+  }
   driver: {
-    id: number;
-    name: string;
-    lastname: string;
-    role: string;
-  };
+    id: number
+    name: string
+    lastname: string
+    role: string
+  }
   discharges: Array<{
-    id: number;
-    customerId: number;
-    totalDischarged: string | number;
-    status: string;
-    marcadorInicial: string | number | null;
-    marcadorFinal: string | number | null;
-    cantidadReal: string | number | null;
-    createdAt: string;
+    id: number
+    customerId: number
+    totalDischarged: string | number
+    status: string
+    marcadorInicial: string | number | null
+    marcadorFinal: string | number | null
+    cantidadReal: string | number | null
+    createdAt: string
     customer: {
-      id: number;
-      companyname: string;
-      ruc: string;
-    };
-  }>;
+      id: number
+      companyname: string
+      ruc: string
+    }
+  }>
 }
 
 interface TruckType {
-  id: number;
-  placa: string;
-  typefuel: string;
-  capacitygal: number;
+  id: number
+  placa: string
+  typefuel: string
+  capacitygal: number
 }
 
 interface User {
-  id: number;
-  name: string;
-  lastname: string;
-  role: string;
+  id: number
+  name: string
+  lastname: string
+  role: string
 }
 
 interface ReportData {
-  assignments: Assignment[];
+  assignments: Assignment[]
   summary: {
-    totalFuelLoaded: number;
-    totalFuelDischarged: number;
-    totalFuelRemaining: number;
-    completedAssignments: number;
-    pendingAssignments: number;
-    trucksUsed: number;
-    driversActive: number;
-    efficiencyPercentage: number;
-    averageFuelPerAssignment: number;
-    totalDischarges: number;
-    completedDischarges: number;
-    pendingDischarges: number;
-  };
+    totalFuelLoaded: number
+    totalFuelDischarged: number
+    totalFuelRemaining: number
+    completedAssignments: number
+    pendingAssignments: number
+    trucksUsed: number
+    driversActive: number
+    efficiencyPercentage: number
+    averageFuelPerAssignment: number
+    totalDischarges: number
+    completedDischarges: number
+    pendingDischarges: number
+  }
   breakdown: {
-    fuelTypes: Record<
-      string,
-      {
-        count: number;
-        totalLoaded: number;
-        totalRemaining: number;
-      }
-    >;
-  };
+    fuelTypes: Record<string, {
+      count: number
+      totalLoaded: number
+      totalRemaining: number
+    }>
+  }
   metadata: {
-    totalRecords: number;
+    totalRecords: number
     dateRange: {
-      start: string | null;
-      end: string | null;
-    };
+      start: string | null
+      end: string | null
+    }
     filters: {
-      truckId: string | null;
-      driverId: string | null;
-      fuelType: string | null;
-    };
-    generatedAt: string;
-  };
+      truckId: string | null
+      driverId: string | null
+      fuelType: string | null
+    }
+    generatedAt: string
+  }
 }
 
 export default function AnalyticsPage() {
-  const { isAdmin, isLoading } = useAuth();
-  const router = useRouter();
+  const { isAdmin, isLoading } = useAuth()
+  const router = useRouter()
 
   // State for filters
-  const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split("T")[0]
-  );
-  const [startDate, setStartDate] = useState<string>("");
-  const [endDate, setEndDate] = useState<string>("");
-  const [selectedTruck, setSelectedTruck] = useState<string>("all");
-  const [selectedDriver, setSelectedDriver] = useState<string>("all");
-  const [selectedFuelType, setSelectedFuelType] = useState<string>("all");
-  const [reportType, setReportType] = useState<"daily" | "range">("daily");
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
+  const [startDate, setStartDate] = useState<string>("")
+  const [endDate, setEndDate] = useState<string>("")
+  const [selectedTruck, setSelectedTruck] = useState<string>("all")
+  const [selectedDriver, setSelectedDriver] = useState<string>("all")
+  const [selectedFuelType, setSelectedFuelType] = useState<string>("all")
+  const [reportType, setReportType] = useState<"daily" | "range">("daily")
 
   // Data state
-  const [reportData, setReportData] = useState<ReportData | null>(null);
-  const [trucks, setTrucks] = useState<TruckType[]>([]);
-  const [drivers, setDrivers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
+  const [reportData, setReportData] = useState<ReportData | null>(null)
+  const [trucks, setTrucks] = useState<TruckType[]>([])
+  const [drivers, setDrivers] = useState<User[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
+    setMounted(true)
+  }, [])
 
   useEffect(() => {
     if (mounted && !isLoading && !isAdmin) {
-      router.push("/unauthorized");
+      router.push("/unauthorized")
     }
-  }, [mounted, isLoading, isAdmin, router]);
+  }, [mounted, isLoading, isAdmin, router])
 
   // Fetch trucks and drivers for filter options
   useEffect(() => {
     const fetchInitialData = async () => {
-      if (!mounted || !isAdmin) return;
+      if (!mounted || !isAdmin) return
 
       try {
         const [trucksRes, driversRes] = await Promise.all([
           axios.get("/api/trucks"),
           axios.get("/api/users"),
-        ]);
+        ])
 
         // Handle trucks response
         if (Array.isArray(trucksRes.data)) {
-          setTrucks(trucksRes.data);
-        } else if (
-          trucksRes.data.success &&
-          Array.isArray(trucksRes.data.data)
-        ) {
-          setTrucks(trucksRes.data.data);
+          setTrucks(trucksRes.data)
+        } else if (trucksRes.data.success && Array.isArray(trucksRes.data.data)) {
+          setTrucks(trucksRes.data.data)
         }
 
         // Handle users response and filter drivers
-        let users = [];
+        let users = []
         if (Array.isArray(driversRes.data)) {
-          users = driversRes.data;
-        } else if (
-          driversRes.data.success &&
-          Array.isArray(driversRes.data.data)
-        ) {
-          users = driversRes.data.data;
+          users = driversRes.data
+        } else if (driversRes.data.success && Array.isArray(driversRes.data.data)) {
+          users = driversRes.data.data
         }
 
-        const driverUsers = users.filter(
-          (user: User) => user.role === "Operador"
-        );
-        setDrivers(driverUsers);
+        const driverUsers = users.filter((user: User) => user.role === "Operador")
+        setDrivers(driverUsers)
       } catch (error) {
-        console.error("Error fetching initial data:", error);
-        toast.error("Error al cargar datos iniciales");
+        console.error("Error fetching initial data:", error)
+        toast.error("Error al cargar datos iniciales")
       }
-    };
+    }
 
-    fetchInitialData();
-  }, [mounted, isAdmin]);
+    fetchInitialData()
+  }, [mounted, isAdmin])
 
   const generateReport = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    setLoading(true)
+    setError(null)
 
     try {
-      const params = new URLSearchParams();
+      const params = new URLSearchParams()
 
       if (reportType === "daily" && selectedDate) {
-        params.append("date", selectedDate);
+        params.append("date", selectedDate)
       } else if (reportType === "range" && startDate) {
-        params.append("startDate", startDate);
+        params.append("startDate", startDate)
         if (endDate) {
-          params.append("endDate", endDate);
+          params.append("endDate", endDate)
         }
       }
 
       if (selectedTruck !== "all") {
-        params.append("truckId", selectedTruck);
+        params.append("truckId", selectedTruck)
       }
 
       if (selectedDriver !== "all") {
-        params.append("driverId", selectedDriver);
+        params.append("driverId", selectedDriver)
       }
 
       if (selectedFuelType !== "all") {
-        params.append("fuelType", selectedFuelType);
+        params.append("fuelType", selectedFuelType)
       }
 
-      console.log(
-        "Generating analytics report with params:",
-        params.toString()
-      );
+      console.log("Generating analytics report with params:", params.toString())
 
-      const response = await axios.get(`/api/reports?${params.toString()}`);
-
+      const response = await axios.get(`/api/reports?${params.toString()}`)
+      
       if (response.data) {
-        setReportData(response.data);
+        setReportData(response.data)
         toast.success("Análisis generado exitosamente", {
-          description: `Se analizaron ${response.data.assignments.length} asignaciones.`,
-        });
+          description: `Se analizaron ${response.data.assignments.length} asignaciones.`
+        })
       }
     } catch (error: any) {
-      console.error("Error generating analytics:", error);
-      const errorMessage =
-        error.response?.data?.error || "Error al generar el análisis.";
-      setError(errorMessage);
+      console.error("Error generating analytics:", error)
+      const errorMessage = error.response?.data?.error || "Error al generar el análisis."
+      setError(errorMessage)
       toast.error("Error al generar análisis", {
-        description: errorMessage,
-      });
+        description: errorMessage
+      })
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  }, [
-    reportType,
-    selectedDate,
-    startDate,
-    endDate,
-    selectedTruck,
-    selectedDriver,
-    selectedFuelType,
-  ]);
+  }, [reportType, selectedDate, startDate, endDate, selectedTruck, selectedDriver, selectedFuelType])
 
   const exportReport = useCallback(() => {
-    if (!reportData) return;
+    if (!reportData) return
 
     try {
       const csvContent = [
-        [
-          "Fecha",
-          "Camión",
-          "Conductor",
-          "Combustible",
-          "Cargado",
-          "Descargado",
-          "Remanente",
-          "Estado",
-        ],
+        ["Fecha", "Camión", "Conductor", "Combustible", "Cargado", "Descargado", "Remanente", "Estado"],
         ...reportData.assignments.map((assignment) => {
           // Convert Prisma Decimals to numbers
-          const totalLoaded = Number(assignment.totalLoaded);
-          const totalRemaining = Number(assignment.totalRemaining);
-          const discharged = totalLoaded - totalRemaining;
-
+          const totalLoaded = Number(assignment.totalLoaded)
+          const totalRemaining = Number(assignment.totalRemaining)
+          const discharged = totalLoaded - totalRemaining
+          
           return [
             new Date(assignment.createdAt).toLocaleDateString(),
             assignment.truck.placa,
@@ -310,46 +257,44 @@ export default function AnalyticsPage() {
             discharged.toFixed(2),
             totalRemaining.toFixed(2),
             assignment.isCompleted ? "Completado" : "Pendiente",
-          ];
+          ]
         }),
       ]
         .map((row) => row.join(","))
-        .join("\n");
+        .join("\n")
 
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `analisis-despachos-${
-        new Date().toISOString().split("T")[0]
-      }.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      window.URL.revokeObjectURL(url);
-
-      toast.success("Análisis exportado exitosamente");
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `analisis-despachos-${new Date().toISOString().split('T')[0]}.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+      
+      toast.success("Análisis exportado exitosamente")
     } catch (error) {
-      toast.error("Error al exportar el análisis");
+      toast.error("Error al exportar el análisis")
     }
-  }, [reportData]);
+  }, [reportData])
 
   const setQuickDateRange = (days: number) => {
-    const endDateObj = new Date();
-    const startDateObj = new Date();
-    startDateObj.setDate(startDateObj.getDate() - days + 1);
-
-    setStartDate(startDateObj.toISOString().split("T")[0]);
-    setEndDate(endDateObj.toISOString().split("T")[0]);
-    setReportType("range");
-  };
+    const endDateObj = new Date()
+    const startDateObj = new Date()
+    startDateObj.setDate(startDateObj.getDate() - days + 1)
+    
+    setStartDate(startDateObj.toISOString().split('T')[0])
+    setEndDate(endDateObj.toISOString().split('T')[0])
+    setReportType("range")
+  }
 
   // Auto-generate report on component mount
   useEffect(() => {
     if (mounted && isAdmin) {
-      generateReport();
+      generateReport()
     }
-  }, [mounted, isAdmin, generateReport]);
+  }, [mounted, isAdmin, generateReport])
 
   if (!mounted || isLoading) {
     return (
@@ -359,7 +304,7 @@ export default function AnalyticsPage() {
           <p className="mt-4 text-gray-600 font-medium">Cargando...</p>
         </div>
       </div>
-    );
+    )
   }
 
   if (!isAdmin) {
@@ -367,18 +312,14 @@ export default function AnalyticsPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">
-            Acceso Denegado
-          </h2>
-          <p className="text-gray-600 mb-4">
-            No tienes permisos para acceder a esta página.
-          </p>
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Acceso Denegado</h2>
+          <p className="text-gray-600 mb-4">No tienes permisos para acceder a esta página.</p>
           <Button asChild>
-            <Link href="/admin/dashboard">Volver al Dashboard</Link>
+            <Link href="/dashboard">Volver al Dashboard</Link>
           </Button>
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -386,22 +327,18 @@ export default function AnalyticsPage() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            Análisis y Métricas
-          </h1>
-          <p className="text-sm text-gray-600">
-            Dashboard analítico del sistema de combustibles
-          </p>
+          <h1 className="text-2xl font-bold text-gray-900">Análisis y Métricas</h1>
+          <p className="text-sm text-gray-600">Dashboard analítico del sistema de combustibles</p>
         </div>
         <div className="flex gap-3">
           <Button asChild variant="outline">
-            <Link href="/admin/reports">
+            <Link href="/reports">
               <FileText className="h-4 w-4 mr-2" />
               Reportes
             </Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href="/admin/dashboard">
+            <Link href="/dashboard">
               <ArrowLeft className="h-4 w-4 mr-2" />
               Volver
             </Link>
@@ -418,20 +355,13 @@ export default function AnalyticsPage() {
                 <Calendar className="h-5 w-5 text-blue-600" />
                 Filtros de Análisis
               </CardTitle>
-              <CardDescription>
-                Configure los parámetros para el análisis
-              </CardDescription>
+              <CardDescription>Configure los parámetros para el análisis</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Report Type */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Tipo de Análisis</label>
-                <Select
-                  value={reportType}
-                  onValueChange={(value: "daily" | "range") =>
-                    setReportType(value)
-                  }
-                >
+                <Select value={reportType} onValueChange={(value: "daily" | "range") => setReportType(value)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -451,7 +381,7 @@ export default function AnalyticsPage() {
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    max={new Date().toISOString().split("T")[0]}
+                    max={new Date().toISOString().split('T')[0]}
                   />
                 </div>
               ) : (
@@ -464,7 +394,7 @@ export default function AnalyticsPage() {
                       value={startDate}
                       onChange={(e) => setStartDate(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      max={new Date().toISOString().split("T")[0]}
+                      max={new Date().toISOString().split('T')[0]}
                     />
                     <input
                       type="date"
@@ -473,22 +403,14 @@ export default function AnalyticsPage() {
                       onChange={(e) => setEndDate(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       min={startDate}
-                      max={new Date().toISOString().split("T")[0]}
+                      max={new Date().toISOString().split('T')[0]}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-2 mt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setQuickDateRange(7)}
-                    >
+                    <Button variant="outline" size="sm" onClick={() => setQuickDateRange(7)}>
                       7 días
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setQuickDateRange(30)}
-                    >
+                    <Button variant="outline" size="sm" onClick={() => setQuickDateRange(30)}>
                       30 días
                     </Button>
                   </div>
@@ -516,10 +438,7 @@ export default function AnalyticsPage() {
               {/* Driver Filter */}
               <div className="space-y-2">
                 <label className="text-sm font-medium">Conductor</label>
-                <Select
-                  value={selectedDriver}
-                  onValueChange={setSelectedDriver}
-                >
+                <Select value={selectedDriver} onValueChange={setSelectedDriver}>
                   <SelectTrigger>
                     <SelectValue placeholder="Todos los conductores" />
                   </SelectTrigger>
@@ -536,13 +455,8 @@ export default function AnalyticsPage() {
 
               {/* Fuel Type Filter */}
               <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  Tipo de Combustible
-                </label>
-                <Select
-                  value={selectedFuelType}
-                  onValueChange={setSelectedFuelType}
-                >
+                <label className="text-sm font-medium">Tipo de Combustible</label>
+                <Select value={selectedFuelType} onValueChange={setSelectedFuelType}>
                   <SelectTrigger>
                     <SelectValue placeholder="Todos los tipos" />
                   </SelectTrigger>
@@ -568,51 +482,39 @@ export default function AnalyticsPage() {
           </Card>
 
           {/* Fuel Types Breakdown */}
-          {reportData &&
-            Object.keys(reportData.breakdown.fuelTypes).length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">
-                    Breakdown por Combustible
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {Object.entries(reportData.breakdown.fuelTypes).map(
-                    ([fuelType, data]) => (
-                      <div key={fuelType} className="space-y-2">
-                        <div className="flex justify-between items-center">
-                          <Badge variant="outline" className="text-xs">
-                            {fuelType}
-                          </Badge>
-                          <span className="text-sm font-medium">
-                            {data.count} asignaciones
-                          </span>
-                        </div>
-                        <div className="text-xs text-gray-600 space-y-1">
-                          <div className="flex justify-between">
-                            <span>Cargado:</span>
-                            <span>{data.totalLoaded.toFixed(2)} gal</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Remanente:</span>
-                            <span>{data.totalRemaining.toFixed(2)} gal</span>
-                          </div>
-                          <div className="flex justify-between font-medium">
-                            <span>Descargado:</span>
-                            <span>
-                              {(data.totalLoaded - data.totalRemaining).toFixed(
-                                2
-                              )}{" "}
-                              gal
-                            </span>
-                          </div>
-                        </div>
+          {reportData && Object.keys(reportData.breakdown.fuelTypes).length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Breakdown por Combustible</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {Object.entries(reportData.breakdown.fuelTypes).map(([fuelType, data]) => (
+                  <div key={fuelType} className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <Badge variant="outline" className="text-xs">
+                        {fuelType}
+                      </Badge>
+                      <span className="text-sm font-medium">{data.count} asignaciones</span>
+                    </div>
+                    <div className="text-xs text-gray-600 space-y-1">
+                      <div className="flex justify-between">
+                        <span>Cargado:</span>
+                        <span>{data.totalLoaded.toFixed(2)} gal</span>
                       </div>
-                    )
-                  )}
-                </CardContent>
-              </Card>
-            )}
+                      <div className="flex justify-between">
+                        <span>Remanente:</span>
+                        <span>{data.totalRemaining.toFixed(2)} gal</span>
+                      </div>
+                      <div className="flex justify-between font-medium">
+                        <span>Descargado:</span>
+                        <span>{(data.totalLoaded - data.totalRemaining).toFixed(2)} gal</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Analytics Results */}
@@ -632,9 +534,7 @@ export default function AnalyticsPage() {
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm text-gray-600">
-                          Combustible Cargado
-                        </p>
+                        <p className="text-sm text-gray-600">Combustible Cargado</p>
                         <p className="text-2xl font-bold text-blue-600">
                           {reportData.summary.totalFuelLoaded.toFixed(2)}
                         </p>
@@ -649,9 +549,7 @@ export default function AnalyticsPage() {
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm text-gray-600">
-                          Combustible Descargado
-                        </p>
+                        <p className="text-sm text-gray-600">Combustible Descargado</p>
                         <p className="text-2xl font-bold text-green-600">
                           {reportData.summary.totalFuelDischarged.toFixed(2)}
                         </p>
@@ -668,8 +566,7 @@ export default function AnalyticsPage() {
                       <div>
                         <p className="text-sm text-gray-600">Asignaciones</p>
                         <p className="text-2xl font-bold text-purple-600">
-                          {reportData.summary.completedAssignments}/
-                          {reportData.assignments.length}
+                          {reportData.summary.completedAssignments}/{reportData.assignments.length}
                         </p>
                         <p className="text-xs text-gray-500">completadas</p>
                       </div>
@@ -682,9 +579,7 @@ export default function AnalyticsPage() {
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm text-gray-600">
-                          Eficiencia Global
-                        </p>
+                        <p className="text-sm text-gray-600">Eficiencia Global</p>
                         <p className="text-2xl font-bold text-orange-600">
                           {reportData.summary.efficiencyPercentage.toFixed(1)}%
                         </p>
@@ -702,9 +597,7 @@ export default function AnalyticsPage() {
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm text-gray-600">
-                          Camiones Operativos
-                        </p>
+                        <p className="text-sm text-gray-600">Camiones Operativos</p>
                         <p className="text-2xl font-bold text-indigo-600">
                           {reportData.summary.trucksUsed}
                         </p>
@@ -719,9 +612,7 @@ export default function AnalyticsPage() {
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm text-gray-600">
-                          Conductores Activos
-                        </p>
+                        <p className="text-sm text-gray-600">Conductores Activos</p>
                         <p className="text-2xl font-bold text-teal-600">
                           {reportData.summary.driversActive}
                         </p>
@@ -751,13 +642,9 @@ export default function AnalyticsPage() {
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm text-gray-600">
-                          Promedio por Asignación
-                        </p>
+                        <p className="text-sm text-gray-600">Promedio por Asignación</p>
                         <p className="text-2xl font-bold text-amber-600">
-                          {reportData.summary.averageFuelPerAssignment.toFixed(
-                            1
-                          )}
+                          {reportData.summary.averageFuelPerAssignment.toFixed(1)}
                         </p>
                         <p className="text-xs text-gray-500">galones</p>
                       </div>
@@ -771,9 +658,7 @@ export default function AnalyticsPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">
-                      Eficiencia de Descarga
-                    </CardTitle>
+                    <CardTitle className="text-base">Eficiencia de Descarga</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
@@ -793,14 +678,9 @@ export default function AnalyticsPage() {
                         <div className="flex justify-between font-medium">
                           <span>Tasa de Completación:</span>
                           <span className="text-green-600">
-                            {reportData.summary.totalDischarges > 0
-                              ? (
-                                  (reportData.summary.completedDischarges /
-                                    reportData.summary.totalDischarges) *
-                                  100
-                                ).toFixed(1)
-                              : 0}
-                            %
+                            {reportData.summary.totalDischarges > 0 
+                              ? ((reportData.summary.completedDischarges / reportData.summary.totalDischarges) * 100).toFixed(1)
+                              : 0}%
                           </span>
                         </div>
                       </div>
@@ -810,43 +690,30 @@ export default function AnalyticsPage() {
 
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">
-                      Utilización de Recursos
-                    </CardTitle>
+                    <CardTitle className="text-base">Utilización de Recursos</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
                       <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">
-                          Camiones en Uso:
-                        </span>
+                        <span className="text-sm text-gray-600">Camiones en Uso:</span>
                         <div className="flex items-center gap-2">
                           <Truck className="h-4 w-4 text-indigo-600" />
-                          <span className="font-medium">
-                            {reportData.summary.trucksUsed}
-                          </span>
+                          <span className="font-medium">{reportData.summary.trucksUsed}</span>
                         </div>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">
-                          Conductores Activos:
-                        </span>
+                        <span className="text-sm text-gray-600">Conductores Activos:</span>
                         <div className="flex items-center gap-2">
                           <Users className="h-4 w-4 text-teal-600" />
-                          <span className="font-medium">
-                            {reportData.summary.driversActive}
-                          </span>
+                          <span className="font-medium">{reportData.summary.driversActive}</span>
                         </div>
                       </div>
                       <div className="mt-3 pt-3 border-t">
                         <div className="flex justify-between font-medium">
                           <span>Ratio C/T:</span>
                           <span className="text-blue-600">
-                            {reportData.summary.trucksUsed > 0
-                              ? (
-                                  reportData.summary.driversActive /
-                                  reportData.summary.trucksUsed
-                                ).toFixed(2)
+                            {reportData.summary.trucksUsed > 0 
+                              ? (reportData.summary.driversActive / reportData.summary.trucksUsed).toFixed(2)
                               : "0.00"}
                           </span>
                         </div>
@@ -857,9 +724,7 @@ export default function AnalyticsPage() {
 
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">
-                      Volumen de Combustible
-                    </CardTitle>
+                    <CardTitle className="text-base">Volumen de Combustible</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
@@ -872,8 +737,7 @@ export default function AnalyticsPage() {
                       <div className="flex justify-between text-sm">
                         <span>Total Descargado:</span>
                         <span className="font-medium text-green-600">
-                          {reportData.summary.totalFuelDischarged.toFixed(0)}{" "}
-                          gal
+                          {reportData.summary.totalFuelDischarged.toFixed(0)} gal
                         </span>
                       </div>
                       <div className="flex justify-between text-sm">
@@ -886,8 +750,7 @@ export default function AnalyticsPage() {
                         <div className="flex justify-between font-medium">
                           <span>Pérdidas:</span>
                           <span className="text-red-600">
-                            {reportData.summary.totalFuelRemaining.toFixed(0)}{" "}
-                            gal
+                            {(reportData.summary.totalFuelRemaining).toFixed(0)} gal
                           </span>
                         </div>
                       </div>
@@ -905,29 +768,21 @@ export default function AnalyticsPage() {
                       Análisis Detallado ({reportData.assignments.length})
                     </CardTitle>
                     {reportData.assignments.length > 0 && (
-                      <Button
-                        onClick={exportReport}
-                        variant="outline"
-                        size="sm"
-                      >
+                      <Button onClick={exportReport} variant="outline" size="sm">
                         <Download className="h-4 w-4 mr-2" />
                         Exportar Datos
                       </Button>
                     )}
                   </div>
                   <CardDescription>
-                    Análisis detallado de todas las asignaciones para el período
-                    seleccionado
+                    Análisis detallado de todas las asignaciones para el período seleccionado
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   {reportData.assignments.length === 0 ? (
                     <div className="text-center py-8 text-gray-500">
                       <BarChart3 className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                      <p>
-                        No se encontraron asignaciones para los filtros
-                        seleccionados
-                      </p>
+                      <p>No se encontraron asignaciones para los filtros seleccionados</p>
                     </div>
                   ) : (
                     <div className="overflow-x-auto">
@@ -948,29 +803,21 @@ export default function AnalyticsPage() {
                         <TableBody>
                           {reportData.assignments.map((assignment) => {
                             // Convert Prisma Decimal to number
-                            const totalLoaded = Number(assignment.totalLoaded);
-                            const totalRemaining = Number(
-                              assignment.totalRemaining
-                            );
-                            const discharged = totalLoaded - totalRemaining;
-                            const efficiency =
-                              totalLoaded > 0
-                                ? (discharged / totalLoaded) * 100
-                                : 0;
-
+                            const totalLoaded = Number(assignment.totalLoaded)
+                            const totalRemaining = Number(assignment.totalRemaining)
+                            const discharged = totalLoaded - totalRemaining
+                            const efficiency = totalLoaded > 0 ? (discharged / totalLoaded) * 100 : 0
+                            
                             return (
                               <TableRow key={assignment.id}>
                                 <TableCell className="text-sm">
-                                  {new Date(
-                                    assignment.createdAt
-                                  ).toLocaleDateString()}
+                                  {new Date(assignment.createdAt).toLocaleDateString()}
                                 </TableCell>
                                 <TableCell className="font-medium">
                                   {assignment.truck.placa}
                                 </TableCell>
                                 <TableCell>
-                                  {assignment.driver.name}{" "}
-                                  {assignment.driver.lastname}
+                                  {assignment.driver.name} {assignment.driver.lastname}
                                 </TableCell>
                                 <TableCell>
                                   <Badge variant="outline" className="text-xs">
@@ -1007,13 +854,11 @@ export default function AnalyticsPage() {
                                         : "bg-yellow-100 text-yellow-700"
                                     }
                                   >
-                                    {assignment.isCompleted
-                                      ? "Completado"
-                                      : "Pendiente"}
+                                    {assignment.isCompleted ? "Completado" : "Pendiente"}
                                   </Badge>
                                 </TableCell>
                               </TableRow>
-                            );
+                            )
                           })}
                         </TableBody>
                       </Table>
@@ -1026,5 +871,5 @@ export default function AnalyticsPage() {
         </div>
       </div>
     </div>
-  );
+  )
 }

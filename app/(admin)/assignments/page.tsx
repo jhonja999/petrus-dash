@@ -13,15 +13,13 @@ import { useEffect, useState } from "react"
 import axios from "axios"
 import { RefreshCw } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import type { User } from "@/types/globals"
 
 export default function AssignmentsPage() {
   const authData = useAuth()
   const assignmentsData = useAssignments()
   const trucksData = useTruckState()
   const [mounted, setMounted] = useState(false)
-  const [drivers, setDrivers] = useState<User[]>([])
-  const [driversLoading, setDriversLoading] = useState(true)
+  const [drivers, setDrivers] = useState([])
   const [refreshing, setRefreshing] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
@@ -47,46 +45,15 @@ export default function AssignmentsPage() {
     if (!mounted) return
 
     const fetchDrivers = async () => {
-      setDriversLoading(true)
-      console.log("🔄 Fetching drivers for assignments page...")
-
       try {
-        // First try to get OPERADOR users specifically
-        const response = await axios.get("/api/users", {
-          params: { role: "OPERADOR" },
-        })
-
-        console.log("📋 Drivers API response:", response.data)
-
-        if (Array.isArray(response.data) && response.data.length > 0) {
-          setDrivers(response.data)
-          console.log("✅ Successfully loaded drivers:", response.data.length)
-        } else {
-          console.log("⚠️ No OPERADOR users found, trying fallback...")
-
-          // Fallback: get all users and filter by role
-          const allUsersResponse = await axios.get("/api/users")
-          const allUsers = allUsersResponse.data as User[]
-          const operadores = Array.isArray(allUsers) ? allUsers.filter((user) => user.role === "OPERADOR") : []
-
-          console.log("📋 Fallback - All users:", allUsers.length, "Operadores found:", operadores.length)
-          setDrivers(operadores)
-        }
+        const response = await axios.get("/api/users?role=conductor")
+        setDrivers(response.data)
       } catch (error) {
-        console.error("❌ Error fetching drivers:", error)
-        setDrivers([])
-        toast({
-          title: "Error",
-          description: "Error al cargar la lista de conductores",
-          variant: "destructive",
-        })
-      } finally {
-        setDriversLoading(false)
+        console.error("Error al obtener conductores:", error)
       }
     }
-
     fetchDrivers()
-  }, [mounted, toast])
+  }, [mounted])
 
   // Add this useEffect after the existing ones
   useEffect(() => {
@@ -124,12 +91,6 @@ export default function AssignmentsPage() {
       // Then refresh both trucks and assignments data
       await Promise.all([refreshTrucks(), refreshAssignments()])
 
-      // Also refresh drivers
-      const driversResponse = await axios.get("/api/users", {
-        params: { role: "OPERADOR" },
-      })
-      setDrivers(driversResponse.data)
-
       toast({
         title: "Estados actualizados",
         description: statusResponse.data.message,
@@ -159,7 +120,7 @@ export default function AssignmentsPage() {
     )
   }
 
-  if (isLoading || assignmentsLoading || driversLoading) {
+  if (isLoading || assignmentsLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -237,9 +198,6 @@ export default function AssignmentsPage() {
                         ? new Date(assignment.createdAt).toLocaleDateString()
                         : "N/A"
 
-                      // ✅ FIX: Usar completedAt en lugar de isCompleted
-                      const isCompleted = assignment.completedAt !== null
-
                       return (
                         <TableRow key={assignment.id}>
                           <TableCell className="font-medium">{truckPlaca}</TableCell>
@@ -252,13 +210,15 @@ export default function AssignmentsPage() {
                           <TableCell>{createdAt}</TableCell>
                           <TableCell>
                             <Badge
-                              className={isCompleted ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}
+                              className={
+                                assignment.isCompleted ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
+                              }
                             >
-                              {isCompleted ? "Completada" : "Activa"}
+                              {assignment.isCompleted ? "Completada" : "Activa"}
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <Button asChild size="sm" variant="outline" disabled={isCompleted}>
+                            <Button asChild size="sm" variant="outline" disabled={assignment.isCompleted}>
                               <Link href={`/assignments/${assignment.id}/clients`}>Gestionar Clientes</Link>
                             </Button>
                           </TableCell>

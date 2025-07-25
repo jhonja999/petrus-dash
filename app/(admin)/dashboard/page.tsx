@@ -53,16 +53,16 @@ export default function AdminDashboard() {
         ])
 
         setTrucks(trucksResponse.data || [])
-
+        
         // ✅ FIX: Now always expect consistent format {assignments: [...], pagination: {...}}
         const assignmentsData = assignmentsResponse.data
         if (assignmentsData && assignmentsData.assignments) {
           setAssignments(assignmentsData.assignments)
         } else {
-          console.warn("⚠️ AdminDashboard: Unexpected assignments response format:", assignmentsData)
+          console.warn('⚠️ AdminDashboard: Unexpected assignments response format:', assignmentsData)
           setAssignments([])
         }
-
+        
         setError(null)
       } catch (err) {
         console.error("Error fetching data:", err)
@@ -121,201 +121,202 @@ export default function AdminDashboard() {
   const trucksWithRemaining = trucks.filter((t) => Number(t.lastRemaining) > 0).length
 
   return (
-    <div className="space-y-6">
-      {/* Error State */}
-      {error && (
-        <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-          <div className="flex">
-            <AlertCircle className="h-5 w-5 text-yellow-600 mr-2" />
-            <p className="text-yellow-800">{error}</p>
+   
+      <div className="space-y-6">
+        {/* Error State */}
+        {error && (
+          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="flex">
+              <AlertCircle className="h-5 w-5 text-yellow-600 mr-2" />
+              <p className="text-yellow-800">{error}</p>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Loading State para datos */}
-      {dataLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {[1, 2, 3, 4].map((i) => (
-            <Card key={i} className="animate-pulse">
-              <CardHeader>
-                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-              </CardHeader>
-              <CardContent>
-                <div className="h-8 bg-gray-200 rounded w-1/3"></div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      ) : (
-        <>
-          {/* Key Metrics */}
+        {/* Loading State para datos */}
+        {dataLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Camiones Activos</CardTitle>
-                <Truck className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{activeTrucks}</div>
-                <p className="text-xs text-muted-foreground">
-                  {activeTrucks} de {totalTrucks} camiones
-                </p>
-                <Badge className="mt-2 bg-blue-100 text-blue-800">
-                  {((activeTrucks / totalTrucks) * 100).toFixed(0)}%
-                </Badge>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Asignaciones Hoy</CardTitle>
-                <MapPin className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-green-600">{todayAssignments}</div>
-                <p className="text-xs text-muted-foreground">Despachos programados</p>
-                <Badge className="mt-2 bg-green-100 text-green-800">Hoy</Badge>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Combustible Remanente</CardTitle>
-                <Fuel className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-orange-600">{trucksWithRemaining}</div>
-                <p className="text-xs text-muted-foreground">{trucksWithRemaining} camiones con remanente</p>
-                {trucksWithRemaining > 0 && (
-                  <Badge className="mt-2 bg-orange-100 text-orange-800">
-                    <AlertCircle className="h-3 w-3 mr-1" />
-                    Pendiente
+            {[1, 2, 3, 4].map((i) => (
+              <Card key={i} className="animate-pulse">
+                <CardHeader>
+                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                  <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-8 bg-gray-200 rounded w-1/3"></div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <>
+            {/* Key Metrics */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Camiones Activos</CardTitle>
+                  <Truck className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{activeTrucks}</div>
+                  <p className="text-xs text-muted-foreground">
+                    {activeTrucks} de {totalTrucks} camiones
+                  </p>
+                  <Badge className="mt-2 bg-blue-100 text-blue-800">
+                    {((activeTrucks / totalTrucks) * 100).toFixed(0)}%
                   </Badge>
-                )}
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Completados</CardTitle>
-                <FileText className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-purple-600">{completedAssignments}</div>
-                <p className="text-xs text-muted-foreground">Asignaciones finalizadas</p>
-                <Badge className="mt-2 bg-purple-100 text-purple-800">Total</Badge>
-              </CardContent>
-            </Card>
-          </div>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Asignaciones Hoy</CardTitle>
+                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-green-600">{todayAssignments}</div>
+                  <p className="text-xs text-muted-foreground">Despachos programados</p>
+                  <Badge className="mt-2 bg-green-100 text-green-800">Hoy</Badge>
+                </CardContent>
+              </Card>
 
-          {/* Quick Actions */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Combustible Remanente</CardTitle>
+                  <Fuel className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-orange-600">{trucksWithRemaining}</div>
+                  <p className="text-xs text-muted-foreground">{trucksWithRemaining} camiones con remanente</p>
+                  {trucksWithRemaining > 0 && (
+                    <Badge className="mt-2 bg-orange-100 text-orange-800">
+                      <AlertCircle className="h-3 w-3 mr-1" />
+                      Pendiente
+                    </Badge>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Completados</CardTitle>
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-purple-600">{completedAssignments}</div>
+                  <p className="text-xs text-muted-foreground">Asignaciones finalizadas</p>
+                  <Badge className="mt-2 bg-purple-100 text-purple-800">Total</Badge>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Acciones Rápidas</CardTitle>
+                  <CardDescription>Gestión diaria del sistema</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Button asChild variant="outline" className="w-full">
+                      <Link href="/assignments/new">
+                        <MapPin className="h-4 w-4 mr-2" />
+                        Nueva Asignación
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" className="w-full">
+                      <Link href="/trucks">
+                        <Truck className="h-4 w-4 mr-2" />
+                        Gestionar Camiones
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" className="w-full">
+                      <Link href="/users">
+                        <Users className="h-4 w-4 mr-2" />
+                        Gestionar Usuarios
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" className="w-full">
+                      <Link href="/customers">
+                        <Users className="h-4 w-4 mr-2" />
+                        Gestionar Clientes
+                      </Link>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Estado del Sistema</CardTitle>
+                  <CardDescription>Resumen operacional</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Camiones en tránsito:</span>
+                      <Badge variant="outline" className="text-blue-700">
+                        {trucks.filter((t) => t.state === "Transito").length}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Camiones en descarga:</span>
+                      <Badge variant="outline" className="text-purple-700">
+                        {trucks.filter((t) => t.state === "Descarga").length}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">En mantenimiento:</span>
+                      <Badge variant="outline" className="text-yellow-700">
+                        {trucks.filter((t) => t.state === "Mantenimiento").length}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Asignados:</span>
+                      <Badge variant="outline" className="text-green-700">
+                        {trucks.filter((t) => t.state === "Asignado").length}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Reports Section */}
             <Card>
               <CardHeader>
-                <CardTitle>Acciones Rápidas</CardTitle>
-                <CardDescription>Gestión diaria del sistema</CardDescription>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-6 w-6 text-indigo-600" />
+                  Reportes y Análisis
+                </CardTitle>
+                <CardDescription>Acceso a reportes detallados del sistema</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Button asChild variant="outline" className="w-full bg-transparent">
-                    <Link href="/assignments/new">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <Button asChild variant="outline" className="w-full">
+                    <Link href="/reports">
+                      <FileText className="h-4 w-4 mr-2" />
+                      Reportes Generales
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline" className="w-full">
+                    <Link href="/assignments">
                       <MapPin className="h-4 w-4 mr-2" />
-                      Nueva Asignación
+                      Historial Asignaciones
                     </Link>
                   </Button>
-                  <Button asChild variant="outline" className="w-full bg-transparent">
-                    <Link href="/trucks">
-                      <Truck className="h-4 w-4 mr-2" />
-                      Gestionar Camiones
-                    </Link>
-                  </Button>
-                  <Button asChild variant="outline" className="w-full bg-transparent">
-                    <Link href="/users">
-                      <Users className="h-4 w-4 mr-2" />
-                      Gestionar Usuarios
-                    </Link>
-                  </Button>
-                  <Button asChild variant="outline" className="w-full bg-transparent">
-                    <Link href="/customers">
-                      <Users className="h-4 w-4 mr-2" />
-                      Gestionar Clientes
+                  <Button asChild variant="outline" className="w-full">
+                    <Link href="/analytics">
+                      <FileText className="h-4 w-4 mr-2" />
+                      Análisis Avanzado
                     </Link>
                   </Button>
                 </div>
               </CardContent>
             </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Estado del Sistema</CardTitle>
-                <CardDescription>Resumen operacional</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Camiones en tránsito:</span>
-                    <Badge variant="outline" className="text-blue-700">
-                      {trucks.filter((t) => t.state === "Transito").length}
-                    </Badge>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Camiones en descarga:</span>
-                    <Badge variant="outline" className="text-purple-700">
-                      {trucks.filter((t) => t.state === "Descarga").length}
-                    </Badge>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">En mantenimiento:</span>
-                    <Badge variant="outline" className="text-yellow-700">
-                      {trucks.filter((t) => t.state === "Mantenimiento").length}
-                    </Badge>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Asignados:</span>
-                    <Badge variant="outline" className="text-green-700">
-                      {trucks.filter((t) => t.state === "Asignado").length}
-                    </Badge>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Reports Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-6 w-6 text-indigo-600" />
-                Reportes y Análisis
-              </CardTitle>
-              <CardDescription>Acceso a reportes detallados del sistema</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/reports">
-                    <FileText className="h-4 w-4 mr-2" />
-                    Reportes Generales
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/assignments">
-                    <MapPin className="h-4 w-4 mr-2" />
-                    Historial Asignaciones
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" className="w-full bg-transparent">
-                  <Link href="/analytics">
-                    <FileText className="h-4 w-4 mr-2" />
-                    Análisis Avanzado
-                  </Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </>
-      )}
-    </div>
+          </>
+        )}
+      </div>
   )
 }

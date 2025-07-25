@@ -61,17 +61,7 @@ export async function middleware(request: NextRequest) {
     }
 
     // Admin routes - all routes under (admin) group: dashboard, assignments, customers, reports, trucks
-    const adminRoutes = [
-      "/dashboard",
-      "/dispatches",
-      "/assignments",
-      "/customers",
-      "/reports",
-      "/trucks",
-      "/users",
-      "/history",
-      "/analytics",
-    ]
+    const adminRoutes = ["/dashboard", "/assignments", "/customers", "/reports", "/trucks", "/users"]
     const isAdminRoute = adminRoutes.some((route) => pathname === route || pathname.startsWith(`${route}/`))
 
     if (isAdminRoute) {

@@ -20,7 +20,6 @@ interface TruckFormData {
   capacitygal: string
   lastRemaining: string
   state: TruckState
-  customFuelName: string
 }
 
 interface TruckFormErrors {
@@ -29,32 +28,14 @@ interface TruckFormErrors {
   capacitygal?: string
   lastRemaining?: string
   state?: string
-  customFuelName?: string
 }
 
 const fuelTypeOptions = [
   { value: "DIESEL_B5", label: "Diésel B5" },
-  { value: "DIESEL_B500", label: "Diésel B500" },
-  { value: "GASOLINA_PREMIUM_95", label: "Gasolina Premium 95" },
-  { value: "GASOLINA_REGULAR_90", label: "Gasolina Regular 90" },
-  { value: "GASOHOL_84", label: "Gasohol 84" },
-  { value: "GASOHOL_90", label: "Gasohol 90" },
-  { value: "GASOHOL_95", label: "Gasohol 95" },
-  { value: "SOLVENTE", label: "Solvente Industrial" },
-  { value: "GASOL", label: "Gasol" },
-  { value: "PERSONALIZADO", label: "Personalizado" },
-]
-
-const capacityOptions = [
-  { value: 1500, label: "1,500 galones" },
-  { value: 2000, label: "2,000 galones" },
-  { value: 3000, label: "3,000 galones" },
-  { value: 5000, label: "5,000 galones" },
-  { value: 6500, label: "6,500 galones" },
-  { value: 7500, label: "7,500 galones" },
-  { value: 9000, label: "9,000 galones" },
-  { value: 10000, label: "10,000 galones" },
-  { value: 15000, label: "15,000 galones (Máximo)" },
+  { value: "GASOLINA_90", label: "Gasolina 90" },
+  { value: "GASOLINA_95", label: "Gasolina 95" },
+  { value: "GLP", label: "GLP" },
+  { value: "ELECTRICA", label: "Eléctrica" },
 ]
 
 const stateOptions = [
@@ -76,7 +57,6 @@ export function TruckForm() {
     capacitygal: "",
     lastRemaining: "0",
     state: "Activo",
-    customFuelName: "",
   })
 
   const [errors, setErrors] = useState<TruckFormErrors>({})
@@ -94,24 +74,12 @@ export function TruckForm() {
       newErrors.typefuel = "El tipo de combustible es requerido"
     }
 
-    if (formData.typefuel === "PERSONALIZADO") {
-      if (!formData.customFuelName.trim()) {
-        newErrors.customFuelName = "El nombre del combustible personalizado es requerido"
-      } else if (formData.customFuelName.trim().length < 3) {
-        newErrors.customFuelName = "El nombre debe tener al menos 3 caracteres"
-      }
-    }
-
     if (!formData.capacitygal.trim()) {
       newErrors.capacitygal = "La capacidad es requerida"
     } else {
       const capacity = Number.parseFloat(formData.capacitygal)
       if (isNaN(capacity) || capacity <= 0) {
         newErrors.capacitygal = "La capacidad debe ser un número mayor a 0"
-      } else if (capacity < 1500) {
-        newErrors.capacitygal = "La capacidad mínima es 1,500 galones"
-      } else if (capacity > 15000) {
-        newErrors.capacitygal = "La capacidad máxima es 15,000 galones"
       }
     }
 
@@ -156,7 +124,6 @@ export function TruckForm() {
           capacitygal: Number.parseFloat(formData.capacitygal),
           lastRemaining: formData.lastRemaining ? Number.parseFloat(formData.lastRemaining) : 0,
           state: formData.state,
-          customFuelName: formData.typefuel === "PERSONALIZADO" ? formData.customFuelName.trim() : null,
         }),
       })
 
@@ -254,68 +221,23 @@ export function TruckForm() {
           {errors.typefuel && <p className="text-sm text-red-500">{errors.typefuel}</p>}
         </div>
 
-        {/* Custom Fuel Type Input - Add this after the fuel type Select */}
-        {formData.typefuel === "PERSONALIZADO" && (
-          <div className="space-y-2 md:col-span-2">
-            <Label htmlFor="customFuelName">
-              Nombre del Combustible Personalizado <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              id="customFuelName"
-              type="text"
-              placeholder="Ej: Combustible Especial XYZ"
-              value={formData.customFuelName || ""}
-              onChange={(e) => handleInputChange("customFuelName", e.target.value)}
-              className={errors.customFuelName ? "border-red-500" : ""}
-              disabled={isLoading}
-            />
-            {errors.customFuelName && <p className="text-sm text-red-500">{errors.customFuelName}</p>}
-            <p className="text-sm text-gray-500">Especifica el nombre del combustible personalizado</p>
-          </div>
-        )}
-
         {/* Capacidad */}
         <div className="space-y-2">
           <Label htmlFor="capacitygal">
             Capacidad (Galones) <span className="text-red-500">*</span>
           </Label>
-          <div className="space-y-2">
-            <Select
-              value={formData.capacitygal}
-              onValueChange={(value) => handleInputChange("capacitygal", value)}
-              disabled={isLoading}
-            >
-              <SelectTrigger className={errors.capacitygal ? "border-red-500" : ""}>
-                <SelectValue placeholder="Seleccionar capacidad estándar" />
-              </SelectTrigger>
-              <SelectContent>
-                {capacityOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value.toString()}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-                <SelectItem value="custom">Capacidad personalizada</SelectItem>
-              </SelectContent>
-            </Select>
-
-            {(formData.capacitygal === "custom" ||
-              !capacityOptions.find((opt) => opt.value.toString() === formData.capacitygal)) && (
-              <Input
-                id="capacitygal-custom"
-                type="number"
-                step="1"
-                min="1500"
-                max="15000"
-                placeholder="Ingrese capacidad personalizada (1500-15000)"
-                value={formData.capacitygal === "custom" ? "" : formData.capacitygal}
-                onChange={(e) => handleInputChange("capacitygal", e.target.value)}
-                className={errors.capacitygal ? "border-red-500" : ""}
-                disabled={isLoading}
-              />
-            )}
-          </div>
+          <Input
+            id="capacitygal"
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="Ej: 3000"
+            value={formData.capacitygal}
+            onChange={(e) => handleInputChange("capacitygal", e.target.value)}
+            className={errors.capacitygal ? "border-red-500" : ""}
+            disabled={isLoading}
+          />
           {errors.capacitygal && <p className="text-sm text-red-500">{errors.capacitygal}</p>}
-          <p className="text-sm text-gray-500">Rango permitido: 1,500 - 15,000 galones</p>
         </div>
 
         {/* Remanente Inicial */}
@@ -369,8 +291,7 @@ export function TruckForm() {
         <CardContent>
           <ul className="text-sm text-gray-600 space-y-1">
             <li>• La placa debe ser única en el sistema</li>
-            <li>• La capacidad se registra en galones (rango: 1,500 - 15,000)</li>
-            <li>• El tipo de combustible es referencial - cualquier camión puede transportar cualquier combustible</li>
+            <li>• La capacidad se registra en galones</li>
             <li>• El remanente inicial puede ser 0 si el camión está vacío</li>
             <li>• El estado se puede cambiar posteriormente desde la lista de camiones</li>
           </ul>

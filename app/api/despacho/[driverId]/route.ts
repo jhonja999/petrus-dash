@@ -91,7 +91,8 @@ export async function POST(request: Request, context: { params: { driverId: stri
       await prisma.assignment.update({
         where: { id: Number.parseInt(assignmentId) },
         data: {
-          completedAt: new Date(), // Removed isCompleted: true
+          isCompleted: true,
+          completedAt: new Date(),
         },
       })
     }
@@ -99,12 +100,7 @@ export async function POST(request: Request, context: { params: { driverId: stri
     return NextResponse.json(newDischarge, { status: 201 })
   } catch (error) {
     console.error("Error al crear el despacho:", error)
-    const errorMessage =
-      error instanceof Error
-        ? error.message
-        : typeof error === "object" && error !== null && "message" in error
-          ? String(error.message)
-          : "Error desconocido"
+    const errorMessage = error instanceof Error ? error.message : "Error desconocido"
     return NextResponse.json({ error: "Error interno del servidor", details: errorMessage }, { status: 500 })
   }
 }
@@ -152,12 +148,6 @@ export async function GET(_request: Request, context: { params: { driverId: stri
     return NextResponse.json(despachos)
   } catch (error) {
     console.error("Error al obtener los despachos:", error)
-    const errorMessage =
-      error instanceof Error
-        ? error.message
-        : typeof error === "object" && error !== null && "message" in error
-          ? String(error.message)
-          : "Error desconocido"
-    return NextResponse.json({ error: "Error interno del servidor", details: errorMessage }, { status: 500 })
+    return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }
 }
