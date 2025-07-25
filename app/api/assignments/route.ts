@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { verifyToken } from "@/lib/jwt"
 import { cookies } from "next/headers"
+import { FuelType } from "@prisma/client" // Import FuelType enum from Prisma client
 
 export async function GET(request: NextRequest) {
   try {
@@ -245,7 +246,8 @@ export async function GET(request: NextRequest) {
         pages: Math.ceil(totalCount / limit),
       },
     })
-  } catch (error) {
+  } catch (error: any) {
+    // Explicitly type error as any
     console.error("❌ Error fetching assignments:", error)
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }
@@ -279,22 +281,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Todos los campos son requeridos" }, { status: 400 })
     }
 
-    // Validate fuel type
-    const validFuelTypes = [
-      "DIESEL_B5",
-      "DIESEL_B500",
-      "GASOLINA_PREMIUM_95",
-      "GASOLINA_REGULAR_90",
-      "GASOHOL_84",
-      "GASOHOL_90",
-      "GASOHOL_95",
-      "SOLVENTE",
-      "GASOL",
-      "PERSONALIZADO",
-    ]
+    // Determine if the fuelType is one of the predefined enum values
+    // If not, it's a custom fuel type, and we store "PERSONALIZADO" in the enum field
+    // and the actual custom string in the new customFuelType field.
+    const predefinedFuelTypes = Object.values(FuelType) as string[] // Get all enum string values
 
-    if (!validFuelTypes.includes(fuelType)) {
-      return NextResponse.json({ error: "Tipo de combustible inválido" }, { status: 400 })
+    let mappedFuelType: FuelType
+    let customFuelTypeName: string | null = null
+
+    if (predefinedFuelTypes.includes(fuelType)) {
+      mappedFuelType = fuelType as FuelType
+    } else {
+      mappedFuelType = FuelType.PERSONALIZADO
+      customFuelTypeName = fuelType // Store the custom string here
     }
 
     // Clients are optional for initial assignment creation
@@ -355,7 +354,8 @@ export async function POST(request: NextRequest) {
         data: {
           truckId,
           driverId,
-          fuelType,
+          fuelType: mappedFuelType, // Use the mapped enum value
+          customFuelType: customFuelTypeName, // Store the custom string here
           totalLoaded: Number(totalLoaded),
           totalRemaining: Number(totalLoaded),
           isCompleted: false,
@@ -427,7 +427,8 @@ export async function POST(request: NextRequest) {
     })
 
     return NextResponse.json(createdAssignment, { status: 201 })
-  } catch (error) {
+  } catch (error: any) {
+    // Explicitly type error as any
     console.error("❌ Error creating assignment:", error)
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }
