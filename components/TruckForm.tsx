@@ -239,7 +239,7 @@ export function TruckForm() {
             step="0.01"
             min="0"
             max="15000"
-            placeholder="Ej: 3000 (Máximo: 15,000)"
+            placeholder="(Máximo: 15,000)"
             value={formData.capacitygal}
             onChange={(e) => handleInputChange("capacitygal", e.target.value)}
             className={errors.capacitygal ? "border-red-500" : ""}

@@ -35,8 +35,10 @@ interface TruckData {
 }
 
 interface AssignmentFormProps {
+  trucks: TruckData[]
+  drivers: Driver[]
   onSuccess?: () => void
-  onCancel?: () => void
+  refreshing?: boolean
 }
 
 // Properly typed fuel type labels
@@ -58,11 +60,9 @@ const getFuelTypeLabel = (fuelType: FuelType): string => {
   return fuelTypeLabels[fuelType] || fuelType
 }
 
-export function AssignmentForm({ onSuccess, onCancel }: AssignmentFormProps) {
+export function AssignmentForm({ trucks, drivers, onSuccess, refreshing }: AssignmentFormProps) {
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
-  const [drivers, setDrivers] = useState<Driver[]>([])
-  const [trucks, setTrucks] = useState<TruckData[]>([])
   const [availableTrucks, setAvailableTrucks] = useState<TruckData[]>([])
   const [selectedTruck, setSelectedTruck] = useState<TruckData | null>(null)
 
@@ -71,18 +71,14 @@ export function AssignmentForm({ onSuccess, onCancel }: AssignmentFormProps) {
     driverId: "",
     totalLoaded: "",
     fuelType: "" as FuelType | "",
+    customFuelType: "", // Para combustible personalizado
     notes: "",
   })
 
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   useEffect(() => {
-    fetchDrivers()
-    fetchTrucks()
-  }, [])
-
-  useEffect(() => {
-    if (formData.fuelType) {
+    if (formData.fuelType && formData.fuelType !== "PERSONALIZADO") {
       const filtered = trucks.filter((truck) => truck.typefuel === formData.fuelType && truck.state === "Activo")
       setAvailableTrucks(filtered)
 
@@ -91,6 +87,10 @@ export function AssignmentForm({ onSuccess, onCancel }: AssignmentFormProps) {
         setSelectedTruck(null)
         setFormData((prev) => ({ ...prev, truckId: "" }))
       }
+    } else if (formData.fuelType === "PERSONALIZADO") {
+      // Para combustible personalizado, mostrar todos los camiones activos
+      const filtered = trucks.filter((truck) => truck.state === "Activo")
+      setAvailableTrucks(filtered)
     } else {
       setAvailableTrucks([])
     }
@@ -105,34 +105,6 @@ export function AssignmentForm({ onSuccess, onCancel }: AssignmentFormProps) {
     }
   }, [formData.truckId, trucks])
 
-  const fetchDrivers = async () => {
-    try {
-      const response = await axios.get("/api/users?role=Operador&state=Activo")
-      setDrivers(response.data)
-    } catch (error) {
-      console.error("Error fetching drivers:", error)
-      toast({
-        title: "Error",
-        description: "No se pudieron cargar los conductores",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const fetchTrucks = async () => {
-    try {
-      const response = await axios.get("/api/trucks")
-      setTrucks(response.data)
-    } catch (error) {
-      console.error("Error fetching trucks:", error)
-      toast({
-        title: "Error",
-        description: "No se pudieron cargar los camiones",
-        variant: "destructive",
-      })
-    }
-  }
-
   const validateForm = () => {
     const newErrors: Record<string, string> = {}
 
@@ -140,6 +112,11 @@ export function AssignmentForm({ onSuccess, onCancel }: AssignmentFormProps) {
     if (!formData.driverId) newErrors.driverId = "Selecciona un conductor"
     if (!formData.totalLoaded) newErrors.totalLoaded = "Ingresa la cantidad cargada"
     if (!formData.fuelType) newErrors.fuelType = "Selecciona el tipo de combustible"
+
+    // Validar combustible personalizado
+    if (formData.fuelType === "PERSONALIZADO" && !formData.customFuelType.trim()) {
+      newErrors.customFuelType = "Especifica el tipo de combustible personalizado"
+    }
 
     const totalLoaded = Number.parseFloat(formData.totalLoaded)
     if (totalLoaded <= 0) {
@@ -166,7 +143,7 @@ export function AssignmentForm({ onSuccess, onCancel }: AssignmentFormProps) {
         truckId: Number(formData.truckId),
         driverId: Number(formData.driverId),
         totalLoaded: Number.parseFloat(formData.totalLoaded),
-        fuelType: formData.fuelType,
+        fuelType: formData.fuelType === "PERSONALIZADO" ? formData.customFuelType : formData.fuelType,
         notes: formData.notes || null,
       }
 
@@ -183,6 +160,7 @@ export function AssignmentForm({ onSuccess, onCancel }: AssignmentFormProps) {
         driverId: "",
         totalLoaded: "",
         fuelType: "" as FuelType | "",
+        customFuelType: "",
         notes: "",
       })
       setErrors({})
@@ -217,7 +195,7 @@ export function AssignmentForm({ onSuccess, onCancel }: AssignmentFormProps) {
   const selectedDriver = drivers.find((d) => d.id === Number(formData.driverId))
 
   return (
-    <Card className="w-full max-w-2xl mx-auto">
+    <Card className="w-full">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Plus className="h-5 w-5 text-blue-600" />
@@ -250,6 +228,29 @@ export function AssignmentForm({ onSuccess, onCancel }: AssignmentFormProps) {
             )}
           </div>
 
+          {/* Custom Fuel Type Input */}
+          {formData.fuelType === "PERSONALIZADO" && (
+            <div className="space-y-2">
+              <Label htmlFor="customFuelType">Especificar Combustible Personalizado *</Label>
+              <Input
+                id="customFuelType"
+                value={formData.customFuelType}
+                onChange={(e) => handleInputChange("customFuelType", e.target.value)}
+                placeholder="Ej: Diésel Especial, Combustible Industrial, etc."
+                className={errors.customFuelType ? "border-red-500" : ""}
+              />
+              {errors.customFuelType && (
+                <p className="text-sm text-red-500 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {errors.customFuelType}
+                </p>
+              )}
+              <p className="text-xs text-gray-500">
+                Especifica el tipo exacto de combustible personalizado que se va a cargar
+              </p>
+            </div>
+          )}
+
           {/* Truck Selection */}
           <div className="space-y-2">
             <Label htmlFor="truckId">Camión *</Label>
@@ -264,7 +265,7 @@ export function AssignmentForm({ onSuccess, onCancel }: AssignmentFormProps) {
                     !formData.fuelType
                       ? "Primero selecciona el tipo de combustible"
                       : availableTrucks.length === 0
-                        ? "No hay camiones disponibles para este combustible"
+                        ? "No hay camiones disponibles"
                         : "Selecciona un camión"
                   }
                 />
@@ -309,8 +310,13 @@ export function AssignmentForm({ onSuccess, onCancel }: AssignmentFormProps) {
                     <strong>Combustible restante:</strong> {selectedTruck.lastRemaining} galones
                   </p>
                   <p>
-                    <strong>Tipo de combustible:</strong> {getFuelTypeLabel(selectedTruck.typefuel)}
+                    <strong>Tipo de combustible del camión:</strong> {getFuelTypeLabel(selectedTruck.typefuel)}
                   </p>
+                  {formData.fuelType === "PERSONALIZADO" && (
+                    <p className="text-orange-600">
+                      <strong>Combustible a cargar:</strong> {formData.customFuelType || "No especificado"}
+                    </p>
+                  )}
                 </div>
               </AlertDescription>
             </Alert>
@@ -414,18 +420,7 @@ export function AssignmentForm({ onSuccess, onCancel }: AssignmentFormProps) {
 
           {/* Form Actions */}
           <div className="flex gap-3 pt-4">
-            {onCancel && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onCancel}
-                className="flex-1 bg-transparent"
-                disabled={loading}
-              >
-                Cancelar
-              </Button>
-            )}
-            <Button type="submit" disabled={loading} className="flex-1">
+            <Button type="submit" disabled={loading || refreshing} className="flex-1">
               {loading ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />

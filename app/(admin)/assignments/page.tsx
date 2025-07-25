@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import axios from "axios"
 import { RefreshCw } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
@@ -26,10 +26,21 @@ export default function AssignmentsPage() {
 
   const { isAdmin, isLoading } = authData
   const { assignments: rawAssignments, loading: assignmentsLoading, refreshAssignments } = assignmentsData
-  const { trucks, refreshTrucks } = trucksData
+  const { trucks: rawTrucks, refreshTrucks } = trucksData
 
   // ✅ FIX: Asegurar que assignments siempre sea un array
   const assignments = Array.isArray(rawAssignments) ? rawAssignments : []
+
+  // ✅ FIX: Transform trucks data to match TruckData interface
+  const trucks = useMemo(() => {
+    if (!rawTrucks || !Array.isArray(rawTrucks)) return []
+    
+    return rawTrucks.map(truck => ({
+      ...truck,
+      capacitygal: Number(truck.capacitygal), // Convert Decimal to number
+      lastRemaining: Number(truck.lastRemaining) // Convert Decimal to number if needed
+    }))
+  }, [rawTrucks])
 
   useEffect(() => {
     setMounted(true)
@@ -54,19 +65,6 @@ export default function AssignmentsPage() {
     }
     fetchDrivers()
   }, [mounted])
-
-  // Add this useEffect after the existing ones
-  useEffect(() => {
-    if (!mounted || !isAdmin) return
-
-    // Set up polling for real-time updates every 30 seconds
-    const interval = setInterval(() => {
-      console.log("🔄 Auto-refreshing assignments data...")
-      refreshAssignments()
-    }, 30000)
-
-    return () => clearInterval(interval)
-  }, [mounted, isAdmin, refreshAssignments])
 
   const handleAssignmentSuccess = async () => {
     // Refrescar asignaciones y camiones
@@ -151,7 +149,7 @@ export default function AssignmentsPage() {
           className="flex items-center gap-2 hover:bg-gray-100 transition-colors duration-200"
         >
           <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-          {refreshing ? "Actualizando..." : "Actualizar"}
+          {refreshing ? "Actualizando..." : "Actualizar Estados"}
         </Button>
       </div>
 

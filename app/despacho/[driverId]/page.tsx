@@ -21,6 +21,7 @@ import {
   Target,
   Loader2,
   RefreshCw,
+  Navigation,
 } from "lucide-react"
 import Link from "next/link"
 import axios from "axios"
@@ -121,6 +122,10 @@ export default function DespachoDriverPage() {
   const [marcadorInicial, setMarcadorInicial] = useState("")
   const [marcadorFinal, setMarcadorFinal] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
+
+  // Estados para tracking de ubicación
+  const [isLocationSharing, setIsLocationSharing] = useState(false)
+  const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null)
 
   // Basic auth check
   useEffect(() => {
@@ -264,6 +269,95 @@ export default function DespachoDriverPage() {
     }
   }
 
+  // ✅ Función para compartir ubicación
+  const handleShareLocation = async () => {
+    if (!navigator.geolocation) {
+      toast({
+        title: "❌ Error",
+        description: "Tu navegador no soporta geolocalización.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsLocationSharing(true)
+
+    try {
+      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 60000,
+        })
+      })
+
+      const location = {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+      }
+
+      setCurrentLocation(location)
+
+      // Enviar ubicación al servidor para tracking
+      await axios.post(`/api/despacho/${driverId}/location`, {
+        latitude: location.lat,
+        longitude: location.lng,
+        timestamp: new Date().toISOString(),
+      })
+
+      toast({
+        title: "📍 Ubicación compartida",
+        description: "Tu ubicación ha sido enviada al sistema de tracking.",
+        className: "border-green-200 bg-green-50",
+      })
+
+      // Configurar actualización periódica de ubicación cada 5 minutos
+      const locationInterval = setInterval(
+        async () => {
+          try {
+            const newPosition = await new Promise<GeolocationPosition>((resolve, reject) => {
+              navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: true,
+                timeout: 5000,
+                maximumAge: 30000,
+              })
+            })
+
+            const newLocation = {
+              lat: newPosition.coords.latitude,
+              lng: newPosition.coords.longitude,
+            }
+
+            setCurrentLocation(newLocation)
+
+            await axios.post(`/api/despacho/${driverId}/location`, {
+              latitude: newLocation.lat,
+              longitude: newLocation.lng,
+              timestamp: new Date().toISOString(),
+            })
+
+            console.log("📍 Ubicación actualizada automáticamente")
+          } catch (error) {
+            console.error("Error actualizando ubicación:", error)
+          }
+        },
+        5 * 60 * 1000,
+      ) // 5 minutos
+
+      // Limpiar intervalo cuando el componente se desmonte
+      return () => clearInterval(locationInterval)
+    } catch (error) {
+      console.error("Error obteniendo ubicación:", error)
+      toast({
+        title: "❌ Error de ubicación",
+        description: "No se pudo obtener tu ubicación. Verifica los permisos del navegador.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLocationSharing(false)
+    }
+  }
+
   // ✅ Cargar datos al inicializar
   useEffect(() => {
     fetchData()
@@ -274,22 +368,6 @@ export default function DespachoDriverPage() {
     if (selectedDate) {
       setLoading(true)
       fetchData(selectedDate)
-    }
-  }, [selectedDate])
-
-  // ✅ Auto-refresh cada 5 minutos si es el día actual
-  useEffect(() => {
-    const today = new Date().toISOString().split("T")[0]
-    if (selectedDate === today) {
-      const interval = setInterval(
-        () => {
-          console.log("🔄 Auto-refreshing current day assignments")
-          fetchData(selectedDate)
-        },
-        5 * 60 * 1000,
-      ) // 5 minutos
-
-      return () => clearInterval(interval)
     }
   }, [selectedDate])
 
@@ -509,7 +587,7 @@ export default function DespachoDriverPage() {
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Reintentar
               </Button>
-              <Button asChild variant="outline" className="w-full">
+              <Button asChild variant="outline" className="w-full bg-transparent">
                 <Link href="/despacho">Volver al Inicio</Link>
               </Button>
             </div>
@@ -557,12 +635,26 @@ export default function DespachoDriverPage() {
                 {isToday ? "Hoy" : "Histórico"}
               </Badge>
 
+              {/* ✅ Botón de compartir ubicación */}
+              {isToday && (
+                <Button
+                  onClick={handleShareLocation}
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-2 bg-transparent"
+                  disabled={isLocationSharing}
+                >
+                  <Navigation className={`h-4 w-4 ${isLocationSharing ? "animate-pulse" : ""}`} />
+                  {isLocationSharing ? "Obteniendo..." : currentLocation ? "Ubicación Activa" : "Compartir Ubicación"}
+                </Button>
+              )}
+
               {/* ✅ Botón unificado de actualización/sincronización */}
               <Button
                 onClick={handleRefresh}
                 variant="outline"
                 size="sm"
-                className="flex items-center gap-2"
+                className="flex items-center gap-2 bg-transparent"
                 disabled={isRefreshing}
               >
                 <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
@@ -579,6 +671,11 @@ export default function DespachoDriverPage() {
           <div className="text-xs text-blue-600 bg-blue-50 px-3 py-1 rounded-md">
             💡 <strong>Sincronizar:</strong> Actualiza estados de camiones, completa asignaciones antiguas y refresca
             datos en tiempo real
+            {currentLocation && (
+              <span className="ml-4">
+                📍 <strong>Ubicación:</strong> Compartiendo posición para tracking
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -1093,7 +1190,7 @@ export default function DespachoDriverPage() {
                 <Button
                   onClick={closeModal}
                   variant="outline"
-                  className="flex-1 hover:bg-gray-100 active:scale-95 transition-all duration-200"
+                  className="flex-1 hover:bg-gray-100 active:scale-95 transition-all duration-200 bg-transparent"
                   disabled={isProcessing}
                 >
                   Cancelar

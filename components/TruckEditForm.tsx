@@ -293,6 +293,9 @@ export function TruckEditForm({ truck }: TruckEditFormProps) {
                   </SelectContent>
                 </Select>
                 {errors.typefuel && <p className="text-sm text-red-500">{errors.typefuel}</p>}
+                <p className="text-sm text-muted-foreground">
+                  Tipo predeterminado del camión. Puede ser modificado en cada asignación.
+                </p>
               </div>
 
               {/* Capacidad */}
