@@ -36,8 +36,10 @@ export interface Customer {
   companyname: string
   ruc: string
   address: string
-  createdAt?: Date // Added for consistency
-  updatedAt?: Date // Added for consistency
+  latitude?: Decimal | null
+  longitude?: Decimal | null
+  createdAt?: Date
+  updatedAt?: Date
 }
 
 export interface Assignment {

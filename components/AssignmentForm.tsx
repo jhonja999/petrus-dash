@@ -23,10 +23,15 @@ interface AssignmentFormProps {
 
 const fuelTypeLabels = {
   DIESEL_B5: "Diésel B5",
-  GASOLINA_90: "Gasolina 90",
-  GASOLINA_95: "Gasolina 95",
-  GLP: "GLP",
-  ELECTRICA: "Eléctrica",
+  DIESEL_B500: "Diésel B500",
+  GASOLINA_PREMIUM_95: "Gasolina Premium 95",
+  GASOLINA_REGULAR_90: "Gasolina Regular 90",
+  GASOHOL_84: "Gasohol 84",
+  GASOHOL_90: "Gasohol 90",
+  GASOHOL_95: "Gasohol 95",
+  SOLVENTE: "Solvente",
+  GASOL: "Gasol",
+  PERSONALIZADO: "Personalizado",
 }
 
 export function AssignmentForm({ trucks, drivers, onSuccess, refreshing = false }: AssignmentFormProps) {
@@ -199,7 +204,7 @@ export function AssignmentForm({ trucks, drivers, onSuccess, refreshing = false 
                     variant="outline"
                     size="sm"
                     onClick={handleRefreshTrucks}
-                    className="w-full flex items-center gap-2 hover:bg-gray-50 transition-colors"
+                    className="w-full flex items-center gap-2 hover:bg-gray-50 transition-colors bg-transparent"
                     disabled={isRefreshDisabled}
                   >
                     <RefreshCw className={`h-4 w-4 ${isRefreshDisabled ? "animate-spin" : ""}`} />
@@ -246,24 +251,37 @@ export function AssignmentForm({ trucks, drivers, onSuccess, refreshing = false 
                 id="totalLoaded"
                 type="number"
                 step="0.01"
-                max="3000"
+                max="15000"
                 value={formData.totalLoaded}
                 onChange={(e) => {
                   const value = Number.parseFloat(e.target.value) || 0
-                  if (value <= 3000) {
+                  if (value <= 15000) {
                     setFormData((prev) => ({ ...prev, totalLoaded: e.target.value }))
                   }
                 }}
-                placeholder="0.00 (Máximo: 3000)"
+                placeholder="0.00 (Máximo: 15,000)"
                 required
               />
               {selectedTruck && totalLoaded > 0 && (
-                <p className="text-sm text-green-600">
-                  Total disponible: <strong>{totalAvailable.toFixed(2)} galones</strong>
-                  {Number(previousRemaining) > 0 && (
-                    <span className="text-blue-600"> (Incluye {previousRemaining.toString()} de remanente)</span>
-                  )}
-                </p>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>Capacidad utilizada:</span>
+                    <span>
+                      {((totalAvailable / Number.parseFloat(selectedTruck.capacitygal.toString())) * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                      style={{
+                        width: `${Math.min((totalAvailable / Number.parseFloat(selectedTruck.capacitygal.toString())) * 100, 100)}%`,
+                      }}
+                    ></div>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    {totalAvailable.toFixed(2)} / {selectedTruck.capacitygal.toString()} galones
+                  </p>
+                </div>
               )}
             </div>
 

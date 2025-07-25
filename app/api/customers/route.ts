@@ -5,33 +5,35 @@ import { cookies } from "next/headers"
 
 export async function GET() {
   console.log("🔍 GET /api/customers - Iniciando...")
-  
+
   try {
     console.log("📊 Conectando a la base de datos...")
-    
+
     // Test database connection
     await prisma.$connect()
     console.log("✅ Conexión a BD exitosa")
-    
+
     console.log("🔍 Buscando clientes...")
     const customers = await prisma.customer.findMany({
       orderBy: { companyname: "asc" },
     })
-    
+
     console.log(`✅ Clientes encontrados: ${customers.length}`)
     return NextResponse.json(customers)
-    
   } catch (error: any) {
     console.error("❌ Error en GET /api/customers:")
     console.error("Error completo:", error)
     console.error("Error message:", error?.message)
     console.error("Error stack:", error?.stack)
-    
-    return NextResponse.json({ 
-      error: "Error interno del servidor", 
-      details: error?.message,
-      type: error?.constructor?.name 
-    }, { status: 500 })
+
+    return NextResponse.json(
+      {
+        error: "Error interno del servidor",
+        details: error?.message,
+        type: error?.constructor?.name,
+      },
+      { status: 500 },
+    )
   } finally {
     await prisma.$disconnect()
   }
@@ -39,7 +41,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   console.log("🔍 POST /api/customers - Iniciando...")
-  
+
   try {
     console.log("🍪 Verificando cookies...")
     const cookieStore = await cookies()
@@ -64,8 +66,8 @@ export async function POST(request: NextRequest) {
     console.log("📝 Parseando body...")
     const body = await request.json()
     console.log("Body recibido:", body)
-    
-    const { companyname, ruc, address, confirmRuc } = body
+
+    const { companyname, ruc, address, latitude, longitude, confirmRuc } = body
 
     // Manual validation
     console.log("🔍 Validando campos...")
@@ -83,14 +85,17 @@ export async function POST(request: NextRequest) {
     // RUC length validation with confirmation option
     const rucLength = ruc.trim().length
     console.log(`📏 RUC length: ${rucLength}`)
-    
+
     if (rucLength !== 11) {
       if (!confirmRuc) {
         console.log("❌ RUC no estándar sin confirmación")
-        return NextResponse.json({ 
-          error: `El RUC debe tener 11 dígitos. Actualmente tiene ${rucLength} dígitos.`,
-          needsConfirmation: true 
-        }, { status: 400 })
+        return NextResponse.json(
+          {
+            error: `El RUC debe tener 11 dígitos. Actualmente tiene ${rucLength} dígitos.`,
+            needsConfirmation: true,
+          },
+          { status: 400 },
+        )
       }
       console.log(`⚠️ RUC no estándar confirmado: ${rucLength} dígitos`)
     }
@@ -115,11 +120,13 @@ export async function POST(request: NextRequest) {
 
     console.log("✅ No hay duplicados")
     console.log("💾 Creando cliente...")
-    
+
     const customerData = {
       companyname: companyname.trim(),
       ruc: ruc.trim(),
       address: address.trim(),
+      ...(latitude && !isNaN(Number.parseFloat(latitude)) && { latitude: Number.parseFloat(latitude) }),
+      ...(longitude && !isNaN(Number.parseFloat(longitude)) && { longitude: Number.parseFloat(longitude) }),
     }
     console.log("Datos a guardar:", customerData)
 
@@ -132,11 +139,10 @@ export async function POST(request: NextRequest) {
     // Include info about non-standard RUC in response
     const response = {
       ...customer,
-      ...(rucLength !== 11 && { rucWarning: `RUC guardado con ${rucLength} dígitos (no estándar)` })
+      ...(rucLength !== 11 && { rucWarning: `RUC guardado con ${rucLength} dígitos (no estándar)` }),
     }
 
     return NextResponse.json(response, { status: 201 })
-    
   } catch (error: any) {
     console.error("❌ Error en POST /api/customers:")
     console.error("Error completo:", error)
@@ -144,13 +150,16 @@ export async function POST(request: NextRequest) {
     console.error("Error stack:", error?.stack)
     console.error("Error code:", error?.code)
     console.error("Error meta:", error?.meta)
-    
-    return NextResponse.json({ 
-      error: "Error interno del servidor", 
-      details: error?.message,
-      code: error?.code,
-      type: error?.constructor?.name
-    }, { status: 500 })
+
+    return NextResponse.json(
+      {
+        error: "Error interno del servidor",
+        details: error?.message,
+        code: error?.code,
+        type: error?.constructor?.name,
+      },
+      { status: 500 },
+    )
   } finally {
     await prisma.$disconnect()
   }

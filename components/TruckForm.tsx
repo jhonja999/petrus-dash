@@ -32,10 +32,15 @@ interface TruckFormErrors {
 
 const fuelTypeOptions = [
   { value: "DIESEL_B5", label: "Diésel B5" },
-  { value: "GASOLINA_90", label: "Gasolina 90" },
-  { value: "GASOLINA_95", label: "Gasolina 95" },
-  { value: "GLP", label: "GLP" },
-  { value: "ELECTRICA", label: "Eléctrica" },
+  { value: "DIESEL_B500", label: "Diésel B500" },
+  { value: "GASOLINA_PREMIUM_95", label: "Gasolina Premium 95" },
+  { value: "GASOLINA_REGULAR_90", label: "Gasolina Regular 90" },
+  { value: "GASOHOL_84", label: "Gasohol 84" },
+  { value: "GASOHOL_90", label: "Gasohol 90" },
+  { value: "GASOHOL_95", label: "Gasohol 95" },
+  { value: "SOLVENTE", label: "Solvente" },
+  { value: "GASOL", label: "Gasol" },
+  { value: "PERSONALIZADO", label: "Personalizado" },
 ]
 
 const stateOptions = [
@@ -80,6 +85,8 @@ export function TruckForm() {
       const capacity = Number.parseFloat(formData.capacitygal)
       if (isNaN(capacity) || capacity <= 0) {
         newErrors.capacitygal = "La capacidad debe ser un número mayor a 0"
+      } else if (capacity > 15000) {
+        newErrors.capacitygal = "La capacidad máxima es de 15,000 galones"
       }
     }
 
@@ -231,7 +238,8 @@ export function TruckForm() {
             type="number"
             step="0.01"
             min="0"
-            placeholder="Ej: 3000"
+            max="15000"
+            placeholder="Ej: 3000 (Máximo: 15,000)"
             value={formData.capacitygal}
             onChange={(e) => handleInputChange("capacitygal", e.target.value)}
             className={errors.capacitygal ? "border-red-500" : ""}

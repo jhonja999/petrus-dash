@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, Building2, Edit, Eye, AlertCircle } from "lucide-react"
+import { Plus, Building2, Edit, AlertCircle } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import axios from "axios"
@@ -16,6 +16,7 @@ import dynamic from "next/dynamic"
 import type { Customer } from "@/types/globals"
 import { toast } from "sonner"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { LocationDisplay } from "@/components/LocationDisplay"
 
 function CustomersPageContent() {
   const [mounted, setMounted] = useState(false)
@@ -26,9 +27,11 @@ function CustomersPageContent() {
     companyname: "",
     ruc: "",
     address: "",
+    latitude: "",
+    longitude: "",
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [formErrors, setFormErrors] = useState<{[key: string]: string}>({})
+  const [formErrors, setFormErrors] = useState<{ [key: string]: string }>({})
   const [pendingSubmission, setPendingSubmission] = useState<any>(null)
   const router = useRouter()
 
@@ -46,14 +49,14 @@ function CustomersPageContent() {
     const fetchCustomers = async () => {
       try {
         toast.info("Cargando clientes...")
-        
+
         const response = await axios.get("/api/customers")
         setCustomers(response.data)
-        
+
         toast.success("Clientes cargados", {
           description: `Se encontraron ${response.data.length} clientes registrados.`,
         })
-        
+
         // Show info toast if no customers found
         if (response.data.length === 0) {
           setTimeout(() => {
@@ -64,7 +67,7 @@ function CustomersPageContent() {
         }
       } catch (error) {
         console.error("Error fetching customers:", error)
-        
+
         let errorMessage = "No se pudieron cargar los clientes."
         if (axios.isAxiosError(error)) {
           if (error.response?.status === 500) {
@@ -75,7 +78,7 @@ function CustomersPageContent() {
             errorMessage = "No tiene permisos para ver los clientes."
           }
         }
-        
+
         toast.error("❌ Error al cargar", {
           description: errorMessage,
         })
@@ -90,8 +93,8 @@ function CustomersPageContent() {
   }, [isAdmin, mounted])
 
   const validateForm = () => {
-    const errors: {[key: string]: string} = {}
-    
+    const errors: { [key: string]: string } = {}
+
     // Validate company name
     if (!formData.companyname.trim()) {
       errors.companyname = "El nombre de la empresa es requerido"
@@ -109,8 +112,24 @@ function CustomersPageContent() {
       errors.address = "La dirección es requerida"
     }
 
+    // Validar latitud
+    if (formData.latitude && formData.latitude.trim()) {
+      const lat = Number.parseFloat(formData.latitude.trim())
+      if (isNaN(lat) || lat < -90 || lat > 90) {
+        errors.latitude = "La latitud debe estar entre -90 y 90"
+      }
+    }
+
+    // Validar longitud
+    if (formData.longitude && formData.longitude.trim()) {
+      const lng = Number.parseFloat(formData.longitude.trim())
+      if (isNaN(lng) || lng < -180 || lng > 180) {
+        errors.longitude = "La longitud debe estar entre -180 y 180"
+      }
+    }
+
     // Check for duplicate RUC
-    const existingCustomer = customers.find(customer => customer.ruc === formData.ruc.trim())
+    const existingCustomer = customers.find((customer) => customer.ruc === formData.ruc.trim())
     if (existingCustomer) {
       errors.ruc = "Ya existe un cliente con este RUC"
       // Show specific toast for duplicate
@@ -122,27 +141,28 @@ function CustomersPageContent() {
     }
 
     setFormErrors(errors)
-    
+
     // Return validation result with RUC length info
     return {
       isValid: Object.keys(errors).length === 0,
-      needsRucConfirmation: Object.keys(errors).length === 0 && formData.ruc.trim().length !== 11
+      needsRucConfirmation: Object.keys(errors).length === 0 && formData.ruc.trim().length !== 11,
     }
   }
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
-    
+    setFormData((prev) => ({ ...prev, [field]: value }))
+
     // Clear specific field error when user starts typing
     if (formErrors[field]) {
-      setFormErrors(prev => {
+      setFormErrors((prev) => {
         const newErrors = { ...prev }
         delete newErrors[field]
         return newErrors
       })
-      
+
       // Show encouraging toast when error is cleared
-      if (Object.keys(formErrors).length === 1) { // Only show if this was the last error
+      if (Object.keys(formErrors).length === 1) {
+        // Only show if this was the last error
         toast.success("✅ Errores corregidos", {
           description: "Formulario listo para enviar.",
         })
@@ -164,21 +184,21 @@ function CustomersPageContent() {
 
       const response = await axios.post("/api/customers", {
         ...pendingSubmission,
-        confirmRuc: true
+        confirmRuc: true,
       })
-      
+
       setCustomers((prev) => [...prev, response.data])
-      
+
       // Reset form and show success
       const customerName = response.data.companyname
-      setFormData({ companyname: "", ruc: "", address: "" })
+      setFormData({ companyname: "", ruc: "", address: "", latitude: "", longitude: "" })
       setFormErrors({})
       setPendingSubmission(null)
-      
+
       toast.success("✅ ¡Éxito!", {
         description: `Cliente "${customerName}" creado exitosamente con RUC de ${pendingSubmission.ruc.length} dígitos.`,
       })
-      
+
       // Show additional info for non-standard RUC
       setTimeout(() => {
         toast.info("ℹ️ RUC no estándar guardado", {
@@ -197,7 +217,7 @@ function CustomersPageContent() {
   const handleApiError = (error: any) => {
     let errorTitle = "❌ Error"
     let errorMessage = "Error al crear cliente."
-    
+
     if (axios.isAxiosError(error)) {
       if (error.response?.status === 400) {
         errorTitle = "⚠️ Error de validación"
@@ -205,7 +225,7 @@ function CustomersPageContent() {
         if (backendError) {
           errorMessage = backendError
         }
-        
+
         if (backendError?.includes("RUC")) {
           setFormErrors({ ruc: backendError })
         } else if (backendError?.includes("empresa") || backendError?.includes("nombre")) {
@@ -235,7 +255,7 @@ function CustomersPageContent() {
       errorTitle = "🌐 Error de conexión"
       errorMessage = "No se pudo conectar con el servidor. Verifique su conexión a internet."
     }
-    
+
     toast.error(errorTitle, {
       description: errorMessage,
     })
@@ -243,9 +263,9 @@ function CustomersPageContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     const validation = validateForm()
-    
+
     if (!validation.isValid) {
       toast.error("⚠️ Formulario incompleto", {
         description: "Por favor corrige los errores marcados en rojo.",
@@ -258,12 +278,14 @@ function CustomersPageContent() {
       companyname: formData.companyname.trim(),
       ruc: formData.ruc.trim(),
       address: formData.address.trim(),
+      latitude: formData.latitude.trim(),
+      longitude: formData.longitude.trim(),
     }
 
     // Check if RUC needs confirmation
     if (validation.needsRucConfirmation) {
       setPendingSubmission(cleanFormData)
-      
+
       toast("⚠️ RUC no estándar", {
         description: `El RUC tiene ${cleanFormData.ruc.length} dígitos en lugar de 11. ¿Deseas continuar?`,
         action: {
@@ -275,7 +297,7 @@ function CustomersPageContent() {
           onClick: () => {
             setPendingSubmission(null)
             toast.info("❌ Cancelado", {
-              description: "Creación de cliente cancelada. Puedes corregir el RUC."
+              description: "Creación de cliente cancelada. Puedes corregir el RUC.",
             })
           },
         },
@@ -295,16 +317,16 @@ function CustomersPageContent() {
 
       const response = await axios.post("/api/customers", cleanFormData)
       setCustomers((prev) => [...prev, response.data])
-      
+
       // Reset form and show success
       const customerName = response.data.companyname
-      setFormData({ companyname: "", ruc: "", address: "" })
+      setFormData({ companyname: "", ruc: "", address: "", latitude: "", longitude: "" })
       setFormErrors({})
-      
+
       toast.success("✅ ¡Cliente creado!", {
         description: `"${customerName}" se ha registrado exitosamente con RUC ${response.data.ruc}.`,
       })
-      
+
       // Show form reset confirmation
       setTimeout(() => {
         toast.info("📝 Formulario listo", {
@@ -393,7 +415,7 @@ function CustomersPageContent() {
                       value={formData.ruc}
                       onChange={(e) => {
                         // Only allow numbers
-                        const value = e.target.value.replace(/\D/g, '')
+                        const value = e.target.value.replace(/\D/g, "")
                         handleInputChange("ruc", value)
                       }}
                       placeholder="20123456789"
@@ -429,21 +451,53 @@ function CustomersPageContent() {
                     )}
                   </div>
 
+                  <div className="space-y-2">
+                    <Label htmlFor="latitude">Latitud (Opcional)</Label>
+                    <Input
+                      id="latitude"
+                      type="number"
+                      step="any"
+                      value={formData.latitude}
+                      onChange={(e) => handleInputChange("latitude", e.target.value)}
+                      placeholder="-12.0464"
+                      className={formErrors.latitude ? "border-red-500" : ""}
+                    />
+                    {formErrors.latitude && (
+                      <p className="text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {formErrors.latitude}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="longitude">Longitud (Opcional)</Label>
+                    <Input
+                      id="longitude"
+                      type="number"
+                      step="any"
+                      value={formData.longitude}
+                      onChange={(e) => handleInputChange("longitude", e.target.value)}
+                      placeholder="-77.0428"
+                      className={formErrors.longitude ? "border-red-500" : ""}
+                    />
+                    {formErrors.longitude && (
+                      <p className="text-sm text-red-600 flex items-center">
+                        <AlertCircle className="h-4 w-4 mr-1" />
+                        {formErrors.longitude}
+                      </p>
+                    )}
+                  </div>
+
                   {Object.keys(formErrors).length > 0 && (
                     <Alert variant="destructive">
                       <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        Por favor corrige los errores antes de continuar.
-                      </AlertDescription>
+                      <AlertDescription>Por favor corrige los errores antes de continuar.</AlertDescription>
                     </Alert>
                   )}
 
                   <Button type="submit" className="w-full" disabled={isSubmitting}>
-                    {isSubmitting ? (
-                      pendingSubmission ? "⏳ Confirmando..." : "⏳ Creando..."
-                    ) : (
-                      "Crear Cliente"
-                    )}
+                    {isSubmitting ? (pendingSubmission ? "⏳ Confirmando..." : "⏳ Creando...") : "Crear Cliente"}
                   </Button>
                 </form>
               </CardContent>
@@ -467,6 +521,7 @@ function CustomersPageContent() {
                         <TableHead>Empresa</TableHead>
                         <TableHead>RUC</TableHead>
                         <TableHead>Dirección</TableHead>
+                        <TableHead>Ubicación</TableHead>
                         <TableHead>Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -476,6 +531,13 @@ function CustomersPageContent() {
                           <TableCell className="font-medium">{customer.companyname}</TableCell>
                           <TableCell>{customer.ruc}</TableCell>
                           <TableCell className="max-w-xs truncate">{customer.address}</TableCell>
+                          <TableCell>
+                            <LocationDisplay
+                              latitude={customer.latitude}
+                              longitude={customer.longitude}
+                              companyName={customer.companyname}
+                            />
+                          </TableCell>
                           <TableCell>
                             <div className="flex space-x-2">
                               <Button size="sm" variant="outline" asChild>

@@ -32,10 +32,19 @@ enum TruckState {
 
 enum FuelType {
   DIESEL_B5
+  DIESEL_B500
   GASOLINA_90
   GASOLINA_95
   GLP
   ELECTRICA
+  GASOLINA_PREMIUM_95
+  GASOLINA_REGULAR_90
+  GASOHOL_84
+  GASOHOL_90
+  GASOHOL_95
+  SOLVENTE
+  GASOL
+  PERSONALIZADO
 }
 
 enum DischargeStatus {
@@ -66,7 +75,7 @@ model Truck {
   id            Int          @id @default(autoincrement())
   placa         String       @unique
   typefuel      FuelType
-  capacitygal   Decimal
+  capacitygal   Decimal @db.Decimal(10, 2)
   lastRemaining Decimal      @default(0.00)
   state         TruckState   @default(Activo)
   Assignment    Assignment[]
@@ -79,6 +88,8 @@ model Customer {
   companyname String      @unique
   ruc         String      @unique
   address     String
+  latitude    Decimal?
+  longitude   Decimal?
   Discharge   Discharge[]
   ClientAssignment ClientAssignment[]
 
