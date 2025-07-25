@@ -33,13 +33,10 @@ enum TruckState {
 enum FuelType {
   DIESEL_B5
   DIESEL_B500
-  GASOLINA_PREMIUM_95
-  GASOLINA_REGULAR_90
-  GASOHOL_84
-  GASOHOL_90
-  GASOHOL_95
-  SOLVENTE
+  GASOLINA_PREMIUM
+  GASOLINA_REGULAR
   GASOL
+  SOLVENTE
   PERSONALIZADO
 }
 
@@ -48,6 +45,7 @@ enum DischargeStatus {
   en_proceso
   finalizado
   cancelado
+  programado
 }
 
 model User {

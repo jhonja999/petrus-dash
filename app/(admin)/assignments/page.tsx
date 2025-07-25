@@ -15,16 +15,13 @@ import { RefreshCw } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 export default function AssignmentsPage() {
-  const authData = useAuth()
+  const { isAdmin, isLoading } = useAuth()
   const assignmentsData = useAssignments()
   const trucksData = useTruckState()
-  const [mounted, setMounted] = useState(false)
   const [drivers, setDrivers] = useState([])
   const [refreshing, setRefreshing] = useState(false)
   const router = useRouter()
   const { toast } = useToast()
-
-  const { isAdmin, isLoading } = authData
   const { assignments: rawAssignments, loading: assignmentsLoading, refreshAssignments } = assignmentsData
   const { trucks: rawTrucks, refreshTrucks } = trucksData
 
@@ -43,18 +40,12 @@ export default function AssignmentsPage() {
   }, [rawTrucks])
 
   useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  useEffect(() => {
-    if (mounted && !isLoading && !isAdmin) {
+    if (!isLoading && !isAdmin) {
       router.push("/unauthorized")
     }
-  }, [isAdmin, isLoading, router, mounted])
+  }, [isAdmin, isLoading, router])
 
   useEffect(() => {
-    if (!mounted) return
-
     const fetchDrivers = async () => {
       try {
         const response = await axios.get("/api/users?role=conductor")
@@ -64,7 +55,7 @@ export default function AssignmentsPage() {
       }
     }
     fetchDrivers()
-  }, [mounted])
+  }, [])
 
   const handleAssignmentSuccess = async () => {
     // Refrescar asignaciones y camiones
@@ -107,15 +98,6 @@ export default function AssignmentsPage() {
         setRefreshing(false)
       }, 2000)
     }
-  }
-
-  // Si aún no se ha montado, renderizar un placeholder mínimo
-  if (!mounted) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
-    )
   }
 
   if (isLoading || assignmentsLoading) {

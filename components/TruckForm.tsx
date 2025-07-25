@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,15 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, Truck, AlertCircle, CheckCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import useTruckFormStore from "@/store/truckForm"
 import type { FuelType, TruckState } from "@/types/globals"
-
-interface TruckFormData {
-  placa: string
-  typefuel: FuelType | ""
-  capacitygal: string
-  lastRemaining: string
-  state: TruckState
-}
 
 interface TruckFormErrors {
   placa?: string
@@ -33,13 +26,10 @@ interface TruckFormErrors {
 const fuelTypeOptions = [
   { value: "DIESEL_B5", label: "Diésel B5" },
   { value: "DIESEL_B500", label: "Diésel B500" },
-  { value: "GASOLINA_PREMIUM_95", label: "Gasolina Premium 95" },
-  { value: "GASOLINA_REGULAR_90", label: "Gasolina Regular 90" },
-  { value: "GASOHOL_84", label: "Gasohol 84" },
-  { value: "GASOHOL_90", label: "Gasohol 90" },
-  { value: "GASOHOL_95", label: "Gasohol 95" },
-  { value: "SOLVENTE", label: "Solvente" },
+  { value: "GASOLINA_PREMIUM", label: "Gasolina Premium" },
+  { value: "GASOLINA_REGULAR", label: "Gasolina Regular" },
   { value: "GASOL", label: "Gasol" },
+  { value: "SOLVENTE", label: "Solvente" },
   { value: "PERSONALIZADO", label: "Personalizado" },
 ]
 
@@ -55,16 +45,14 @@ export function TruckForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
-
-  const [formData, setFormData] = useState<TruckFormData>({
-    placa: "",
-    typefuel: "",
-    capacitygal: "",
-    lastRemaining: "0",
-    state: "Activo",
-  })
-
+  const { formData, setFormData, resetForm } = useTruckFormStore()
   const [errors, setErrors] = useState<TruckFormErrors>({})
+
+  useEffect(() => {
+    return () => {
+      resetForm()
+    }
+  }, [resetForm])
 
   const validateForm = (): boolean => {
     const newErrors: TruckFormErrors = {}
@@ -101,8 +89,8 @@ export function TruckForm() {
     return Object.keys(newErrors).length === 0
   }
 
-  const handleInputChange = (field: keyof TruckFormData, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
+  const handleInputChange = (field: keyof typeof formData, value: string) => {
+    setFormData({ [field]: value })
     // Clear error when user starts typing
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: undefined }))
@@ -141,6 +129,7 @@ export function TruckForm() {
       }
 
       setSuccess(true)
+      resetForm()
       toast({
         title: "¡Éxito!",
         description: `Camión ${data.placa} creado correctamente`,
@@ -233,18 +222,22 @@ export function TruckForm() {
           <Label htmlFor="capacitygal">
             Capacidad (Galones) <span className="text-red-500">*</span>
           </Label>
-          <Input
-            id="capacitygal"
-            type="number"
-            step="0.01"
-            min="0"
-            max="15000"
-            placeholder="(Máximo: 15,000)"
+          <Select
             value={formData.capacitygal}
-            onChange={(e) => handleInputChange("capacitygal", e.target.value)}
-            className={errors.capacitygal ? "border-red-500" : ""}
+            onValueChange={(value) => handleInputChange("capacitygal", value)}
             disabled={isLoading}
-          />
+          >
+            <SelectTrigger className={errors.capacitygal ? "border-red-500" : ""}>
+              <SelectValue placeholder="Seleccionar capacidad" />
+            </SelectTrigger>
+            <SelectContent>
+              {[1500, 2000, 3000, 5000, 6500, 7500, 9000, 10000].map((capacity) => (
+                <SelectItem key={capacity} value={capacity.toString()}>
+                  {capacity} galones
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {errors.capacitygal && <p className="text-sm text-red-500">{errors.capacitygal}</p>}
         </div>
 

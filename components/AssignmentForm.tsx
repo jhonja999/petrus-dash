@@ -14,6 +14,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Truck, User, AlertCircle, Plus, Loader2, Info } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import axios from "axios"
+import useAssignmentFormStore from "@/store/assignmentForm"
 import type { FuelType } from "@/types/globals"
 
 interface Driver {
@@ -45,13 +46,10 @@ interface AssignmentFormProps {
 const fuelTypeLabels: Record<FuelType, string> = {
   DIESEL_B5: "Diésel B5",
   DIESEL_B500: "Diésel B500",
-  GASOLINA_PREMIUM_95: "Gasolina Premium 95",
-  GASOLINA_REGULAR_90: "Gasolina Regular 90",
-  GASOHOL_84: "Gasohol 84",
-  GASOHOL_90: "Gasohol 90",
-  GASOHOL_95: "Gasohol 95",
-  SOLVENTE: "Solvente",
+  GASOLINA_PREMIUM: "Gasolina Premium",
+  GASOLINA_REGULAR: "Gasolina Regular",
   GASOL: "Gasol",
+  SOLVENTE: "Solvente",
   PERSONALIZADO: "Personalizado",
 }
 
@@ -65,17 +63,14 @@ export function AssignmentForm({ trucks, drivers, onSuccess, refreshing }: Assig
   const [loading, setLoading] = useState(false)
   const [availableTrucks, setAvailableTrucks] = useState<TruckData[]>([])
   const [selectedTruck, setSelectedTruck] = useState<TruckData | null>(null)
-
-  const [formData, setFormData] = useState({
-    truckId: "",
-    driverId: "",
-    totalLoaded: "",
-    fuelType: "" as FuelType | "",
-    customFuelType: "", // Para combustible personalizado
-    notes: "",
-  })
-
+  const { formData, setFormData, resetForm } = useAssignmentFormStore()
   const [errors, setErrors] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    return () => {
+      resetForm()
+    }
+  }, [resetForm])
 
   // When truck is selected, set default fuel type from truck
   useEffect(() => {
@@ -162,14 +157,7 @@ export function AssignmentForm({ trucks, drivers, onSuccess, refreshing }: Assig
       })
 
       // Reset form
-      setFormData({
-        truckId: "",
-        driverId: "",
-        totalLoaded: "",
-        fuelType: "" as FuelType | "",
-        customFuelType: "",
-        notes: "",
-      })
+      resetForm()
       setErrors({})
       setSelectedTruck(null)
 
@@ -193,7 +181,7 @@ export function AssignmentForm({ trucks, drivers, onSuccess, refreshing }: Assig
   }
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
+    setFormData({ [field]: value })
     if (errors[field]) {
       setErrors((prev) => ({ ...prev, [field]: "" }))
     }
