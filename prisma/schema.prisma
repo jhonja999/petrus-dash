@@ -97,7 +97,6 @@ model Assignment {
   totalLoaded    Decimal
   totalRemaining Decimal
   fuelType       FuelType
-  customFuelType String?   // New field for custom fuel types
   isCompleted    Boolean   @default(false)
   completedAt    DateTime?
   notes          String?
