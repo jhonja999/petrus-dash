@@ -49,6 +49,7 @@ export interface Assignment {
   totalLoaded: Decimal
   totalRemaining: Decimal
   fuelType: FuelType
+  customFuelType?: string | null // New field for custom fuel types
   isCompleted: boolean
   completedAt?: Date | null // Nueva columna para fecha de finalización
   notes?: string | null
@@ -145,7 +146,7 @@ export interface AssignmentFormData {
   truckId: number
   driverId: number
   totalLoaded: number
-  fuelType: FuelType
+  fuelType: FuelType | string // Allow string for custom fuel types
   notes?: string
 }
 

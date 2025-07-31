@@ -1,8 +1,7 @@
 "use client"
 
 import type React from "react"
-
-import { useState, useEffect } from "react"
+import { useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,27 +12,13 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { useToast } from "@/components/ui/use-toast"
+import { useFormStore } from "@/hooks/useFormStore"
+import { useTruckFormStore, truckValidationRules, type TruckFormData } from "@/stores/truckFormStore"
 import { Loader2, Save, RotateCcw, AlertCircle, Info } from "lucide-react"
 import type { Truck, FuelType, TruckState } from "@/types/globals"
 
 interface TruckEditFormProps {
   truck: Truck
-}
-
-interface TruckFormData {
-  placa: string
-  typefuel: FuelType | ""
-  capacitygal: string
-  lastRemaining: string
-  state: TruckState
-}
-
-interface TruckFormErrors {
-  placa?: string
-  typefuel?: string
-  capacitygal?: string
-  lastRemaining?: string
-  state?: string
 }
 
 const FUEL_TYPES: { value: FuelType; label: string }[] = [
@@ -61,111 +46,41 @@ const TRUCK_STATES: { value: TruckState; label: string; color: string }[] = [
 export function TruckEditForm({ truck }: TruckEditFormProps) {
   const router = useRouter()
   const { toast } = useToast()
+  
+  // Usar el store unificado
+  const truckStore = useTruckFormStore()
+  const {
+    formData,
+    errors,
+    isSubmitting,
+    isDirty,
+    handleSubmit,
+    getFieldProps,
+    getSelectProps,
+    setFormData,
+    setOriginalData,
+    resetForm
+  } = useFormStore(truckStore, truckValidationRules)
 
-  const [formData, setFormData] = useState<TruckFormData>({
-    placa: truck.placa,
-    typefuel: truck.typefuel,
-    capacitygal: truck.capacitygal.toString(),
-    lastRemaining: truck.lastRemaining.toString(),
-    state: truck.state,
-  })
-
-  const [originalData, setOriginalData] = useState<TruckFormData>({
-    placa: truck.placa,
-    typefuel: truck.typefuel,
-    capacitygal: truck.capacitygal.toString(),
-    lastRemaining: truck.lastRemaining.toString(),
-    state: truck.state,
-  })
-
-  const [errors, setErrors] = useState<TruckFormErrors>({})
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [hasChanges, setHasChanges] = useState(false)
-
-  // Detectar cambios
+  // Inicializar datos del formulario
   useEffect(() => {
-    const changed = Object.keys(formData).some(
-      (key) => formData[key as keyof TruckFormData] !== originalData[key as keyof TruckFormData],
-    )
-    setHasChanges(changed)
-  }, [formData, originalData])
-
-  const validateForm = (): boolean => {
-    const newErrors: TruckFormErrors = {}
-
-    // Validar placa
-    if (!formData.placa.trim()) {
-      newErrors.placa = "La placa es requerida"
-    } else if (formData.placa.trim().length < 6) {
-      newErrors.placa = "La placa debe tener al menos 6 caracteres"
+    const initialData: TruckFormData = {
+      id: truck.id.toString(),
+      licensePlate: truck.placa,
+      capacity: truck.capacitygal,
+      model: truck.model || '',
+      year: truck.year || new Date().getFullYear(),
+      status: truck.state === 'Activo' ? 'ACTIVE' : 
+              truck.state === 'Inactivo' ? 'INACTIVE' : 'MAINTENANCE',
+      fuelType: truck.typefuel,
+      notes: truck.notes || ''
     }
+    
+    setFormData(initialData)
+    setOriginalData(initialData)
+  }, [truck, setFormData, setOriginalData])
 
-    // Validar tipo de combustible
-    if (!formData.typefuel) {
-      newErrors.typefuel = "El tipo de combustible es requerido"
-    }
-
-    // Validar capacidad
-    const capacity = Number.parseFloat(formData.capacitygal)
-    if (!formData.capacitygal || isNaN(capacity)) {
-      newErrors.capacitygal = "La capacidad es requerida y debe ser un número"
-    } else if (capacity <= 0) {
-      newErrors.capacitygal = "La capacidad debe ser mayor a 0"
-    } else if (capacity > 15000) {
-      newErrors.capacitygal = "La capacidad máxima es de 15,000 galones"
-    }
-
-    // Validar remanente
-    const remaining = Number.parseFloat(formData.lastRemaining)
-    if (formData.lastRemaining && !isNaN(remaining)) {
-      if (remaining < 0) {
-        newErrors.lastRemaining = "El remanente no puede ser negativo"
-      } else if (!isNaN(capacity) && remaining > capacity) {
-        newErrors.lastRemaining = "El remanente no puede ser mayor a la capacidad"
-      }
-    }
-
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
-  }
-
-  const handleInputChange = (field: keyof TruckFormData, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
-
-    // Limpiar error del campo cuando el usuario empiece a escribir
-    if (errors[field]) {
-      setErrors((prev) => ({ ...prev, [field]: undefined }))
-    }
-  }
-
-  const handleSelectChange = (field: keyof TruckFormData, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
-
-    // Limpiar error del campo
-    if (errors[field]) {
-      setErrors((prev) => ({ ...prev, [field]: undefined }))
-    }
-  }
-
-  const handleReset = () => {
-    setFormData(originalData)
-    setErrors({})
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (!validateForm()) {
-      toast({
-        title: "Error de validación",
-        description: "Por favor corrige los errores en el formulario",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setIsSubmitting(true)
-
+  const onSubmit = async (data: TruckFormData) => {
     try {
       const response = await fetch(`/api/trucks/${truck.id}`, {
         method: "PUT",
@@ -173,214 +88,239 @@ export function TruckEditForm({ truck }: TruckEditFormProps) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          placa: formData.placa.trim(),
-          typefuel: formData.typefuel,
-          capacitygal: Number.parseFloat(formData.capacitygal),
-          lastRemaining: Number.parseFloat(formData.lastRemaining) || 0,
-          state: formData.state,
+          placa: data.licensePlate.trim().toUpperCase(),
+          typefuel: data.fuelType,
+          capacitygal: data.capacity,
+          model: data.model,
+          year: data.year,
+          state: data.status === 'ACTIVE' ? 'Activo' : 
+                 data.status === 'INACTIVE' ? 'Inactivo' : 'Mantenimiento',
+          notes: data.notes,
         }),
       })
 
-      const data = await response.json()
+      const responseData = await response.json()
 
-      if (!data.success) {
-        throw new Error(data.error || "Error al actualizar el camión")
+      if (!response.ok) {
+        throw new Error(responseData.error || "Error al actualizar el camión")
       }
 
       toast({
         title: "¡Éxito!",
-        description: "El camión ha sido actualizado correctamente",
+        description: `Camión ${responseData.placa} actualizado correctamente`,
       })
 
-      // Actualizar datos originales
-      setOriginalData(formData)
-
-      // Redirigir después de un breve delay
+      // Redirect after a short delay
       setTimeout(() => {
         router.push("/trucks")
-      }, 1500)
-    } catch (error) {
-      console.error("Error updating truck:", error)
+      }, 2000)
+    } catch (err: any) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Error al actualizar el camión",
+        description: err.message || "Error al actualizar el camión",
         variant: "destructive",
       })
-    } finally {
-      setIsSubmitting(false)
+      throw err
     }
   }
 
-  const currentState = TRUCK_STATES.find((s) => s.value === truck.state)
-
   return (
-    <div className="space-y-6">
-      {/* Información del camión */}
+    <div className="max-w-4xl mx-auto p-6">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Info className="h-5 w-5" />
-            Información del Camión
+            <Info className="h-5 w-5 text-blue-600" />
+            Editar Camión - {truck.placa}
           </CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-          <div>
-            <Label className="text-muted-foreground">ID</Label>
-            <p className="font-medium">{truck.id}</p>
-          </div>
-          <div>
-            <Label className="text-muted-foreground">Estado Actual</Label>
-            <div className="mt-1">
-              <Badge className={currentState?.color}>{currentState?.label}</Badge>
-            </div>
-          </div>
-          <div>
-            <Label className="text-muted-foreground">Última Actualización</Label>
-            <p className="font-medium">
-              {truck.updatedAt ? new Date(truck.updatedAt).toLocaleDateString("es-ES") : "No disponible"}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+        <CardContent>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            {/* Información actual */}
+            <Alert>
+              <Info className="h-4 w-4" />
+              <AlertDescription>
+                <strong>Camión actual:</strong> {truck.placa} | 
+                <strong>Combustible:</strong> {truck.typefuel} | 
+                <strong>Capacidad:</strong> {truck.capacitygal} galones | 
+                <strong>Estado:</strong> {truck.state}
+              </AlertDescription>
+            </Alert>
 
-      {/* Alerta de cambios */}
-      {hasChanges && (
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>Tienes cambios sin guardar. No olvides guardar antes de salir.</AlertDescription>
-        </Alert>
-      )}
-
-      {/* Formulario */}
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Datos del Camión</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Placa */}
               <div className="space-y-2">
-                <Label htmlFor="placa">
+                <Label htmlFor="licensePlate">
                   Placa <span className="text-red-500">*</span>
                 </Label>
                 <Input
-                  id="placa"
+                  id="licensePlate"
                   type="text"
-                  placeholder="Ej: ABC-123"
-                  value={formData.placa}
-                  onChange={(e) => handleInputChange("placa", e.target.value)}
-                  className={errors.placa ? "border-red-500" : ""}
+                  placeholder="Ej: ABC123"
+                  {...getFieldProps('licensePlate')}
+                  className={errors.licensePlate ? "border-red-500" : ""}
                 />
-                {errors.placa && <p className="text-sm text-red-500">{errors.placa}</p>}
-              </div>
-
-              {/* Tipo de Combustible */}
-              <div className="space-y-2">
-                <Label htmlFor="typefuel">
-                  Tipo de Combustible <span className="text-red-500">*</span>
-                </Label>
-                <Select value={formData.typefuel} onValueChange={(value) => handleSelectChange("typefuel", value)}>
-                  <SelectTrigger className={errors.typefuel ? "border-red-500" : ""}>
-                    <SelectValue placeholder="Selecciona el tipo de combustible" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {FUEL_TYPES.map((fuel) => (
-                      <SelectItem key={fuel.value} value={fuel.value}>
-                        {fuel.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.typefuel && <p className="text-sm text-red-500">{errors.typefuel}</p>}
-                <p className="text-sm text-muted-foreground">
-                  Tipo predeterminado del camión. Puede ser modificado en cada asignación.
-                </p>
+                {errors.licensePlate && (
+                  <p className="text-sm text-red-500">{errors.licensePlate}</p>
+                )}
               </div>
 
               {/* Capacidad */}
               <div className="space-y-2">
-                <Label htmlFor="capacitygal">
-                  Capacidad (Galones) <span className="text-red-500">*</span>
+                <Label htmlFor="capacity">
+                  Capacidad (galones) <span className="text-red-500">*</span>
                 </Label>
                 <Input
-                  id="capacitygal"
+                  id="capacity"
                   type="number"
-                  step="0.01"
-                  min="0"
-                  max="15000"
-                  placeholder="Ej: 1000 (Máximo: 15,000)"
-                  value={formData.capacitygal}
-                  onChange={(e) => handleInputChange("capacitygal", e.target.value)}
-                  className={errors.capacitygal ? "border-red-500" : ""}
+                  placeholder="Ej: 5000"
+                  {...getFieldProps('capacity')}
+                  className={errors.capacity ? "border-red-500" : ""}
                 />
-                {errors.capacitygal && <p className="text-sm text-red-500">{errors.capacitygal}</p>}
+                {errors.capacity && (
+                  <p className="text-sm text-red-500">{errors.capacity}</p>
+                )}
               </div>
 
-              {/* Remanente */}
+              {/* Modelo */}
               <div className="space-y-2">
-                <Label htmlFor="lastRemaining">Remanente Actual (Galones)</Label>
+                <Label htmlFor="model">
+                  Modelo <span className="text-red-500">*</span>
+                </Label>
                 <Input
-                  id="lastRemaining"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="Ej: 500"
-                  value={formData.lastRemaining}
-                  onChange={(e) => handleInputChange("lastRemaining", e.target.value)}
-                  className={errors.lastRemaining ? "border-red-500" : ""}
+                  id="model"
+                  type="text"
+                  placeholder="Ej: Volvo FH16"
+                  {...getFieldProps('model')}
+                  className={errors.model ? "border-red-500" : ""}
                 />
-                {errors.lastRemaining && <p className="text-sm text-red-500">{errors.lastRemaining}</p>}
-                <p className="text-sm text-muted-foreground">Cantidad de combustible restante en el tanque</p>
+                {errors.model && (
+                  <p className="text-sm text-red-500">{errors.model}</p>
+                )}
               </div>
 
-              {/* Estado */}
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="state">Estado del Camión</Label>
-                <Select value={formData.state} onValueChange={(value) => handleSelectChange("state", value)}>
-                  <SelectTrigger>
-                    <SelectValue />
+              {/* Año */}
+              <div className="space-y-2">
+                <Label htmlFor="year">
+                  Año <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  id="year"
+                  type="number"
+                  placeholder="Ej: 2023"
+                  {...getFieldProps('year')}
+                  className={errors.year ? "border-red-500" : ""}
+                />
+                {errors.year && (
+                  <p className="text-sm text-red-500">{errors.year}</p>
+                )}
+              </div>
+
+              {/* Tipo de Combustible */}
+              <div className="space-y-2">
+                <Label htmlFor="fuelType">
+                  Tipo de Combustible <span className="text-red-500">*</span>
+                </Label>
+                <Select {...getSelectProps('fuelType')}>
+                  <SelectTrigger className={errors.fuelType ? "border-red-500" : ""}>
+                    <SelectValue placeholder="Seleccionar tipo de combustible" />
                   </SelectTrigger>
                   <SelectContent>
-                    {TRUCK_STATES.map((state) => (
-                      <SelectItem key={state.value} value={state.value}>
-                        <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${state.color.split(" ")[0]}`} />
-                          {state.label}
-                        </div>
+                    {FUEL_TYPES.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {errors.fuelType && (
+                  <p className="text-sm text-red-500">{errors.fuelType}</p>
+                )}
+              </div>
+
+              {/* Estado */}
+              <div className="space-y-2">
+                <Label htmlFor="status">
+                  Estado <span className="text-red-500">*</span>
+                </Label>
+                <Select {...getSelectProps('status')}>
+                  <SelectTrigger className={errors.status ? "border-red-500" : ""}>
+                    <SelectValue placeholder="Seleccionar estado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ACTIVE">Activo</SelectItem>
+                    <SelectItem value="INACTIVE">Inactivo</SelectItem>
+                    <SelectItem value="MAINTENANCE">Mantenimiento</SelectItem>
+                  </SelectContent>
+                </Select>
+                {errors.status && (
+                  <p className="text-sm text-red-500">{errors.status}</p>
+                )}
+              </div>
+
+              {/* Notas */}
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="notes">Notas</Label>
+                <Input
+                  id="notes"
+                  type="text"
+                  placeholder="Notas adicionales (opcional)"
+                  {...getFieldProps('notes')}
+                  className={errors.notes ? "border-red-500" : ""}
+                />
+                {errors.notes && (
+                  <p className="text-sm text-red-500">{errors.notes}</p>
+                )}
               </div>
             </div>
-          </CardContent>
-        </Card>
 
-        <Separator />
+            <Separator />
 
-        {/* Botones de acción */}
-        <div className="flex justify-end space-x-4">
-          <Button type="button" variant="outline" onClick={handleReset} disabled={!hasChanges || isSubmitting}>
-            <RotateCcw className="h-4 w-4 mr-2" />
-            Restablecer
-          </Button>
+            {/* Botones */}
+            <div className="flex gap-4">
+              <Button type="submit" disabled={isSubmitting || !isDirty} className="flex-1">
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Actualizando...
+                  </>
+                ) : (
+                  <>
+                    <Save className="mr-2 h-4 w-4" />
+                    Guardar Cambios
+                  </>
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={resetForm}
+                disabled={isSubmitting || !isDirty}
+              >
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Restaurar
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => router.push("/trucks")}
+                disabled={isSubmitting}
+              >
+                Cancelar
+              </Button>
+            </div>
 
-          <Button type="submit" disabled={!hasChanges || isSubmitting} className="min-w-[120px]">
-            {isSubmitting ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Guardando...
-              </>
-            ) : (
-              <>
-                <Save className="h-4 w-4 mr-2" />
-                Guardar Cambios
-              </>
+            {/* Indicador de cambios */}
+            {isDirty && (
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Tienes cambios sin guardar. Haz clic en "Guardar Cambios" para aplicar las modificaciones.
+                </AlertDescription>
+              </Alert>
             )}
-          </Button>
-        </div>
-      </form>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   )
 }

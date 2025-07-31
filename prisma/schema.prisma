@@ -33,10 +33,13 @@ enum TruckState {
 enum FuelType {
   DIESEL_B5
   DIESEL_B500
-  GASOLINA_PREMIUM
-  GASOLINA_REGULAR
-  GASOL
+  GASOLINA_PREMIUM_95
+  GASOLINA_REGULAR_90
+  GASOHOL_84
+  GASOHOL_90
+  GASOHOL_95
   SOLVENTE
+  GASOL
   PERSONALIZADO
 }
 
@@ -45,7 +48,12 @@ enum DischargeStatus {
   en_proceso
   finalizado
   cancelado
-  programado
+}
+
+enum TripStatus {
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
 }
 
 model User {
@@ -61,6 +69,8 @@ model User {
   updatedAt  DateTime     @updatedAt
   deletedAt  DateTime?
   Assignment Assignment[]
+  trips      Trip[]
+  locations  DriverLocation[]
 
   @@map("users")
 }
@@ -97,6 +107,7 @@ model Assignment {
   totalLoaded    Decimal
   totalRemaining Decimal
   fuelType       FuelType
+  customFuelType String?   // New field for custom fuel types
   isCompleted    Boolean   @default(false)
   completedAt    DateTime?
   notes          String?
@@ -105,6 +116,7 @@ model Assignment {
   driver           User               @relation(fields: [driverId], references: [id])
   discharges       Discharge[]
   clientAssignments ClientAssignment[]
+  trips            Trip[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -172,4 +184,45 @@ model ClientAssignment {
   @@index([assignmentId])
   @@index([customerId])
   @@index([status])
+}
+
+model Trip {
+  id            Int        @id @default(autoincrement())
+  assignmentId  Int
+  driverId      Int
+  startTime     DateTime
+  endTime       DateTime?
+  status        TripStatus @default(IN_PROGRESS)
+  route         Json?      // Array de puntos de ubicación
+  totalDistance Decimal    @default(0) @db.Decimal(10, 2)
+  estimatedTime Int?       // Tiempo estimado en minutos
+  
+  assignment Assignment @relation(fields: [assignmentId], references: [id])
+  driver     User       @relation(fields: [driverId], references: [id])
+  locations  DriverLocation[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("trips")
+  @@index([assignmentId])
+  @@index([driverId])
+  @@index([status])
+  @@index([startTime])
+}
+
+model DriverLocation {
+  id        Int      @id @default(autoincrement())
+  driverId  Int
+  latitude  Decimal  @db.Decimal(10, 8)
+  longitude Decimal  @db.Decimal(10, 8)
+  timestamp DateTime
+  tripId    Int?     // Asociar con trayecto específico
+  
+  driver User  @relation(fields: [driverId], references: [id])
+  trip   Trip? @relation(fields: [tripId], references: [id])
+
+  @@map("driver_locations")
+  @@index([driverId, timestamp])
+  @@index([tripId])
 }

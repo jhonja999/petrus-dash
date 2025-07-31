@@ -1,13 +1,14 @@
 import { prisma } from "./prisma"
 
 /**
- * Generates a correlative vale number in format PE-000001-2025 or PETRUS-000001-2025
+ * Generates a correlative vale number in format PE-000001-2025
  */
-export async function generateValeNumber(prefix: "PE" | "PETRUS" = "PE"): Promise<string> {
+export async function generateValeNumber(): Promise<string> {
   const currentYear = new Date().getFullYear()
+  const prefix = "PE"
 
   try {
-    // Get the highest number for the current year and prefix
+    // Get the highest number for the current year
     const lastDischarge = await prisma.discharge.findFirst({
       where: {
         valeNumber: {
@@ -23,8 +24,8 @@ export async function generateValeNumber(prefix: "PE" | "PETRUS" = "PE"): Promis
     let nextNumber = 1
 
     if (lastDischarge?.valeNumber) {
-      // Extract number from format PREFIX-000001-2025
-      const match = lastDischarge.valeNumber.match(new RegExp(`${prefix}-(\\d+)-\\d{4}`))
+      // Extract number from format PE-000001-2025
+      const match = lastDischarge.valeNumber.match(/PE-(\d+)-\d{4}/)
       if (match) {
         nextNumber = Number.parseInt(match[1]) + 1
       }
@@ -43,7 +44,7 @@ export async function generateValeNumber(prefix: "PE" | "PETRUS" = "PE"): Promis
  * Validates vale number format
  */
 export function validateValeNumber(valeNumber: string): boolean {
-  const pattern = /^(PE|PETRUS)-\d{6}-\d{4}$/
+  const pattern = /^PE-\d{6}-\d{4}$/
   return pattern.test(valeNumber)
 }
 
@@ -55,7 +56,7 @@ export function parseValeNumber(valeNumber: string): {
   number: number
   year: number
 } | null {
-  const match = valeNumber.match(/^(PE|PETRUS)-(\d{6})-(\d{4})$/)
+  const match = valeNumber.match(/^(PE)-(\d{6})-(\d{4})$/)
 
   if (!match) return null
 
@@ -69,6 +70,6 @@ export function parseValeNumber(valeNumber: string): {
 /**
  * Gets next available vale number for preview
  */
-export async function getNextValeNumber(prefix: "PE" | "PETRUS" = "PE"): Promise<string> {
-  return generateValeNumber(prefix)
+export async function getNextValeNumber(): Promise<string> {
+  return generateValeNumber()
 }

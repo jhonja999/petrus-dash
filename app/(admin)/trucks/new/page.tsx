@@ -5,18 +5,35 @@ import { useAuth } from "@/hooks/useAuth"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { ArrowLeft } from "lucide-react"
 
 export default function NewTruckPage() {
-  const { isAdmin, isLoading } = useAuth()
+  const authResult = useAuth()
+  const [mounted, setMounted] = useState(false)
   const router = useRouter()
 
+  const isAdmin = authResult.isAdmin
+  const isLoading = authResult.isLoading
+
   useEffect(() => {
-    if (!isLoading && !isAdmin) {
+    setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (mounted && !isLoading && !isAdmin) {
       router.push("/unauthorized")
     }
-  }, [isAdmin, isLoading, router])
+  }, [mounted, isAdmin, isLoading, router])
+
+  // Don't render anything until mounted on client
+  if (!mounted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
 
   if (isLoading) {
     return (

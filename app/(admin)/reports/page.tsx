@@ -255,7 +255,6 @@ export default function ReportsPage() {
   const [selectedDriver, setSelectedDriver] = useState<string>("all");
   const [selectedCustomer, setSelectedCustomer] = useState<string>("all");
   const [selectedFuelType, setSelectedFuelType] = useState<string>("all");
-  const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [reportType, setReportType] = useState<"daily" | "range">("daily");
 
   // Data states
@@ -370,10 +369,6 @@ export default function ReportsPage() {
       params.append("fuelType", selectedFuelType);
     }
 
-    if (selectedStatus !== "all") {
-      params.append("status", selectedStatus);
-    }
-
     return params;
   }, [
     reportType,
@@ -385,7 +380,6 @@ export default function ReportsPage() {
     selectedCustomer,
     selectedFuelType,
     activeTab,
-    selectedStatus,
   ]);
 
   const generateDeliveryReport = useCallback(async () => {
@@ -934,33 +928,10 @@ export default function ReportsPage() {
                   <SelectContent>
                     <SelectItem value="all">Todos los tipos</SelectItem>
                     <SelectItem value="DIESEL_B5">Diésel B5</SelectItem>
-                    <SelectItem value="DIESEL_B500">Diésel B500</SelectItem>
-                    <SelectItem value="GASOLINA_PREMIUM">Gasolina Premium</SelectItem>
-                    <SelectItem value="GASOLINA_REGULAR">Gasolina Regular</SelectItem>
-                    <SelectItem value="GASOL">Gasol</SelectItem>
-                    <SelectItem value="SOLVENTE">Solvente</SelectItem>
-                    <SelectItem value="PERSONALIZADO">Personalizado</-SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Status Filter */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Estado</label>
-                <Select
-                  value={selectedStatus}
-                  onValueChange={setSelectedStatus}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Todos los estados" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos los estados</SelectItem>
-                    <SelectItem value="programado">Programado</SelectItem>
-                    <SelectItem value="en_proceso">En Proceso</SelectItem>
-                    <SelectItem value="finalizado">Finalizado</SelectItem>
-                    <SelectItem value="pendiente">Pendiente</SelectItem>
-                    <SelectItem value="cancelado">Cancelado</SelectItem>
+                    <SelectItem value="GASOLINA_90">Gasolina 90</SelectItem>
+                    <SelectItem value="GASOLINA_95">Gasolina 95</SelectItem>
+                    <SelectItem value="GLP">GLP</SelectItem>
+                    <SelectItem value="ELECTRICA">Eléctrica</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

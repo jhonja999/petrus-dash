@@ -412,107 +412,144 @@ export default function ClientAssignmentPage() {
             </Card>
           </div>
 
-import { ClientAssignmentForm } from "@/components/ClientAssignmentForm"
+          {/* Add New Client Assignment */}
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Plus className="h-5 w-5 text-blue-600" />
+                  Nuevo Cliente
+                </CardTitle>
+                <CardDescription>Asignar cliente para entrega</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleAddClientAssignment} className="space-y-4">
+                  <div>
+                    <Label htmlFor="customerId">Cliente *</Label>
+                    <select
+                      id="customerId"
+                      value={newClientAssignment.customerId}
+                      onChange={(e) => setNewClientAssignment((prev) => ({ ...prev, customerId: e.target.value }))}
+                      className="w-full mt-1 p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      required
+                      disabled={assignment.isCompleted || addingClient}
+                    >
+                      <option value="">Seleccionar cliente</option>
+                      {customers
+                        .filter(
+                          (customer) => !assignment.clientAssignments?.some((ca) => ca.customerId === customer.id),
+                        )
+                        .map((customer) => (
+                          <option key={customer.id} value={customer.id}>
+                            {customer.companyname} - {customer.ruc}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
 
-// ... (imports)
+                  <div>
+                    <Label htmlFor="allocatedQuantity">Cantidad Asignada (Galones) *</Label>
+                    <Input
+                      id="allocatedQuantity"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max={remainingToAssign}
+                      value={newClientAssignment.allocatedQuantity}
+                      onChange={(e) =>
+                        setNewClientAssignment((prev) => ({ ...prev, allocatedQuantity: e.target.value }))
+                      }
+                      placeholder="0.00"
+                      required
+                      disabled={assignment.isCompleted || remainingToAssign <= 0 || addingClient}
+                      className="focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Máximo disponible: {remainingToAssign.toFixed(2)} gal</p>
+                  </div>
 
-// ... (interfaces)
+                  <Button
+                    type="submit"
+                    className="w-full"
+                    disabled={
+                      assignment.isCompleted ||
+                      remainingToAssign <= 0 ||
+                      !newClientAssignment.customerId ||
+                      addingClient
+                    }
+                  >
+                    {addingClient ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Agregando...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Agregar Cliente
+                      </>
+                    )}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
 
-export default function ClientAssignmentPage() {
-  // ... (state and hooks)
-
-  const fetchAssignment = async () => {
-    // ... (fetchAssignment logic)
-  }
-
-  const fetchCustomers = async () => {
-    // ... (fetchCustomers logic)
-  }
-
-  const handleDataRefresh = () => {
-    fetchAssignment()
-  }
-
-  // ... (loading and error handling)
-
-  // ... (calculations)
-
-  return (
-    <div className="space-y-6">
-      {/* ... (header) */}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* ... (assignment details) */}
-
-        {/* Client Assignments */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* ... (client assignments list) */}
-        </div>
-
-        {/* Add New Client Assignment */}
-        <div className="space-y-6">
-          <ClientAssignmentForm
-            assignment={assignment}
-            customers={customers}
-            onAssignmentUpdate={handleDataRefresh}
-          />
-
-          {/* Summary */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Fuel className="h-5 w-5 text-orange-600" />
-                Resumen
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Total Cargado:</span>
-                  <span className="font-semibold">{totalLoaded.toFixed(2)} gal</span>
+            {/* Summary */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Fuel className="h-5 w-5 text-orange-600" />
+                  Resumen
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-600">Total Cargado:</span>
+                    <span className="font-semibold">{totalLoaded.toFixed(2)} gal</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-600">Total Asignado:</span>
+                    <span className="font-semibold text-blue-600">{totalAssigned.toFixed(2)} gal</span>
+                  </div>
+                  <Separator />
+                  <div className="flex justify-between">
+                    <span className="text-sm text-gray-600">Por Asignar:</span>
+                    <span className="font-semibold text-green-600">{remainingToAssign.toFixed(2)} gal</span>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Total Asignado:</span>
-                  <span className="font-semibold text-blue-600">{totalAssigned.toFixed(2)} gal</span>
-                </div>
+
                 <Separator />
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Por Asignar:</span>
-                  <span className="font-semibold text-green-600">{remainingToAssign.toFixed(2)} gal</span>
-                </div>
-              </div>
 
-              <Separator />
-
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-medium">Progreso de asignación</span>
-                  <span className="text-sm text-gray-600">{assignmentProgress.toFixed(1)}%</span>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">Progreso de asignación</span>
+                    <span className="text-sm text-gray-600">{assignmentProgress.toFixed(1)}%</span>
+                  </div>
+                  <Progress value={assignmentProgress} className="w-full" />
                 </div>
-                <Progress value={assignmentProgress} className="w-full" />
-              </div>
 
-              {remainingToAssign > 0 && (
-                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <p className="text-sm text-yellow-800">
-                    <AlertCircle className="h-4 w-4 inline mr-1" />
-                    Aún quedan <strong>{remainingToAssign.toFixed(2)} galones</strong> por asignar
-                  </p>
-                </div>
-              )}
+                {remainingToAssign > 0 && (
+                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <p className="text-sm text-yellow-800">
+                      <AlertCircle className="h-4 w-4 inline mr-1" />
+                      Aún quedan <strong>{remainingToAssign.toFixed(2)} galones</strong> por asignar
+                    </p>
+                  </div>
+                )}
 
-              {remainingToAssign === 0 && totalAssigned > 0 && (
-                <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                  <p className="text-sm text-green-800">
-                    <CheckCircle className="h-4 w-4 inline mr-1" />
-                    Todo el combustible ha sido asignado
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                {remainingToAssign === 0 && totalAssigned > 0 && (
+                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <p className="text-sm text-green-800">
+                      <CheckCircle className="h-4 w-4 inline mr-1" />
+                      Todo el combustible ha sido asignado
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
-    </div>
+
   )
 }

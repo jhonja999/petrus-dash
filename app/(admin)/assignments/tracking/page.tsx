@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { MapPin, Truck, RefreshCw, Navigation, Clock, User } from "lucide-react"
+import { MapPin, Truck, RefreshCw, Navigation, Clock, User, Wifi, WifiOff, AlertTriangle } from "lucide-react"
 import axios from "axios"
 import { useToast } from "@/hooks/use-toast"
 
@@ -38,12 +38,24 @@ interface Assignment {
   }>
 }
 
+interface DriverLocation {
+  driverId: number
+  latitude: number
+  longitude: number
+  timestamp: Date
+  assignmentId?: number
+  status: 'active' | 'inactive'
+  driverName?: string
+  timeSinceUpdate: number
+}
+
 export default function AssignmentTrackingPage() {
   const { isAdmin, isLoading } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
 
   const [assignments, setAssignments] = useState<Assignment[]>([])
+  const [driverLocations, setDriverLocations] = useState<DriverLocation[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -61,6 +73,18 @@ export default function AssignmentTrackingPage() {
   useEffect(() => {
     if (mounted && isAdmin) {
       fetchActiveAssignments()
+      fetchDriverLocations()
+    }
+  }, [mounted, isAdmin])
+
+  // Actualizar ubicaciones cada 30 segundos
+  useEffect(() => {
+    if (mounted && isAdmin) {
+      const interval = setInterval(() => {
+        fetchDriverLocations()
+      }, 30000)
+
+      return () => clearInterval(interval)
     }
   }, [mounted, isAdmin])
 
@@ -86,13 +110,24 @@ export default function AssignmentTrackingPage() {
     }
   }
 
+  const fetchDriverLocations = async () => {
+    try {
+      const response = await axios.get("/api/despacho/all/location")
+      if (response.data.success) {
+        setDriverLocations(response.data.locations || [])
+      }
+    } catch (error) {
+      console.error("Error fetching driver locations:", error)
+    }
+  }
+
   const handleRefresh = async () => {
     setRefreshing(true)
     try {
-      await fetchActiveAssignments()
+      await Promise.all([fetchActiveAssignments(), fetchDriverLocations()])
       toast({
         title: "Datos actualizados",
-        description: "La lista de asignaciones ha sido actualizada",
+        description: "La lista de asignaciones y ubicaciones ha sido actualizada",
       })
     } catch (error) {
       toast({
@@ -118,6 +153,29 @@ export default function AssignmentTrackingPage() {
     } else {
       return { text: "En Tránsito", color: "bg-orange-100 text-orange-800" }
     }
+  }
+
+  const formatLocationTimeAgo = (timeSinceUpdate: number) => {
+    const minutes = Math.floor(timeSinceUpdate / (1000 * 60))
+    
+    if (minutes < 1) return "Ahora mismo"
+    if (minutes < 60) return `Hace ${minutes} min`
+    if (minutes < 1440) return `Hace ${Math.floor(minutes / 60)}h`
+    return `Hace ${Math.floor(minutes / 1440)}d`
+  }
+
+  const getLocationStatus = (timeSinceUpdate: number) => {
+    if (timeSinceUpdate < 5 * 60 * 1000) { // Menos de 5 minutos
+      return { label: "Activo", variant: "default" as const, icon: Wifi }
+    } else if (timeSinceUpdate < 15 * 60 * 1000) { // Menos de 15 minutos
+      return { label: "Reciente", variant: "secondary" as const, icon: Clock }
+    } else {
+      return { label: "Inactivo", variant: "destructive" as const, icon: WifiOff }
+    }
+  }
+
+  const getDriverLocation = (driverId: number) => {
+    return driverLocations.find(location => location.driverId === driverId)
   }
 
   if (!mounted || isLoading) {
@@ -210,6 +268,86 @@ export default function AssignmentTrackingPage() {
         </Card>
       </div>
 
+      {/* Ubicaciones en Tiempo Real */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Navigation className="h-5 w-5" />
+            Ubicaciones en Tiempo Real
+          </CardTitle>
+          <CardDescription>
+            Conductores activos con tracking de ubicación ({driverLocations.length} activos)
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {driverLocations.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <WifiOff className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+              <p>No hay conductores con tracking activo</p>
+              <p className="text-sm">Los conductores aparecerán aquí cuando inicien un despacho</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {driverLocations.map((location) => {
+                const status = getLocationStatus(location.timeSinceUpdate)
+                const StatusIcon = status.icon
+                
+                return (
+                  <div key={location.driverId} className="border rounded-lg p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <User className="h-4 w-4 text-gray-600" />
+                        <span className="font-medium">{location.driverName}</span>
+                      </div>
+                      <Badge variant={status.variant} className="text-xs">
+                        <StatusIcon className="h-3 w-3 mr-1" />
+                        {status.label}
+                      </Badge>
+                    </div>
+                    
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Latitud:</span>
+                        <span className="font-mono">{location.latitude.toFixed(6)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Longitud:</span>
+                        <span className="font-mono">{location.longitude.toFixed(6)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Última actualización:</span>
+                        <span className="text-xs">{formatLocationTimeAgo(location.timeSinceUpdate)}</span>
+                      </div>
+                      {location.assignmentId && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Asignación:</span>
+                          <span className="text-xs">#{location.assignmentId}</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="pt-2 border-t">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full text-xs"
+                        onClick={() => {
+                          const url = `https://www.google.com/maps?q=${location.latitude},${location.longitude}`
+                          window.open(url, '_blank')
+                        }}
+                      >
+                        <MapPin className="h-3 w-3 mr-1" />
+                        Ver en Google Maps
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Tabla de asignaciones activas */}
       <Card>
         <CardHeader>
@@ -243,6 +381,7 @@ export default function AssignmentTrackingPage() {
                     <TableHead>Combustible</TableHead>
                     <TableHead>Progreso</TableHead>
                     <TableHead>Estado</TableHead>
+                    <TableHead>Ubicación</TableHead>
                     <TableHead>Última Actividad</TableHead>
                     <TableHead>Acciones</TableHead>
                   </TableRow>
@@ -295,6 +434,43 @@ export default function AssignmentTrackingPage() {
                         </TableCell>
                         <TableCell>
                           <Badge className={status.color}>{status.text}</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {(() => {
+                            const location = getDriverLocation(assignment.driverId)
+                            if (!location) {
+                              return (
+                                <div className="text-center">
+                                  <WifiOff className="h-4 w-4 mx-auto text-gray-400 mb-1" />
+                                  <p className="text-xs text-gray-500">Sin tracking</p>
+                                </div>
+                              )
+                            }
+                            
+                            const locationStatus = getLocationStatus(location.timeSinceUpdate)
+                            const StatusIcon = locationStatus.icon
+                            
+                            return (
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-1">
+                                  <StatusIcon className="h-3 w-3" />
+                                  <span className="text-xs">{formatLocationTimeAgo(location.timeSinceUpdate)}</span>
+                                </div>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-xs h-6 px-2"
+                                  onClick={() => {
+                                    const url = `https://www.google.com/maps?q=${location.latitude},${location.longitude}`
+                                    window.open(url, '_blank')
+                                  }}
+                                >
+                                  <MapPin className="h-3 w-3 mr-1" />
+                                  Ver
+                                </Button>
+                              </div>
+                            )
+                          })()}
                         </TableCell>
                         <TableCell>
                           <p className="text-xs text-gray-500">{new Date(assignment.createdAt).toLocaleDateString()}</p>

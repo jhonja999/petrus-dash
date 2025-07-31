@@ -5,14 +5,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { TruckTable } from "@/components/TruckTable"
 import { useToast } from "@/hooks/use-toast"
-import { useTruckState } from "@/hooks/useTruckState"
+import { useTrucks } from "@/hooks/use-trucks"
 import Link from "next/link"
 import { Plus, RefreshCw } from "lucide-react"
 import type { Truck } from "@/types/globals"
 import axios from "axios"
 
 export default function TrucksPage() {
-  const { trucks, loading, error, refreshTrucks, updateTruckState } = useTruckState()
+  const { trucks, isLoading: loading, error, refresh, updateTruckState } = useTrucks()
   const [filteredTrucks, setFilteredTrucks] = useState<Truck[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -45,11 +45,11 @@ export default function TrucksPage() {
     // Set up polling for real-time updates every 30 seconds
     const interval = setInterval(() => {
       console.log("🔄 Auto-refreshing trucks data...")
-      refreshTrucks()
+      refresh()
     }, 30000)
 
     return () => clearInterval(interval)
-  }, [mounted, isAdmin, refreshTrucks])
+  }, [mounted, isAdmin, refresh])
 
   const handleRefreshStatus = async () => {
     if (isRefreshing) return
@@ -63,11 +63,11 @@ export default function TrucksPage() {
         title: "Estados actualizados",
         description: response.data.message,
       })
-      await refreshTrucks()
+      await refresh()
 
       // Force additional refresh after 2 seconds to catch any delayed updates
       setTimeout(() => {
-        refreshTrucks()
+        refresh()
       }, 2000)
 
       console.log("✅ Status refresh completed")
@@ -140,7 +140,7 @@ export default function TrucksPage() {
             ) : error ? (
               <div className="text-center py-8 text-red-500">
                 <p>Error: {error}</p>
-                <Button onClick={refreshTrucks} className="mt-4" variant="outline">
+                <Button onClick={refresh} className="mt-4" variant="outline">
                   Reintentar
                 </Button>
               </div>
@@ -148,7 +148,7 @@ export default function TrucksPage() {
               <TruckTable
                 trucks={filteredTrucks}
                 onUpdateState={updateTruckState}
-                onRefreshTrucks={refreshTrucks}
+                onRefreshTrucks={refresh}
                 isAdmin={true}
               />
             )}
