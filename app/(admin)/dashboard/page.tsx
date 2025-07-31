@@ -4,11 +4,11 @@ import { useAuth } from "@/hooks/useAuth"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Truck, Users, MapPin, FileText, Fuel, AlertCircle } from "lucide-react"
+import { Truck, Users, MapPin, FileText, Fuel, AlertCircle, RefreshCw } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
-import axios from "axios"
+import { useTruckManagementStore } from "@/stores/truckManagementStore"
 
 // ✅ Interfaz simple para los datos
 interface Assignment {
@@ -22,8 +22,19 @@ export default function AdminDashboard() {
   const [mounted, setMounted] = useState(false)
   const { user, isAdmin, isLoading } = useAuth()
 
-  // ✅ Estados locales en lugar de hooks problemáticos
-  const [trucks, setTrucks] = useState<any[]>([])
+  // ✅ Usar Zustand store en lugar de estado local problemático
+  const { 
+    trucks, 
+    loading: trucksLoading, 
+    error: trucksError,
+    fetchTrucks,
+    getActiveTrucks,
+    getTrucksByState,
+    syncWithAssignments,
+    refreshTrucks
+  } = useTruckManagementStore()
+
+  // ✅ Estados locales solo para assignments
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [dataLoading, setDataLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -38,7 +49,7 @@ export default function AdminDashboard() {
     }
   }, [isAdmin, isLoading, router, mounted])
 
-  // ✅ Cargar datos directamente con fetch
+  // ✅ Cargar datos usando Zustand store
   useEffect(() => {
     const fetchData = async () => {
       if (!mounted || isLoading || !isAdmin) return
@@ -46,29 +57,27 @@ export default function AdminDashboard() {
       try {
         setDataLoading(true)
 
-        // Fetch trucks y assignments en paralelo
-        const [trucksResponse, assignmentsResponse] = await Promise.all([
-          axios.get("/api/trucks").catch(() => ({ data: [] })),
-          axios.get("/api/assignments").catch(() => ({ data: { assignments: [] } })),
+        // Fetch trucks usando store y assignments en paralelo
+        await Promise.all([
+          fetchTrucks(),
+          fetch('/api/assignments').then(res => res.json()).then(data => {
+            const assignmentsData = data
+            if (assignmentsData && assignmentsData.assignments) {
+              setAssignments(assignmentsData.assignments)
+            } else {
+              console.warn('⚠️ AdminDashboard: Unexpected assignments response format:', assignmentsData)
+              setAssignments([])
+            }
+          }).catch(() => setAssignments([]))
         ])
-
-        setTrucks(trucksResponse.data || [])
         
-        // ✅ FIX: Now always expect consistent format {assignments: [...], pagination: {...}}
-        const assignmentsData = assignmentsResponse.data
-        if (assignmentsData && assignmentsData.assignments) {
-          setAssignments(assignmentsData.assignments)
-        } else {
-          console.warn('⚠️ AdminDashboard: Unexpected assignments response format:', assignmentsData)
-          setAssignments([])
-        }
+        // Sincronizar con asignaciones
+        await syncWithAssignments()
         
         setError(null)
       } catch (err) {
         console.error("Error fetching data:", err)
         setError("Error al cargar datos")
-        // Continuar con datos vacíos en lugar de fallar
-        setTrucks([])
         setAssignments([])
       } finally {
         setDataLoading(false)
@@ -76,7 +85,7 @@ export default function AdminDashboard() {
     }
 
     fetchData()
-  }, [mounted, isLoading, isAdmin])
+  }, [mounted, isLoading, isAdmin, fetchTrucks, syncWithAssignments])
 
   // ✅ Loading mejorado
   if (!mounted || isLoading) {
@@ -104,8 +113,8 @@ export default function AdminDashboard() {
     )
   }
 
-  // ✅ Cálculos seguros con fallbacks - Now assignments is guaranteed to be an array
-  const activeTrucks = trucks.filter((truck) => truck.state === "Activo").length
+  // ✅ Cálculos seguros usando store methods - trucks SIEMPRE es array
+  const activeTrucks = getActiveTrucks().length
   const totalTrucks = trucks.length || 1 // Evitar división por 0
 
   const todayAssignments = assignments.filter((assignment) => {
@@ -121,20 +130,37 @@ export default function AdminDashboard() {
   const trucksWithRemaining = trucks.filter((t) => Number(t.lastRemaining) > 0).length
 
   return (
-   
-      <div className="space-y-6">
-        {/* Error State */}
-        {error && (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Dashboard Administrativo</h1>
+          <p className="text-sm text-gray-600">Resumen operacional del sistema Petrus</p>
+        </div>
+        <Button
+          onClick={refreshTrucks}
+          disabled={trucksLoading}
+          variant="outline"
+          size="sm"
+          className="flex items-center gap-2"
+        >
+          <RefreshCw className={`h-4 w-4 ${trucksLoading ? "animate-spin" : ""}`} />
+          {trucksLoading ? "Actualizando..." : "Actualizar"}
+        </Button>
+      </div>
+
+        {/* Error States */}
+        {(error || trucksError) && (
           <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
             <div className="flex">
               <AlertCircle className="h-5 w-5 text-yellow-600 mr-2" />
-              <p className="text-yellow-800">{error}</p>
+              <p className="text-yellow-800">{error || trucksError}</p>
             </div>
           </div>
         )}
 
         {/* Loading State para datos */}
-        {dataLoading ? (
+        {(dataLoading || trucksLoading) ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             {[1, 2, 3, 4].map((i) => (
               <Card key={i} className="animate-pulse">
@@ -257,25 +283,25 @@ export default function AdminDashboard() {
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-600">Camiones en tránsito:</span>
                       <Badge variant="outline" className="text-blue-700">
-                        {trucks.filter((t) => t.state === "Transito").length}
+                        {getTrucksByState("Transito").length}
                       </Badge>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-600">Camiones en descarga:</span>
                       <Badge variant="outline" className="text-purple-700">
-                        {trucks.filter((t) => t.state === "Descarga").length}
+                        {getTrucksByState("Descarga").length}
                       </Badge>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-600">En mantenimiento:</span>
                       <Badge variant="outline" className="text-yellow-700">
-                        {trucks.filter((t) => t.state === "Mantenimiento").length}
+                        {getTrucksByState("Mantenimiento").length}
                       </Badge>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-600">Asignados:</span>
                       <Badge variant="outline" className="text-green-700">
-                        {trucks.filter((t) => t.state === "Asignado").length}
+                        {getTrucksByState("Asignado").length}
                       </Badge>
                     </div>
                   </div>

@@ -36,19 +36,31 @@ export async function GET(request: NextRequest) {
 
     const totalCount = await prisma.truck.count({ where })
 
+    // SIEMPRE retornar formato consistente
     return NextResponse.json({
-      trucks,
+      success: true,
+      data: trucks, // Array de camiones
       pagination: {
         page,
         limit,
         total: totalCount,
         pages: Math.ceil(totalCount / limit),
       },
+      meta: {
+        timestamp: new Date().toISOString(),
+        activeCount: trucks.filter(t => t.state === 'Activo').length,
+        assignedCount: trucks.filter(t => t.state === 'Asignado').length,
+      }
     })
   } catch (error: any) {
     // Explicitly type error as any
     console.error("Error fetching trucks:", error)
-    return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
+    return NextResponse.json({
+      success: false,
+      data: [], // SIEMPRE array vacío en error
+      error: "Error interno del servidor",
+      pagination: { page: 1, limit: 10, total: 0, pages: 0 }
+    }, { status: 500 })
   }
 }
 

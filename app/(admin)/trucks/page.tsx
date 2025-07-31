@@ -2,20 +2,26 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { TruckTable } from "@/components/TruckTable"
+import { TruckGridView } from "@/components/TruckGridView"
 import { useToast } from "@/hooks/use-toast"
-import { useTrucks } from "@/hooks/use-trucks"
+import { useTruckManagementStore } from "@/stores/truckManagementStore"
 import Link from "next/link"
-import { Plus, RefreshCw } from "lucide-react"
+import { Plus, RefreshCw, Grid3X3, List } from "lucide-react"
 import type { Truck } from "@/types/globals"
 import axios from "axios"
 
 export default function TrucksPage() {
-  const { trucks, isLoading: loading, error, refresh, updateTruckState } = useTrucks()
-  const [filteredTrucks, setFilteredTrucks] = useState<Truck[]>([])
-  const [searchTerm, setSearchTerm] = useState("")
+  const { 
+    trucks, 
+    loading, 
+    error, 
+    refreshTrucks, 
+    updateTruckState,
+    getFilteredTrucks 
+  } = useTruckManagementStore()
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid')
   const { toast } = useToast()
   const [mounted, setMounted] = useState(false)
   const isAdmin = true // Assuming isAdmin is always true for this component
@@ -24,19 +30,8 @@ export default function TrucksPage() {
     setMounted(true)
   }, [])
 
-  useEffect(() => {
-    if (searchTerm.trim() === "") {
-      setFilteredTrucks(trucks)
-    } else {
-      const filtered = trucks.filter(
-        (truck: Truck) =>
-          truck.placa.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          truck.typefuel.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          truck.state.toLowerCase().includes(searchTerm.toLowerCase()),
-      )
-      setFilteredTrucks(filtered)
-    }
-  }, [trucks, searchTerm])
+  // ✅ Usar filtros del store en lugar de estado local
+  const filteredTrucks = getFilteredTrucks()
 
   // Add this useEffect after the existing ones
   useEffect(() => {
@@ -45,11 +40,11 @@ export default function TrucksPage() {
     // Set up polling for real-time updates every 30 seconds
     const interval = setInterval(() => {
       console.log("🔄 Auto-refreshing trucks data...")
-      refresh()
+      refreshTrucks()
     }, 30000)
 
     return () => clearInterval(interval)
-  }, [mounted, isAdmin, refresh])
+  }, [mounted, isAdmin, refreshTrucks])
 
   const handleRefreshStatus = async () => {
     if (isRefreshing) return
@@ -63,11 +58,11 @@ export default function TrucksPage() {
         title: "Estados actualizados",
         description: response.data.message,
       })
-      await refresh()
+      await refreshTrucks()
 
       // Force additional refresh after 2 seconds to catch any delayed updates
       setTimeout(() => {
-        refresh()
+        refreshTrucks()
       }, 2000)
 
       console.log("✅ Status refresh completed")
@@ -95,6 +90,24 @@ export default function TrucksPage() {
               <p className="text-sm text-gray-600">Administra la flota de vehículos</p>
             </div>
             <div className="flex items-center space-x-4">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={viewMode === 'grid' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewMode('grid')}
+                >
+                  <Grid3X3 className="h-4 w-4 mr-2" />
+                  Vista Grid
+                </Button>
+                <Button
+                  variant={viewMode === 'table' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setViewMode('table')}
+                >
+                  <List className="h-4 w-4 mr-2" />
+                  Vista Tabla
+                </Button>
+              </div>
               <Button
                 onClick={handleRefreshStatus}
                 disabled={isRefreshing}
@@ -119,41 +132,39 @@ export default function TrucksPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-white rounded-lg shadow">
-          <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-            <h2 className="text-lg font-semibold text-gray-900">Lista de Camiones ({filteredTrucks.length})</h2>
-            <div className="flex items-center space-x-4">
-              <Input
-                placeholder="Buscar por placa, combustible o estado..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="max-w-sm"
-              />
+        {viewMode === 'grid' ? (
+          <TruckGridView />
+        ) : (
+          <div className="bg-white rounded-lg shadow">
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h2 className="text-lg font-semibold text-gray-900">
+                Lista de Camiones ({filteredTrucks.length})
+              </h2>
+            </div>
+            <div className="p-6">
+              {loading ? (
+                <div className="text-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="mt-2 text-gray-600">Cargando camiones...</p>
+                </div>
+              ) : error ? (
+                <div className="text-center py-8 text-red-500">
+                  <p>Error: {error}</p>
+                  <Button onClick={refreshTrucks} className="mt-4" variant="outline">
+                    Reintentar
+                  </Button>
+                </div>
+              ) : (
+                <TruckTable
+                  trucks={filteredTrucks}
+                  onUpdateState={updateTruckState}
+                  onRefreshTrucks={refreshTrucks}
+                  isAdmin={true}
+                />
+              )}
             </div>
           </div>
-          <div className="p-6">
-            {loading ? (
-              <div className="text-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                <p className="mt-2 text-gray-600">Cargando camiones...</p>
-              </div>
-            ) : error ? (
-              <div className="text-center py-8 text-red-500">
-                <p>Error: {error}</p>
-                <Button onClick={refresh} className="mt-4" variant="outline">
-                  Reintentar
-                </Button>
-              </div>
-            ) : (
-              <TruckTable
-                trucks={filteredTrucks}
-                onUpdateState={updateTruckState}
-                onRefreshTrucks={refresh}
-                isAdmin={true}
-              />
-            )}
-          </div>
-        </div>
+        )}
       </main>
     </div>
   )
