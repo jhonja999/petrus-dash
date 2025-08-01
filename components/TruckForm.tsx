@@ -18,6 +18,7 @@ import type { FuelType, TruckState } from "@/types/globals"
 interface TruckFormErrors {
   placa?: string
   typefuel?: string
+  customFuelType?: string
   capacitygal?: string
   lastRemaining?: string
   state?: string
@@ -26,10 +27,13 @@ interface TruckFormErrors {
 const fuelTypeOptions = [
   { value: "DIESEL_B5", label: "Diésel B5" },
   { value: "DIESEL_B500", label: "Diésel B500" },
-  { value: "GASOLINA_PREMIUM", label: "Gasolina Premium" },
-  { value: "GASOLINA_REGULAR", label: "Gasolina Regular" },
-  { value: "GASOL", label: "Gasol" },
+  { value: "GASOLINA_PREMIUM_95", label: "Gasolina Premium 95" },
+  { value: "GASOLINA_REGULAR_90", label: "Gasolina Regular 90" },
+  { value: "GASOHOL_84", label: "Gasohol 84" },
+  { value: "GASOHOL_90", label: "Gasohol 90" },
+  { value: "GASOHOL_95", label: "Gasohol 95" },
   { value: "SOLVENTE", label: "Solvente" },
+  { value: "GASOL", label: "Gasol" },
   { value: "PERSONALIZADO", label: "Personalizado" },
 ]
 
@@ -65,6 +69,11 @@ export function TruckForm() {
 
     if (!formData.typefuel) {
       newErrors.typefuel = "El tipo de combustible es requerido"
+    }
+
+    // Validate custom fuel type if PERSONALIZADO is selected
+    if (formData.typefuel === "PERSONALIZADO" && !formData.customFuelType?.trim()) {
+      newErrors.customFuelType = "Debe especificar el tipo de combustible personalizado"
     }
 
     if (!formData.capacitygal.trim()) {
@@ -108,18 +117,25 @@ export function TruckForm() {
     setError(null)
 
     try {
+      const requestBody: any = {
+        placa: formData.placa.trim().toUpperCase(),
+        typefuel: formData.typefuel,
+        capacitygal: formData.capacitygal, // Send as string as requested
+        lastRemaining: formData.lastRemaining ? Number.parseFloat(formData.lastRemaining) : 0,
+        state: formData.state,
+      }
+
+      // Add custom fuel type if PERSONALIZADO is selected
+      if (formData.typefuel === "PERSONALIZADO" && formData.customFuelType) {
+        requestBody.customFuelType = formData.customFuelType.trim()
+      }
+
       const response = await fetch("/api/trucks", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          placa: formData.placa.trim().toUpperCase(),
-          typefuel: formData.typefuel,
-          capacitygal: Number.parseFloat(formData.capacitygal),
-          lastRemaining: formData.lastRemaining ? Number.parseFloat(formData.lastRemaining) : 0,
-          state: formData.state,
-        }),
+        body: JSON.stringify(requestBody),
       })
 
       const data = await response.json()
@@ -217,28 +233,42 @@ export function TruckForm() {
           {errors.typefuel && <p className="text-sm text-red-500">{errors.typefuel}</p>}
         </div>
 
-        {/* Capacidad */}
+        {/* Custom Fuel Type - Only show when PERSONALIZADO is selected */}
+        {formData.typefuel === "PERSONALIZADO" && (
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="customFuelType">
+              Tipo de Combustible Personalizado <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="customFuelType"
+              type="text"
+              placeholder="Ej: Biodiésel B20, Gas Natural, etc."
+              value={formData.customFuelType || ""}
+              onChange={(e) => handleInputChange("customFuelType", e.target.value)}
+              className={errors.customFuelType ? "border-red-500" : ""}
+              disabled={isLoading}
+            />
+            {errors.customFuelType && <p className="text-sm text-red-500">{errors.customFuelType}</p>}
+            <p className="text-sm text-gray-500">Especifique el tipo de combustible personalizado</p>
+          </div>
+        )}
+
+        {/* Capacidad - Changed to text input */}
         <div className="space-y-2">
           <Label htmlFor="capacitygal">
             Capacidad (Galones) <span className="text-red-500">*</span>
           </Label>
-          <Select
+          <Input
+            id="capacitygal"
+            type="text"
+            placeholder="Ej: 5000"
             value={formData.capacitygal}
-            onValueChange={(value) => handleInputChange("capacitygal", value)}
+            onChange={(e) => handleInputChange("capacitygal", e.target.value)}
+            className={errors.capacitygal ? "border-red-500" : ""}
             disabled={isLoading}
-          >
-            <SelectTrigger className={errors.capacitygal ? "border-red-500" : ""}>
-              <SelectValue placeholder="Seleccionar capacidad" />
-            </SelectTrigger>
-            <SelectContent>
-              {[1500, 2000, 3000, 5000, 6500, 7500, 9000, 10000].map((capacity) => (
-                <SelectItem key={capacity} value={capacity.toString()}>
-                  {capacity} galones
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
           {errors.capacitygal && <p className="text-sm text-red-500">{errors.capacitygal}</p>}
+          <p className="text-sm text-gray-500">Ingrese la capacidad en galones (máximo 15,000)</p>
         </div>
 
         {/* Remanente Inicial */}
@@ -295,6 +325,7 @@ export function TruckForm() {
             <li>• La capacidad se registra en galones</li>
             <li>• El remanente inicial puede ser 0 si el camión está vacío</li>
             <li>• El estado se puede cambiar posteriormente desde la lista de camiones</li>
+            <li>• Si selecciona "Personalizado", debe especificar el tipo de combustible</li>
           </ul>
         </CardContent>
       </Card>

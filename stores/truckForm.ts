@@ -3,6 +3,7 @@ import { create } from 'zustand';
 interface TruckFormData {
   placa: string;
   typefuel: string;
+  customFuelType: string;
   capacitygal: string;
   lastRemaining: string;
   state: string;
@@ -18,6 +19,7 @@ const useTruckFormStore = create<TruckFormState>((set) => ({
   formData: {
     placa: '',
     typefuel: '',
+    customFuelType: '',
     capacitygal: '',
     lastRemaining: '0',
     state: 'Activo',
@@ -28,6 +30,7 @@ const useTruckFormStore = create<TruckFormState>((set) => ({
       formData: {
         placa: '',
         typefuel: '',
+        customFuelType: '',
         capacitygal: '',
         lastRemaining: '0',
         state: 'Activo',
