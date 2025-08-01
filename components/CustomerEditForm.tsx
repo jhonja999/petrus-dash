@@ -12,7 +12,7 @@ import axios from "axios"
 import { useRouter } from "next/navigation"
 import { format } from "date-fns"
 import { es } from "date-fns/locale"
-import { MapPin } from "lucide-react"
+import { MapPin, Navigation } from "lucide-react"
 
 interface CustomerEditFormProps {
   customer: Customer
@@ -55,6 +55,7 @@ export function CustomerEditForm({ customer }: CustomerEditFormProps) {
   const [errors, setErrors] = useState<CustomerFormErrors>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [hasChanges, setHasChanges] = useState(false)
+  const [isGeocoding, setIsGeocoding] = useState(false)
 
   // Ref para evitar que el useEffect se ejecute en el primer render del componente
   const isInitialMount = useRef(true)
@@ -169,9 +170,16 @@ export function CustomerEditForm({ customer }: CustomerEditFormProps) {
       if (response.data.success) {
         setOriginalData(formData)
         setHasChanges(false)
+        
+        // Mensaje personalizado según si se guardaron coordenadas
+        const hasCoordinates = formData.latitude && formData.longitude
+        const message = hasCoordinates 
+          ? "Cliente actualizado exitosamente con coordenadas de ubicación."
+          : "Cliente actualizado exitosamente."
+        
         toast({
           title: "Éxito",
-          description: "Cliente actualizado exitosamente.",
+          description: message,
         })
         router.push("/customers")
       } else {
@@ -197,6 +205,61 @@ export function CustomerEditForm({ customer }: CustomerEditFormProps) {
       title: "Formulario restablecido",
       description: "Los cambios no guardados han sido descartados.",
     })
+  }
+
+  const handleGeocode = async () => {
+    if (!formData.address.trim()) {
+      toast({
+        title: "Error",
+        description: "Por favor, ingresa una dirección primero.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsGeocoding(true)
+    try {
+      // Usar la API de Nominatim (OpenStreetMap) para geocodificación gratuita
+      const searchQuery = encodeURIComponent(`${formData.address}, Perú`)
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${searchQuery}&limit=1&countrycodes=pe`
+      )
+      
+      if (!response.ok) {
+        throw new Error('Error en la geocodificación')
+      }
+
+      const data = await response.json()
+      
+      if (data && data.length > 0) {
+        const location = data[0]
+        setFormData(prev => ({
+          ...prev,
+          latitude: location.lat,
+          longitude: location.lon
+        }))
+        
+        toast({
+          title: "Coordenadas obtenidas",
+          description: `Ubicación encontrada: ${location.display_name}`,
+        })
+      } else {
+        toast({
+          title: "No se encontró ubicación",
+          description: "No se pudo encontrar coordenadas para esta dirección.",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error('Error geocoding:', error)
+      toast({
+        title: "Error de geocodificación",
+        description: "No se pudo obtener las coordenadas automáticamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsGeocoding(false)
+    }
   }
 
   const createdAtFormatted = customer.createdAt
@@ -250,9 +313,22 @@ export function CustomerEditForm({ customer }: CustomerEditFormProps) {
       <Separator />
 
       <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <MapPin className="h-5 w-5 text-blue-600" />
-          <h3 className="text-lg font-semibold">Ubicación (Opcional)</h3>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <MapPin className="h-5 w-5 text-blue-600" />
+            <h3 className="text-lg font-semibold">Ubicación (Opcional)</h3>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleGeocode}
+            disabled={isGeocoding || !formData.address.trim()}
+            className="flex items-center gap-2"
+          >
+            <Navigation className="h-4 w-4" />
+            {isGeocoding ? "Obteniendo..." : "Obtener Coordenadas"}
+          </Button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -289,12 +365,28 @@ export function CustomerEditForm({ customer }: CustomerEditFormProps) {
 
         {formData.latitude && formData.longitude && !errors.latitude && !errors.longitude && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <p className="text-sm text-blue-700">
-              <strong>Coordenadas:</strong> {formData.latitude}, {formData.longitude}
-            </p>
-            <p className="text-xs text-blue-600 mt-1">
-              Estas coordenadas se usarán para el tracking y ubicación del cliente en el mapa.
-            </p>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-blue-700">
+                  <strong>Coordenadas:</strong> {formData.latitude}, {formData.longitude}
+                </p>
+                <p className="text-xs text-blue-600 mt-1">
+                  Estas coordenadas se usarán para el tracking y ubicación del cliente en el mapa.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const url = `https://www.google.com/maps?q=${formData.latitude},${formData.longitude}`
+                  window.open(url, '_blank')
+                }}
+                className="text-xs"
+              >
+                Ver en Maps
+              </Button>
+            </div>
           </div>
         )}
       </div>

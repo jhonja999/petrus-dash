@@ -121,11 +121,19 @@ const createTruckManagementStore = () =>
             console.error(`Error in ${context}:`, error)
             
             if (axios.isAxiosError(error)) {
+              console.error(`🔍 Detailed error info for ${context}:`, {
+                status: error.response?.status,
+                statusText: error.response?.statusText,
+                data: error.response?.data,
+                url: error.config?.url,
+                method: error.config?.method
+              })
+              
               if (error.response?.status === 404) {
                 return `${context}: Recurso no encontrado`
               }
               if (error.response?.status >= 500) {
-                return `${context}: Error del servidor`
+                return `${context}: Error del servidor (${error.response?.status}) - ${error.response?.data?.error || 'Error interno'}`
               }
               return error.response?.data?.error || `${context}: Error desconocido`
             }

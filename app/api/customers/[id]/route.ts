@@ -59,7 +59,7 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
     }
 
     const body = await request.json()
-    const { companyname, ruc, address } = body
+    const { companyname, ruc, address, latitude, longitude } = body
 
     // Basic validation
     if (!companyname || !ruc || !address) {
@@ -69,12 +69,29 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
       return NextResponse.json({ success: false, message: "RUC must be 11 digits" }, { status: 400 })
     }
 
+    // Validate coordinates if provided
+    if (latitude !== null && latitude !== undefined) {
+      const lat = Number(latitude)
+      if (isNaN(lat) || lat < -90 || lat > 90) {
+        return NextResponse.json({ success: false, message: "Invalid latitude value" }, { status: 400 })
+      }
+    }
+
+    if (longitude !== null && longitude !== undefined) {
+      const lng = Number(longitude)
+      if (isNaN(lng) || lng < -180 || lng > 180) {
+        return NextResponse.json({ success: false, message: "Invalid longitude value" }, { status: 400 })
+      }
+    }
+
     const updatedCustomer = await prisma.customer.update({
       where: { id: customerId },
       data: {
         companyname,
         ruc,
         address,
+        latitude: latitude !== null && latitude !== undefined ? Number(latitude) : null,
+        longitude: longitude !== null && longitude !== undefined ? Number(longitude) : null,
       },
     })
 

@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, Building2, Edit, AlertCircle } from "lucide-react"
+import { Plus, Building2, Edit, AlertCircle, Eye } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import axios from "axios"
@@ -540,6 +540,12 @@ function CustomersPageContent() {
                           </TableCell>
                           <TableCell>
                             <div className="flex space-x-2">
+                              <Button size="sm" variant="outline" asChild>
+                                <Link href={`/customers/${customer.id}`}>
+                                  <Eye className="h-4 w-4 mr-1" />
+                                  Ver
+                                </Link>
+                              </Button>
                               <Button size="sm" variant="outline" asChild>
                                 <Link href={`/customers/${customer.id}/edit`}>
                                   <Edit className="h-4 w-4 mr-1" />
