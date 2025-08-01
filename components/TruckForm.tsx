@@ -10,8 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Loader2, Truck, AlertCircle, CheckCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { useFormStore } from "@/hooks/useFormStore"
-import { useTruckFormStore, truckValidationRules, type TruckFormData } from "@/stores/truckFormStore"
+import { useState } from "react"
 import type { FuelType, TruckState } from "@/types/globals"
 
 const fuelTypeOptions = [
@@ -37,19 +36,67 @@ export function TruckForm() {
   const router = useRouter()
   const { toast } = useToast()
   
-  // Usar el store unificado
-  const truckStore = useTruckFormStore()
-  const {
-    formData,
-    errors,
-    isSubmitting,
-    handleSubmit,
-    getFieldProps,
-    getSelectProps,
-    resetForm
-  } = useFormStore(truckStore, truckValidationRules)
+  // Estado local del formulario
+  const [formData, setFormData] = useState({
+    licensePlate: '',
+    fuelType: 'DIESEL_B5' as FuelType,
+    capacity: 0,
+    model: '',
+    year: new Date().getFullYear(),
+    status: 'ACTIVE' as TruckState,
+    notes: ''
+  })
+  
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const onSubmit = async (data: TruckFormData) => {
+  const handleInputChange = (field: string, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
+    // Limpiar error del campo
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: '' }))
+    }
+  }
+
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {}
+    
+    if (!formData.licensePlate.trim()) {
+      newErrors.licensePlate = 'La placa es requerida'
+    } else if (formData.licensePlate.length < 6) {
+      newErrors.licensePlate = 'La placa debe tener al menos 6 caracteres'
+    }
+    
+    if (!formData.model.trim()) {
+      newErrors.model = 'El modelo es requerido'
+    }
+    
+    if (formData.capacity <= 0) {
+      newErrors.capacity = 'La capacidad debe ser mayor a 0'
+    }
+    
+    if (formData.year < 1990 || formData.year > new Date().getFullYear() + 1) {
+      newErrors.year = 'El año debe ser válido'
+    }
+    
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!validateForm()) {
+      toast({
+        title: "Error de validación",
+        description: "Por favor, corrige los errores en el formulario",
+        variant: "destructive",
+      })
+      return
+    }
+    
+    setIsSubmitting(true)
+    
     try {
       const response = await fetch("/api/trucks", {
         method: "POST",
@@ -57,13 +104,13 @@ export function TruckForm() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          licensePlate: data.licensePlate.trim().toUpperCase(),
-          fuelType: data.fuelType,
-          capacity: data.capacity,
-          model: data.model,
-          year: data.year,
-          status: data.status,
-          notes: data.notes,
+          licensePlate: formData.licensePlate.trim().toUpperCase(),
+          fuelType: formData.fuelType,
+          capacity: formData.capacity,
+          model: formData.model,
+          year: formData.year,
+          status: formData.status,
+          notes: formData.notes,
         }),
       })
 
@@ -88,12 +135,13 @@ export function TruckForm() {
         description: err.message || "Error al crear el camión",
         variant: "destructive",
       })
-      throw err // Re-throw para que el hook maneje el estado de loading
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Placa */}
         <div className="space-y-2">
@@ -104,7 +152,8 @@ export function TruckForm() {
             id="licensePlate"
             type="text"
             placeholder="Ej: ABC123"
-            {...getFieldProps('licensePlate')}
+            value={formData.licensePlate}
+            onChange={(e) => handleInputChange('licensePlate', e.target.value)}
             className={errors.licensePlate ? "border-red-500" : ""}
           />
           {errors.licensePlate && (
@@ -121,7 +170,8 @@ export function TruckForm() {
             id="capacity"
             type="number"
             placeholder="Ej: 5000"
-            {...getFieldProps('capacity')}
+            value={formData.capacity}
+            onChange={(e) => handleInputChange('capacity', Number(e.target.value))}
             className={errors.capacity ? "border-red-500" : ""}
           />
           {errors.capacity && (
@@ -138,7 +188,8 @@ export function TruckForm() {
             id="model"
             type="text"
             placeholder="Ej: Volvo FH16"
-            {...getFieldProps('model')}
+            value={formData.model}
+            onChange={(e) => handleInputChange('model', e.target.value)}
             className={errors.model ? "border-red-500" : ""}
           />
           {errors.model && (
@@ -155,7 +206,8 @@ export function TruckForm() {
             id="year"
             type="number"
             placeholder="Ej: 2023"
-            {...getFieldProps('year')}
+            value={formData.year}
+            onChange={(e) => handleInputChange('year', Number(e.target.value))}
             className={errors.year ? "border-red-500" : ""}
           />
           {errors.year && (
@@ -168,7 +220,7 @@ export function TruckForm() {
           <Label htmlFor="fuelType">
             Tipo de Combustible <span className="text-red-500">*</span>
           </Label>
-          <Select {...getSelectProps('fuelType')}>
+          <Select value={formData.fuelType} onValueChange={(value) => handleInputChange('fuelType', value)}>
             <SelectTrigger className={errors.fuelType ? "border-red-500" : ""}>
               <SelectValue placeholder="Seleccionar tipo de combustible" />
             </SelectTrigger>
@@ -190,7 +242,7 @@ export function TruckForm() {
           <Label htmlFor="status">
             Estado <span className="text-red-500">*</span>
           </Label>
-          <Select {...getSelectProps('status')}>
+          <Select value={formData.status} onValueChange={(value) => handleInputChange('status', value)}>
             <SelectTrigger className={errors.status ? "border-red-500" : ""}>
               <SelectValue placeholder="Seleccionar estado" />
             </SelectTrigger>
@@ -214,7 +266,8 @@ export function TruckForm() {
             id="notes"
             type="text"
             placeholder="Notas adicionales (opcional)"
-            {...getFieldProps('notes')}
+            value={formData.notes}
+            onChange={(e) => handleInputChange('notes', e.target.value)}
             className={errors.notes ? "border-red-500" : ""}
           />
           {errors.notes && (
