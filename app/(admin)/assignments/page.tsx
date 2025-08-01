@@ -13,6 +13,7 @@ import { useEffect, useState, useMemo } from "react"
 import axios from "axios"
 import { RefreshCw } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import type { FuelType } from "@/types/globals"
 
 export default function AssignmentsPage() {
   const authData = useAuth()
@@ -26,7 +27,7 @@ export default function AssignmentsPage() {
 
   const { isAdmin, isLoading } = authData
   const { assignments: rawAssignments, loading: assignmentsLoading, refreshAssignments } = assignmentsData
-  const { trucks: rawTrucks, refreshTrucks } = trucksData
+  const { trucks: rawTrucks, refresh: refreshTrucks } = trucksData
 
   // ✅ FIX: Asegurar que assignments siempre sea un array
   const assignments = Array.isArray(rawAssignments) ? rawAssignments : []
@@ -38,7 +39,9 @@ export default function AssignmentsPage() {
     return rawTrucks.map(truck => ({
       ...truck,
       capacitygal: Number(truck.capacitygal), // Convert Decimal to number
-      lastRemaining: Number(truck.lastRemaining) // Convert Decimal to number if needed
+      lastRemaining: Number(truck.lastRemaining), // Convert Decimal to number if needed
+      typefuel: truck.typefuel as FuelType, // Ensure proper type casting
+      customFuelType: (truck as any).customFuelType || undefined
     }))
   }, [rawTrucks])
 

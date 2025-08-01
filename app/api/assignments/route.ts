@@ -283,7 +283,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Validate required fields
-    if (!truckId || !driverId || !fuelType || !quantity || !unitPrice || !totalAmount || !deliveryDate || !deliveryTime || !status) {
+    if (!truckId || !driverId || !fuelType || quantity === undefined || quantity === null || unitPrice === undefined || unitPrice === null || totalAmount === undefined || totalAmount === null || !deliveryDate || !deliveryTime || !status) {
       return NextResponse.json({ error: "Todos los campos son requeridos" }, { status: 400 })
     }
 

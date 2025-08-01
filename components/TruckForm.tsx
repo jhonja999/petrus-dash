@@ -261,7 +261,7 @@ export function TruckForm() {
           <Input
             id="capacitygal"
             type="text"
-            placeholder="Ej: 5000"
+            placeholder="Ej: 15000"
             value={formData.capacitygal}
             onChange={(e) => handleInputChange("capacitygal", e.target.value)}
             className={errors.capacitygal ? "border-red-500" : ""}

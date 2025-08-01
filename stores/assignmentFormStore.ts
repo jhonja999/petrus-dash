@@ -32,7 +32,7 @@ export const assignmentValidationRules: ValidationRules<AssignmentFormData> = {
     required: true
   },
   customerId: {
-    required: true
+    required: false // Made optional since customers might not be provided
   },
   fuelType: {
     required: true
@@ -116,7 +116,7 @@ export const assignmentValidationRules: ValidationRules<AssignmentFormData> = {
 const initialAssignmentData: AssignmentFormData = {
   truckId: '',
   driverId: '',
-  customerId: '',
+  customerId: '', // Optional field
   fuelType: 'DIESEL_B5',
   customFuelType: '',
   quantity: 0,
