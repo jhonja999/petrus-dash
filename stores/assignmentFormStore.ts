@@ -1,4 +1,5 @@
 import { createFormStore, ValidationRules } from './formStore'
+import type { FuelType } from '@/types/globals'
 
 // Tipos para el formulario de asignación
 export interface AssignmentFormData {
@@ -6,7 +7,8 @@ export interface AssignmentFormData {
   truckId: string
   driverId: string
   customerId: string
-  fuelType: 'DIESEL' | 'GASOLINE'
+  fuelType: FuelType
+  customFuelType?: string
   quantity: number
   unitPrice: number
   totalAmount: number
@@ -34,6 +36,14 @@ export const assignmentValidationRules: ValidationRules<AssignmentFormData> = {
   },
   fuelType: {
     required: true
+  },
+  customFuelType: {
+    custom: (value: string, formData: AssignmentFormData) => {
+      if (formData.fuelType === 'PERSONALIZADO' && !value?.trim()) {
+        return 'Debe especificar el tipo de combustible personalizado'
+      }
+      return null
+    }
   },
   quantity: {
     required: true,
@@ -107,7 +117,8 @@ const initialAssignmentData: AssignmentFormData = {
   truckId: '',
   driverId: '',
   customerId: '',
-  fuelType: 'DIESEL',
+  fuelType: 'DIESEL_B5',
+  customFuelType: '',
   quantity: 0,
   unitPrice: 0,
   totalAmount: 0,

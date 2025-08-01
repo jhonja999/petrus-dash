@@ -30,6 +30,7 @@ interface TruckData {
   id: number
   placa: string
   typefuel: FuelType
+  customFuelType?: string
   capacitygal: number
   lastRemaining: number
   state: string
@@ -57,7 +58,10 @@ const fuelTypeLabels: Record<FuelType, string> = {
 }
 
 // Helper function to safely get fuel type label
-const getFuelTypeLabel = (fuelType: FuelType): string => {
+const getFuelTypeLabel = (fuelType: FuelType, customFuelType?: string): string => {
+  if (fuelType === 'PERSONALIZADO' && customFuelType) {
+    return `Personalizado: ${customFuelType}`
+  }
   return fuelTypeLabels[fuelType] || fuelType
 }
 
@@ -91,6 +95,12 @@ export function AssignmentForm({ trucks, drivers, onSuccess, refreshing }: Assig
       const truck = trucks.find((t) => t.id === Number(formData.truckId))
       if (truck) {
         setField('fuelType', truck.typefuel)
+        // Si el camión tiene un tipo personalizado, usarlo como valor por defecto
+        if (truck.typefuel === 'PERSONALIZADO' && truck.customFuelType) {
+          setField('customFuelType', truck.customFuelType)
+        } else {
+          setField('customFuelType', '')
+        }
       }
     }
   }, [formData.truckId, trucks, setField])
@@ -101,6 +111,7 @@ export function AssignmentForm({ trucks, drivers, onSuccess, refreshing }: Assig
         truckId: Number(data.truckId),
         driverId: Number(data.driverId),
         fuelType: data.fuelType,
+        customFuelType: data.fuelType === 'PERSONALIZADO' ? data.customFuelType : undefined,
         quantity: data.quantity,
         unitPrice: data.unitPrice,
         totalAmount: data.totalAmount,
@@ -149,7 +160,7 @@ export function AssignmentForm({ trucks, drivers, onSuccess, refreshing }: Assig
                   <SelectItem key={truck.id} value={truck.id.toString()}>
                     <div className="flex items-center gap-2">
                       <Truck className="h-4 w-4" />
-                      {truck.placa} - {getFuelTypeLabel(truck.typefuel)}
+                      {truck.placa} - {getFuelTypeLabel(truck.typefuel, truck.customFuelType)}
                     </div>
                   </SelectItem>
                 ))}
@@ -214,6 +225,28 @@ export function AssignmentForm({ trucks, drivers, onSuccess, refreshing }: Assig
             <p className="text-sm text-red-500">{errors.fuelType}</p>
           )}
         </div>
+
+        {/* Tipo de Combustible Personalizado */}
+        {formData.fuelType === 'PERSONALIZADO' && (
+          <div className="space-y-2">
+            <Label htmlFor="customFuelType">
+              Tipo Personalizado <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="customFuelType"
+              type="text"
+              placeholder="Ej: Biodiésel B20, Gas Natural Comprimido, etc."
+              {...getFieldProps('customFuelType')}
+              className={errors.customFuelType ? "border-red-500" : ""}
+            />
+            {errors.customFuelType && (
+              <p className="text-sm text-red-500">{errors.customFuelType}</p>
+            )}
+            <p className="text-xs text-gray-500">
+              Especifique el tipo de combustible personalizado para esta asignación
+            </p>
+          </div>
+        )}
 
         {/* Cantidad */}
         <div className="space-y-2">
@@ -354,7 +387,7 @@ export function AssignmentForm({ trucks, drivers, onSuccess, refreshing }: Assig
                   <h4 className="font-medium mb-2">Camión Seleccionado</h4>
                   <div className="space-y-1 text-sm">
                     <p><strong>Placa:</strong> {selectedTruck.placa}</p>
-                    <p><strong>Combustible:</strong> {getFuelTypeLabel(selectedTruck.typefuel)}</p>
+                    <p><strong>Combustible:</strong> {getFuelTypeLabel(selectedTruck.typefuel, selectedTruck.customFuelType)}</p>
                     <p><strong>Capacidad:</strong> {selectedTruck.capacitygal} galones</p>
                     <p><strong>Remanente:</strong> {selectedTruck.lastRemaining} galones</p>
                   </div>

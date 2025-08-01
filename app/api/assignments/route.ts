@@ -266,38 +266,37 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { truckId, driverId, fuelType, totalLoaded, clients } = body
+    const { truckId, driverId, fuelType, customFuelType, quantity, unitPrice, totalAmount, deliveryDate, deliveryTime, status, notes } = body
 
     console.log("📝 Creating new assignment:", {
       truckId,
       driverId,
       fuelType,
-      totalLoaded,
-      clientsCount: clients?.length,
+      customFuelType,
+      quantity,
+      unitPrice,
+      totalAmount,
+      deliveryDate,
+      deliveryTime,
+      status,
+      notes
     })
 
     // Validate required fields
-    if (!truckId || !driverId || !fuelType || !totalLoaded) {
+    if (!truckId || !driverId || !fuelType || !quantity || !unitPrice || !totalAmount || !deliveryDate || !deliveryTime || !status) {
       return NextResponse.json({ error: "Todos los campos son requeridos" }, { status: 400 })
     }
 
-    // Determine if the fuelType is one of the predefined enum values
-    // If not, it's a custom fuel type, and we store "PERSONALIZADO" in the enum field
-    // and the actual custom string in the new customFuelType field.
-    const predefinedFuelTypes = Object.values(FuelType) as string[] // Get all enum string values
-
-    let mappedFuelType: FuelType
-    let customFuelTypeName: string | null = null
-
-    if (predefinedFuelTypes.includes(fuelType)) {
-      mappedFuelType = fuelType as FuelType
-    } else {
-      mappedFuelType = FuelType.PERSONALIZADO
-      customFuelTypeName = fuelType // Store the custom string here
+    // Validate fuel type
+    const validFuelTypes = Object.values(FuelType) as string[]
+    if (!validFuelTypes.includes(fuelType)) {
+      return NextResponse.json({ error: "Tipo de combustible inválido" }, { status: 400 })
     }
 
-    // Clients are optional for initial assignment creation
-    const clientsArray = clients || []
+    // Validate custom fuel type if PERSONALIZADO is selected
+    if (fuelType === 'PERSONALIZADO' && !customFuelType?.trim()) {
+      return NextResponse.json({ error: "Debe especificar el tipo de combustible personalizado" }, { status: 400 })
+    }
 
     // Check if truck is available
     const truck = await prisma.truck.findUnique({
@@ -339,46 +338,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "El conductor ya tiene una asignación activa" }, { status: 400 })
     }
 
-    // Validate total allocated quantity (only if clients are provided)
-    if (clientsArray.length > 0) {
-      const totalAllocated = clientsArray.reduce((sum: number, client: any) => sum + Number(client.quantity), 0)
-      if (totalAllocated > totalLoaded) {
-        return NextResponse.json({ error: "La cantidad total asignada excede la carga del camión" }, { status: 400 })
-      }
-    }
-
-    // Create assignment with client assignments in a transaction
+    // Create assignment
     const result = await prisma.$transaction(async (tx) => {
       // Create the main assignment
       const assignment = await tx.assignment.create({
         data: {
           truckId,
           driverId,
-          fuelType: mappedFuelType, // Use the mapped enum value
-          customFuelType: customFuelTypeName, // Store the custom string here
-          totalLoaded: Number(totalLoaded),
-          totalRemaining: Number(totalLoaded),
+          fuelType: fuelType as FuelType,
+          customFuelType: fuelType === 'PERSONALIZADO' ? customFuelType : null,
+          totalLoaded: Number(quantity),
+          totalRemaining: Number(quantity),
           isCompleted: false,
+          notes: notes || null,
         },
       })
-
-      // Create client assignments (only if clients are provided)
-      const clientAssignments =
-        clientsArray.length > 0
-          ? await Promise.all(
-              clientsArray.map((client: any) =>
-                tx.clientAssignment.create({
-                  data: {
-                    assignmentId: assignment.id,
-                    customerId: client.customerId,
-                    allocatedQuantity: Number(client.quantity),
-                    deliveredQuantity: 0,
-                    status: "pending",
-                  },
-                }),
-              ),
-            )
-          : []
 
       // Update truck status to "Asignado"
       await tx.truck.update({
@@ -386,7 +360,7 @@ export async function POST(request: NextRequest) {
         data: { state: "Asignado" },
       })
 
-      return { assignment, clientAssignments }
+      return { assignment }
     })
 
     console.log(`✅ Assignment created successfully: ID ${result.assignment.id}`)
@@ -408,6 +382,7 @@ export async function POST(request: NextRequest) {
             id: true,
             placa: true,
             typefuel: true,
+            customFuelType: true,
             capacitygal: true,
             state: true,
           },

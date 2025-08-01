@@ -36,6 +36,7 @@ const stateOptions = [
 const initialFormState = {
   licensePlate: '',
   fuelType: 'DIESEL_B5' as FuelType,
+  customFuelType: '',
   capacity: 0,
   model: '',
   year: new Date().getFullYear(),
@@ -88,6 +89,11 @@ export function TruckForm() {
     if (formData.year < 1990 || formData.year > new Date().getFullYear() + 1) {
       newErrors.year = 'El año debe ser válido'
     }
+
+    // Validate custom fuel type if PERSONALIZADO is selected
+    if (formData.fuelType === 'PERSONALIZADO' && !formData.customFuelType.trim()) {
+      newErrors.customFuelType = 'Debe especificar el tipo de combustible personalizado'
+    }
     
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
@@ -114,12 +120,14 @@ export function TruckForm() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          licensePlate: formData.licensePlate.trim().toUpperCase(),
-          fuelType: formData.fuelType,
-          capacity: formData.capacity,
+          placa: formData.licensePlate.trim().toUpperCase(),
+          typefuel: formData.fuelType,
+          customFuelType: formData.fuelType === 'PERSONALIZADO' ? formData.customFuelType : undefined,
+          capacitygal: formData.capacity,
           model: formData.model,
           year: formData.year,
-          status: formData.status,
+          state: formData.status === 'ACTIVE' ? 'Activo' : 
+                 formData.status === 'INACTIVE' ? 'Inactivo' : 'Mantenimiento',
           notes: formData.notes,
         }),
       })
@@ -132,7 +140,7 @@ export function TruckForm() {
 
       toast({
         title: "¡Éxito!",
-        description: `Camión ${responseData.licensePlate} creado correctamente`,
+        description: `Camión ${responseData.placa} creado correctamente`,
       })
 
       // Reset form after successful submission
@@ -271,6 +279,29 @@ export function TruckForm() {
             <p className="text-sm text-red-500">{errors.status}</p>
           )}
         </div>
+
+        {/* Tipo de Combustible Personalizado */}
+        {formData.fuelType === 'PERSONALIZADO' && (
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="customFuelType">
+              Tipo de Combustible Personalizado <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="customFuelType"
+              type="text"
+              placeholder="Ej: Biodiésel B20, Gas Natural Comprimido, etc."
+              value={formData.customFuelType}
+              onChange={(e) => handleInputChange('customFuelType', e.target.value)}
+              className={errors.customFuelType ? "border-red-500" : ""}
+            />
+            {errors.customFuelType && (
+              <p className="text-sm text-red-500">{errors.customFuelType}</p>
+            )}
+            <p className="text-xs text-gray-500">
+              Especifique el tipo de combustible personalizado que utilizará este camión
+            </p>
+          </div>
+        )}
 
         {/* Notas */}
         <div className="space-y-2 md:col-span-2">

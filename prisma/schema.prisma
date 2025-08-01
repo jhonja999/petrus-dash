@@ -79,9 +79,13 @@ model Truck {
   id            Int          @id @default(autoincrement())
   placa         String       @unique
   typefuel      FuelType
+  customFuelType String?     // Custom fuel type when PERSONALIZADO is selected
   capacitygal   Decimal @db.Decimal(10, 2)
   lastRemaining Decimal      @default(0.00)
   state         TruckState   @default(Activo)
+  model         String?      // Truck model
+  year          Int?         // Manufacturing year
+  notes         String?      // Additional notes
   Assignment    Assignment[]
 
   @@map("trucks")

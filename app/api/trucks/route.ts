@@ -77,10 +77,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { placa, typefuel, capacitygal } = body
+    const { placa, typefuel, customFuelType, capacitygal, model, year, state, notes } = body
 
     if (!placa || !typefuel || !capacitygal) {
-      return NextResponse.json({ error: "Todos los campos son requeridos" }, { status: 400 })
+      return NextResponse.json({ error: "Placa, tipo de combustible y capacidad son requeridos" }, { status: 400 })
     }
 
     // Validate typefuel against the FuelType enum
@@ -89,12 +89,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Tipo de combustible inválido" }, { status: 400 })
     }
 
+    // Validate custom fuel type if PERSONALIZADO is selected
+    if (typefuel === 'PERSONALIZADO' && !customFuelType?.trim()) {
+      return NextResponse.json({ error: "Debe especificar el tipo de combustible personalizado" }, { status: 400 })
+    }
+
+    // Validate state if provided
+    let truckState = TruckState.Activo // Default state
+    if (state) {
+      const validStates = Object.values(TruckState) as string[]
+      if (!validStates.includes(state)) {
+        return NextResponse.json({ error: "Estado de camión inválido" }, { status: 400 })
+      }
+      truckState = state as TruckState
+    }
+
     const newTruck = await prisma.truck.create({
       data: {
         placa,
         typefuel: typefuel as FuelType, // Cast to FuelType enum
+        customFuelType: typefuel === 'PERSONALIZADO' ? customFuelType : null,
         capacitygal: Number(capacitygal),
-        state: TruckState.Activo, // Default state
+        state: truckState,
+        model: model || null,
+        year: year ? Number(year) : null,
+        notes: notes || null,
       },
     })
 
@@ -103,7 +122,7 @@ export async function POST(request: NextRequest) {
     // Explicitly type error as any
     console.error("Error creating truck:", error)
     if (error.code === "P2002") {
-      return NextResponse.json({ error: "La placa o el RUC ya existen" }, { status: 409 })
+      return NextResponse.json({ error: "La placa ya existe" }, { status: 409 })
     }
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
   }
@@ -122,16 +141,21 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { id, placa, typefuel, capacitygal, state } = body
+    const { id, placa, typefuel, customFuelType, capacitygal, state, model, year, notes } = body
 
-    if (!id || !placa || !typefuel || !capacitygal || !state) {
-      return NextResponse.json({ error: "Todos los campos son requeridos" }, { status: 400 })
+    if (!id || !placa || !typefuel || !capacitygal) {
+      return NextResponse.json({ error: "ID, placa, tipo de combustible y capacidad son requeridos" }, { status: 400 })
     }
 
     // Validate typefuel against the FuelType enum
     const validFuelTypes = Object.values(FuelType) as string[]
     if (!validFuelTypes.includes(typefuel)) {
       return NextResponse.json({ error: "Tipo de combustible inválido" }, { status: 400 })
+    }
+
+    // Validate custom fuel type if PERSONALIZADO is selected
+    if (typefuel === 'PERSONALIZADO' && !customFuelType?.trim()) {
+      return NextResponse.json({ error: "Debe especificar el tipo de combustible personalizado" }, { status: 400 })
     }
 
     // Validate state against the TruckState enum
@@ -145,8 +169,12 @@ export async function PUT(request: NextRequest) {
       data: {
         placa,
         typefuel: typefuel as FuelType, // Cast to FuelType enum
+        customFuelType: typefuel === 'PERSONALIZADO' ? customFuelType : null,
         capacitygal: Number(capacitygal),
         state: state as TruckState, // Cast to TruckState enum
+        model: model || null,
+        year: year ? Number(year) : null,
+        notes: notes || null,
       },
     })
 
