@@ -24,6 +24,7 @@ export default function TrucksPage() {
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid')
   const { toast } = useToast()
   const [mounted, setMounted] = useState(false)
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true)
   const isAdmin = true // Assuming isAdmin is always true for this component
 
   useEffect(() => {
@@ -35,16 +36,60 @@ export default function TrucksPage() {
 
   // Add this useEffect after the existing ones
   useEffect(() => {
-    if (!mounted || !isAdmin) return
+    if (!mounted || !isAdmin || !autoRefreshEnabled) return
 
-    // Set up polling for real-time updates every 30 seconds
+    // Set up polling for real-time updates every 60 seconds (increased from 30)
+    // Only refresh if no forms are active and auto-refresh is enabled
     const interval = setInterval(() => {
-      console.log("🔄 Auto-refreshing trucks data...")
-      refreshTrucks()
-    }, 30000)
+      // Check if any form elements are focused
+      const activeElement = document.activeElement
+      const isFormActive = activeElement && (
+        activeElement.tagName === 'INPUT' ||
+        activeElement.tagName === 'TEXTAREA' ||
+        activeElement.tagName === 'SELECT' ||
+        activeElement.closest('form')
+      )
+
+      if (!isFormActive) {
+        console.log("🔄 Auto-refreshing trucks data...")
+        refreshTrucks()
+      } else {
+        console.log("⏸️ Auto-refresh paused - form is active")
+      }
+    }, 60000) // Increased to 60 seconds
 
     return () => clearInterval(interval)
-  }, [mounted, isAdmin, refreshTrucks])
+  }, [mounted, isAdmin, refreshTrucks, autoRefreshEnabled])
+
+  // Pause auto-refresh when forms are focused
+  useEffect(() => {
+    const handleFocusIn = (e: FocusEvent) => {
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.closest('form')) {
+        setAutoRefreshEnabled(false)
+        console.log("⏸️ Auto-refresh paused due to form focus")
+      }
+    }
+
+    const handleFocusOut = (e: FocusEvent) => {
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.closest('form')) {
+        // Delay re-enabling to avoid conflicts
+        setTimeout(() => {
+          setAutoRefreshEnabled(true)
+          console.log("▶️ Auto-refresh resumed")
+        }, 2000)
+      }
+    }
+
+    document.addEventListener('focusin', handleFocusIn)
+    document.addEventListener('focusout', handleFocusOut)
+
+    return () => {
+      document.removeEventListener('focusin', handleFocusIn)
+      document.removeEventListener('focusout', handleFocusOut)
+    }
+  }, [])
 
   const handleRefreshStatus = async () => {
     if (isRefreshing) return

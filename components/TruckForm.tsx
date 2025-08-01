@@ -32,23 +32,33 @@ const stateOptions = [
   { value: "MAINTENANCE", label: "Mantenimiento" },
 ]
 
+// Initial form state
+const initialFormState = {
+  licensePlate: '',
+  fuelType: 'DIESEL_B5' as FuelType,
+  capacity: 0,
+  model: '',
+  year: new Date().getFullYear(),
+  status: 'ACTIVE' as TruckState,
+  notes: ''
+}
+
 export function TruckForm() {
   const router = useRouter()
   const { toast } = useToast()
   
   // Estado local del formulario
-  const [formData, setFormData] = useState({
-    licensePlate: '',
-    fuelType: 'DIESEL_B5' as FuelType,
-    capacity: 0,
-    model: '',
-    year: new Date().getFullYear(),
-    status: 'ACTIVE' as TruckState,
-    notes: ''
-  })
+  const [formData, setFormData] = useState(initialFormState)
   
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Reset form function
+  const resetForm = () => {
+    setFormData(initialFormState)
+    setErrors({})
+    setIsSubmitting(false)
+  }
 
   const handleInputChange = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -124,6 +134,9 @@ export function TruckForm() {
         title: "¡Éxito!",
         description: `Camión ${responseData.licensePlate} creado correctamente`,
       })
+
+      // Reset form after successful submission
+      resetForm()
 
       // Redirect after a short delay
       setTimeout(() => {
