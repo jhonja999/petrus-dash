@@ -121,13 +121,14 @@ export function MobileDispatchCard({ assignment, onUpdate }: MobileDispatchCardP
   const [marcadorFinal, setMarcadorFinal] = useState("")
   const [quantityDelivered, setQuantityDelivered] = useState("")
 
-  // Usar el store móvil
+  // Usar el store móvil - FIXED: Added updateLocation to destructuring
   const {
     currentTrip,
     isOnline,
     pendingSync,
     startTrip,
     endTrip,
+    updateLocation,
     updateClientDelivery,
     completeClientDelivery,
     addPhotoToDelivery,
@@ -574,14 +575,13 @@ export function MobileDispatchCard({ assignment, onUpdate }: MobileDispatchCardP
                       </div>
                     )}
 
-                    {/* Subida de fotos */}
+                    {/* Subida de fotos - FIXED: Removed accept prop */}
                     <div>
                       <Label>Fotos de {stageConfig.label}</Label>
                       <CloudinaryUpload
                         onUpload={(files) => handleStagePhotoUpload(stageKey, files)}
                         folder={`dispatch-${assignment.id}/client-${currentClient?.id}/${stageKey}`}
                         multiple
-                        accept="image/*"
                       />
                     </div>
 

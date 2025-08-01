@@ -1,3 +1,4 @@
+// app/api/assignments/[id]/start-trip/route.ts
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { verifyAuth } from "@/lib/auth"
@@ -9,7 +10,7 @@ export async function POST(
   try {
     // Verificar autenticación
     const authResult = await verifyAuth(request)
-    if (!authResult.success) {
+    if (!authResult.success || !authResult.user) {
       return NextResponse.json(
         { error: "No autorizado" },
         { status: 401 }
@@ -33,18 +34,31 @@ export async function POST(
       )
     }
 
-    // Actualizar estado a "en_transito"
+    // Actualizar estado (sin el campo status por ahora hasta actualizar schema)
     const existingNotes = JSON.parse(assignment.notes || '{}')
     const updatedAssignment = await prisma.assignment.update({
       where: { id: assignmentId },
       data: {
-        status: 'IN_PROGRESS',
+        // status: 'IN_PROGRESS', // Comentado hasta actualizar schema
+        tripStartTime: new Date(),
         notes: JSON.stringify({
           ...existingNotes,
           tripStarted: new Date().toISOString(),
-          status: 'en_transito',
+          status: 'en_transito', // Guardamos el status en notes por ahora
           lastUpdated: new Date().toISOString()
         })
+      }
+    })
+
+    // Crear registro de trayecto
+    const trip = await prisma.trip.create({
+      data: {
+        assignmentId: assignmentId,
+        driverId: authResult.user.id,
+        startTime: new Date(),
+        status: 'IN_PROGRESS',
+        route: [],
+        totalDistance: 0
       }
     })
 
@@ -53,7 +67,8 @@ export async function POST(
     return NextResponse.json({
       success: true,
       message: "Trayecto iniciado correctamente",
-      assignment: updatedAssignment
+      assignment: updatedAssignment,
+      tripId: trip.id
     })
 
   } catch (error) {
@@ -63,4 +78,4 @@ export async function POST(
       { status: 500 }
     )
   }
-} 
+}

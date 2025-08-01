@@ -43,6 +43,36 @@ const TRUCK_STATES: { value: TruckState; label: string; color: string }[] = [
   { value: "Asignado", label: "Asignado", color: "bg-orange-100 text-orange-800" },
 ]
 
+// Helper function to safely convert Decimal to number
+const decimalToNumber = (decimal: any): number => {
+  if (decimal === null || decimal === undefined) return 0
+  if (typeof decimal === 'number') return decimal
+  if (typeof decimal === 'string') return parseFloat(decimal) || 0
+  // Handle Prisma Decimal type
+  if (decimal && typeof decimal.toNumber === 'function') {
+    return decimal.toNumber()
+  }
+  // Handle Decimal.js objects
+  if (decimal && typeof decimal.toString === 'function') {
+    return parseFloat(decimal.toString()) || 0
+  }
+  return 0
+}
+
+// Helper function to safely get string value
+const safeStringValue = (value: any): string => {
+  if (value === null || value === undefined) return ''
+  return String(value)
+}
+
+// Helper function to safely get number value
+const safeNumberValue = (value: any, defaultValue: number = new Date().getFullYear()): number => {
+  if (value === null || value === undefined) return defaultValue
+  if (typeof value === 'number') return value
+  const parsed = parseInt(String(value), 10)
+  return isNaN(parsed) ? defaultValue : parsed
+}
+
 export function TruckEditForm({ truck }: TruckEditFormProps) {
   const router = useRouter()
   const { toast } = useToast()
@@ -67,13 +97,13 @@ export function TruckEditForm({ truck }: TruckEditFormProps) {
     const initialData: TruckFormData = {
       id: truck.id.toString(),
       licensePlate: truck.placa,
-      capacity: truck.capacitygal,
-      model: truck.model || '',
-      year: truck.year || new Date().getFullYear(),
+      capacity: decimalToNumber(truck.capacitygal), // Convert Decimal to number
+      model: safeStringValue((truck as any).model), // Safe access to optional property
+      year: safeNumberValue((truck as any).year), // Safe access to optional property
       status: truck.state === 'Activo' ? 'ACTIVE' : 
               truck.state === 'Inactivo' ? 'INACTIVE' : 'MAINTENANCE',
       fuelType: truck.typefuel,
-      notes: truck.notes || ''
+      notes: safeStringValue((truck as any).notes) // Safe access to optional property
     }
     
     setFormData(initialData)
@@ -141,7 +171,7 @@ export function TruckEditForm({ truck }: TruckEditFormProps) {
               <AlertDescription>
                 <strong>Camión actual:</strong> {truck.placa} | 
                 <strong>Combustible:</strong> {truck.typefuel} | 
-                <strong>Capacidad:</strong> {truck.capacitygal} galones | 
+                <strong>Capacidad:</strong> {decimalToNumber(truck.capacitygal)} galones | 
                 <strong>Estado:</strong> {truck.state}
               </AlertDescription>
             </Alert>

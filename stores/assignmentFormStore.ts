@@ -38,8 +38,8 @@ export const assignmentValidationRules: ValidationRules<AssignmentFormData> = {
     required: true
   },
   customFuelType: {
-    custom: (value: string, formData: AssignmentFormData) => {
-      if (formData.fuelType === 'PERSONALIZADO' && !value?.trim()) {
+    custom: (value: string | undefined, formData: AssignmentFormData) => {
+      if (formData.fuelType === 'PERSONALIZADO' && (!value || !value.trim())) {
         return 'Debe especificar el tipo de combustible personalizado'
       }
       return null
@@ -129,4 +129,7 @@ const initialAssignmentData: AssignmentFormData = {
 }
 
 // Crear store de asignación
-export const useAssignmentFormStore = createFormStore<AssignmentFormData>('assignment-form', initialAssignmentData) 
+export const useAssignmentFormStore = createFormStore<AssignmentFormData>(
+  'assignment-form', 
+  initialAssignmentData
+)

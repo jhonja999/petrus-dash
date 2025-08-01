@@ -56,6 +56,13 @@ enum TripStatus {
   CANCELLED
 }
 
+enum AssignmentStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
 model User {
   id         Int          @id @default(autoincrement())
   dni        String       @unique
@@ -105,15 +112,18 @@ model Customer {
 }
 
 model Assignment {
-  id             Int       @id @default(autoincrement())
+  id             Int              @id @default(autoincrement())
   truckId        Int
   driverId       Int
   totalLoaded    Decimal
   totalRemaining Decimal
   fuelType       FuelType
-  customFuelType String?   // New field for custom fuel types
-  isCompleted    Boolean   @default(false)
+  customFuelType String?          // New field for custom fuel types
+  status         AssignmentStatus @default(PENDING) // Added status field
+  isCompleted    Boolean          @default(false)
   completedAt    DateTime?
+  tripStartTime  DateTime?        // Added trip start time
+  tripEndTime    DateTime?        // Added trip end time
   notes          String?
 
   truck            Truck              @relation(fields: [truckId], references: [id])
@@ -131,6 +141,7 @@ model Assignment {
   @@index([createdAt])
   @@index([fuelType])
   @@index([isCompleted])
+  @@index([status])
 }
 
 model Discharge {

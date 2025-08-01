@@ -1,447 +1,470 @@
 import { create } from 'zustand'
-import { devtools, persist } from 'zustand/middleware'
+import { persist } from 'zustand/middleware'
 
-export interface UploadedFile {
-  id: string
-  url: string
-  type: 'photo' | 'document'
-  stage: 'loading_start' | 'loading_end' | 'delivery' | 'client_confirmation'
+// Tipos para el sistema de despacho móvil
+export interface TripLocation {
+  lat: number
+  lng: number
   timestamp: Date
-  clientId?: number
+  accuracy?: number
+}
+
+export interface CurrentTrip {
+  assignmentId: number
+  driverId: number
+  startTime: Date
+  currentLocation?: TripLocation
+  route: TripLocation[]
+  isActive: boolean
 }
 
 export interface ClientDelivery {
   clientId: number
   status: 'pending' | 'in_progress' | 'completed'
-  photos: UploadedFile[]
-  observations: string
   startTime?: Date
   endTime?: Date
+  photos: DeliveryPhoto[]
+  observations?: string
   marcadorInicial?: number
   marcadorFinal?: number
   quantityDelivered?: number
-  clientSignature?: string
 }
 
-export interface TripData {
+export interface DeliveryPhoto {
   id: string
-  assignmentId: number
-  driverId: number
-  status: 'idle' | 'started' | 'in_delivery' | 'completed'
-  startTime?: Date
-  endTime?: Date
-  currentLocation: { lat: number; lng: number } | null
-  route: Array<{ lat: number; lng: number; timestamp: Date }>
-  totalDistance?: number
-  estimatedTime?: number
+  url: string
+  type: 'photo'
+  stage: 'loading_start' | 'loading_end' | 'delivery' | 'client_confirmation'
+  timestamp: Date
+  clientId?: number
 }
 
 export interface PendingSync {
   id: string
-  type: 'delivery_complete' | 'trip_start' | 'trip_end' | 'location_update'
+  type: 'location' | 'photo' | 'delivery' | 'trip'
   data: any
   timestamp: Date
   retries: number
 }
 
-interface MobileDispatchStore {
-  // Estado de entregas por cliente
-  clientDeliveries: Record<string, ClientDelivery>
+interface MobileDispatchState {
+  // Estado del trayecto actual
+  currentTrip: CurrentTrip | null
   
-  // Estado de trayecto actual
-  currentTrip: TripData | null
+  // Entregas de clientes
+  clientDeliveries: Record<number, ClientDelivery>
   
-  // Estado de conexión
+  // Estado de conectividad
   isOnline: boolean
-  lastSync: Date | null
   
   // Cola de sincronización
   pendingSync: PendingSync[]
   
-  // Configuración
-  autoTracking: boolean
-  syncInterval: number
+  // Tracking de ubicación
+  locationWatchId?: number
   
-  // Acciones de trayecto
+  // Acciones
   startTrip: (assignmentId: number, driverId: number) => void
   endTrip: () => void
   updateLocation: (lat: number, lng: number) => void
   
-  // Acciones de entregas
-  updateClientDelivery: (clientId: number, data: Partial<ClientDelivery>) => void
+  // Gestión de entregas
+  startClientDelivery: (clientId: number) => void
+  updateClientDelivery: (clientId: number, updates: Partial<ClientDelivery>) => void
   completeClientDelivery: (clientId: number) => void
-  addPhotoToDelivery: (clientId: number, photo: UploadedFile) => void
-  removePhotoFromDelivery: (clientId: number, photoId: string) => void
   
-  // Acciones de sincronización
+  // Fotos
+  addPhotoToDelivery: (clientId: number, photo: DeliveryPhoto) => void
+  
+  // Validaciones
+  validateNextDelivery: (clientId: number) => boolean
+  
+  // Conectividad
   setOnlineStatus: (isOnline: boolean) => void
-  addToPendingSync: (type: PendingSync['type'], data: any) => void
-  removeFromPendingSync: (id: string) => void
+  addToSyncQueue: (item: Omit<PendingSync, 'id' | 'timestamp' | 'retries'>) => void
+  removeFromSyncQueue: (id: string) => void
   syncWithServer: () => Promise<void>
   
+  // Tracking privado
+  startLocationTracking: () => void
+  stopLocationTracking: () => void
+  sendLocationToServer: (lat: number, lng: number) => Promise<void>
+  
   // Utilidades
-  getCurrentDelivery: () => ClientDelivery | null
-  getCompletedDeliveries: () => ClientDelivery[]
-  getPendingDeliveries: () => ClientDelivery[]
-  validateNextDelivery: (clientId: number) => boolean
-  resetTrip: () => void
+  reset: () => void
 }
 
-const createMobileDispatchStore = () =>
-  create<MobileDispatchStore>()(
-    devtools(
-      persist(
-        (set, get) => ({
-          // Estado inicial
-          clientDeliveries: {},
-          currentTrip: null,
-          isOnline: navigator.onLine,
-          lastSync: null,
-          pendingSync: [],
-          autoTracking: true,
-          syncInterval: 30000, // 30 segundos
+export const useMobileDispatchStore = create<MobileDispatchState>()(
+  persist(
+    (set, get) => ({
+      // Estado inicial
+      currentTrip: null,
+      clientDeliveries: {},
+      isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
+      pendingSync: [],
+      locationWatchId: undefined,
 
-          // Acciones de trayecto
-          startTrip: (assignmentId: number, driverId: number) => {
-            const tripData: TripData = {
-              id: `trip_${Date.now()}`,
-              assignmentId,
-              driverId,
-              status: 'started',
-              startTime: new Date(),
-              currentLocation: null,
-              route: []
+      // Gestión de trayecto
+      startTrip: (assignmentId: number, driverId: number) => {
+        const trip: CurrentTrip = {
+          assignmentId,
+          driverId,
+          startTime: new Date(),
+          route: [],
+          isActive: true
+        }
+        
+        set({ currentTrip: trip })
+        
+        // Agregar a cola de sincronización
+        get().addToSyncQueue({
+          type: 'trip',
+          data: { action: 'start', assignmentId, driverId }
+        })
+        
+        // Iniciar tracking automático
+        get().startLocationTracking()
+      },
+
+      endTrip: () => {
+        const { currentTrip } = get()
+        if (!currentTrip) return
+        
+        // Agregar a cola de sincronización
+        get().addToSyncQueue({
+          type: 'trip',
+          data: { 
+            action: 'end', 
+            assignmentId: currentTrip.assignmentId,
+            endTime: new Date(),
+            totalRoute: currentTrip.route
+          }
+        })
+        
+        set({ currentTrip: null })
+        
+        // Detener tracking
+        get().stopLocationTracking()
+      },
+
+      updateLocation: (lat: number, lng: number) => {
+        const { currentTrip } = get()
+        if (!currentTrip) return
+
+        const location: TripLocation = {
+          lat,
+          lng,
+          timestamp: new Date(),
+          accuracy: undefined
+        }
+
+        const updatedTrip = {
+          ...currentTrip,
+          currentLocation: location,
+          route: [...currentTrip.route, location]
+        }
+
+        set({ currentTrip: updatedTrip })
+
+        // Agregar a cola de sincronización (solo cada 30 segundos)
+        const lastSync = get().pendingSync
+          .filter(item => item.type === 'location')
+          .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())[0]
+
+        const shouldSync = !lastSync || 
+          (new Date().getTime() - lastSync.timestamp.getTime()) > 30000
+
+        if (shouldSync) {
+          get().addToSyncQueue({
+            type: 'location',
+            data: { 
+              assignmentId: currentTrip.assignmentId,
+              driverId: currentTrip.driverId,
+              location
             }
-            
-            set({ currentTrip: tripData })
-            
-            // Agregar a cola de sincronización
-            get().addToPendingSync('trip_start', {
-              assignmentId,
-              driverId,
-              startTime: tripData.startTime
-            })
-            
-            // Iniciar tracking automático si está habilitado
-            if (get().autoTracking) {
-              get().startLocationTracking()
-            }
+          })
+        }
+      },
+
+      // Métodos de tracking
+      startLocationTracking: () => {
+        if (!navigator.geolocation) return
+
+        const watchId = navigator.geolocation.watchPosition(
+          (position) => {
+            const { latitude, longitude } = position.coords
+            get().updateLocation(latitude, longitude)
           },
-
-          endTrip: () => {
-            const { currentTrip } = get()
-            if (!currentTrip) return
-
-            const updatedTrip = {
-              ...currentTrip,
-              status: 'completed' as const,
-              endTime: new Date()
-            }
-            
-            set({ currentTrip: updatedTrip })
-            
-            // Agregar a cola de sincronización
-            get().addToPendingSync('trip_end', {
-              tripId: currentTrip.id,
-              endTime: updatedTrip.endTime,
-              totalDistance: currentTrip.totalDistance,
-              route: currentTrip.route
-            })
-            
-            // Detener tracking
-            get().stopLocationTracking()
+          (error) => {
+            console.error('Error getting location:', error)
           },
+          {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 30000
+          }
+        )
 
-          updateLocation: (lat: number, lng: number) => {
-            const { currentTrip } = get()
-            if (!currentTrip || currentTrip.status === 'idle') return
+        set({ locationWatchId: watchId })
+      },
 
-            const locationPoint = { lat, lng, timestamp: new Date() }
-            const updatedTrip = {
-              ...currentTrip,
-              currentLocation: { lat, lng },
-              route: [...currentTrip.route, locationPoint]
-            }
-            
-            set({ currentTrip: updatedTrip })
-            
-            // Agregar a cola de sincronización
-            get().addToPendingSync('location_update', {
-              tripId: currentTrip.id,
-              lat,
-              lng,
-              timestamp: locationPoint.timestamp
+      stopLocationTracking: () => {
+        const { locationWatchId } = get()
+        if (locationWatchId !== undefined) {
+          navigator.geolocation.clearWatch(locationWatchId)
+          set({ locationWatchId: undefined })
+        }
+      },
+
+      sendLocationToServer: async (lat: number, lng: number) => {
+        const { currentTrip } = get()
+        if (!currentTrip) return
+
+        try {
+          const response = await fetch(`/api/despacho/${currentTrip.driverId}/location`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              latitude: lat,
+              longitude: lng,
+              assignmentId: currentTrip.assignmentId
             })
-          },
+          })
 
-          // Acciones de entregas
-          updateClientDelivery: (clientId: number, data: Partial<ClientDelivery>) => {
-            const { clientDeliveries } = get()
-            const existing = clientDeliveries[clientId] || {
+          if (!response.ok) {
+            console.error('Error sending location to server')
+          }
+        } catch (error) {
+          console.error('Error sending location:', error)
+          // Agregar a cola de sincronización si falla
+          get().addToSyncQueue({
+            type: 'location',
+            data: { 
+              assignmentId: currentTrip.assignmentId,
+              driverId: currentTrip.driverId,
+              location: { lat, lng, timestamp: new Date() }
+            }
+          })
+        }
+      },
+
+      // Gestión de entregas a clientes
+      startClientDelivery: (clientId: number) => {
+        set(state => ({
+          clientDeliveries: {
+            ...state.clientDeliveries,
+            [clientId]: {
               clientId,
-              status: 'pending',
+              status: 'in_progress',
+              startTime: new Date(),
               photos: [],
               observations: ''
             }
-            
-            const updated = { ...existing, ...data }
-            set({
-              clientDeliveries: {
-                ...clientDeliveries,
-                [clientId]: updated
-              }
-            })
-          },
+          }
+        }))
+      },
 
-          completeClientDelivery: (clientId: number) => {
-            const { clientDeliveries } = get()
-            const delivery = clientDeliveries[clientId]
-            if (!delivery) return
-
-            const updated = {
-              ...delivery,
-              status: 'completed' as const,
-              endTime: new Date()
-            }
-            
-            set({
-              clientDeliveries: {
-                ...clientDeliveries,
-                [clientId]: updated
-              }
-            })
-            
-            // Agregar a cola de sincronización
-            get().addToPendingSync('delivery_complete', {
-              clientId,
-              delivery: updated
-            })
-          },
-
-          addPhotoToDelivery: (clientId: number, photo: UploadedFile) => {
-            const { clientDeliveries } = get()
-            const delivery = clientDeliveries[clientId]
-            if (!delivery) return
-
-            const updated = {
-              ...delivery,
-              photos: [...delivery.photos, { ...photo, clientId }]
-            }
-            
-            set({
-              clientDeliveries: {
-                ...clientDeliveries,
-                [clientId]: updated
-              }
-            })
-          },
-
-          removePhotoFromDelivery: (clientId: number, photoId: string) => {
-            const { clientDeliveries } = get()
-            const delivery = clientDeliveries[clientId]
-            if (!delivery) return
-
-            const updated = {
-              ...delivery,
-              photos: delivery.photos.filter(p => p.id !== photoId)
-            }
-            
-            set({
-              clientDeliveries: {
-                ...clientDeliveries,
-                [clientId]: updated
-              }
-            })
-          },
-
-          // Acciones de sincronización
-          setOnlineStatus: (isOnline: boolean) => {
-            set({ isOnline })
-            if (isOnline) {
-              // Intentar sincronizar cuando se recupera la conexión
-              get().syncWithServer()
-            }
-          },
-
-          addToPendingSync: (type: PendingSync['type'], data: any) => {
-            const pending: PendingSync = {
-              id: `sync_${Date.now()}_${Math.random()}`,
-              type,
-              data,
-              timestamp: new Date(),
-              retries: 0
-            }
-            
-            set(state => ({
-              pendingSync: [...state.pendingSync, pending]
-            }))
-          },
-
-          removeFromPendingSync: (id: string) => {
-            set(state => ({
-              pendingSync: state.pendingSync.filter(p => p.id !== id)
-            }))
-          },
-
-          syncWithServer: async () => {
-            const { pendingSync, isOnline } = get()
-            if (!isOnline || pendingSync.length === 0) return
-
-            const syncPromises = pendingSync.map(async (pending) => {
-              try {
-                const response = await fetch(`/api/mobile/sync`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    type: pending.type,
-                    data: pending.data,
-                    timestamp: pending.timestamp
-                  })
-                })
-
-                if (response.ok) {
-                  get().removeFromPendingSync(pending.id)
-                } else {
-                  // Incrementar contador de reintentos
-                  set(state => ({
-                    pendingSync: state.pendingSync.map(p => 
-                      p.id === pending.id 
-                        ? { ...p, retries: p.retries + 1 }
-                        : p
-                    )
-                  }))
-                }
-              } catch (error) {
-                console.error('Error syncing:', error)
-                // Incrementar contador de reintentos
-                set(state => ({
-                  pendingSync: state.pendingSync.map(p => 
-                    p.id === pending.id 
-                      ? { ...p, retries: p.retries + 1 }
-                      : p
-                  )
-                }))
-              }
-            })
-
-            await Promise.all(syncPromises)
-            set({ lastSync: new Date() })
-          },
-
-          // Utilidades
-          getCurrentDelivery: () => {
-            const { clientDeliveries } = get()
-            return Object.values(clientDeliveries).find(d => d.status === 'in_progress') || null
-          },
-
-          getCompletedDeliveries: () => {
-            const { clientDeliveries } = get()
-            return Object.values(clientDeliveries).filter(d => d.status === 'completed')
-          },
-
-          getPendingDeliveries: () => {
-            const { clientDeliveries } = get()
-            return Object.values(clientDeliveries).filter(d => d.status === 'pending')
-          },
-
-          validateNextDelivery: (clientId: number) => {
-            const { clientDeliveries } = get()
-            const deliveries = Object.values(clientDeliveries)
-            
-            // Verificar que no hay entregas en progreso
-            const inProgress = deliveries.find(d => d.status === 'in_progress')
-            if (inProgress) return false
-            
-            // Verificar que todas las entregas anteriores están completadas
-            const pending = deliveries.filter(d => d.status === 'pending')
-            const completed = deliveries.filter(d => d.status === 'completed')
-            
-            // Si hay entregas pendientes, solo permitir la primera
-            if (pending.length > 0) {
-              const firstPending = pending[0]
-              return firstPending.clientId === clientId
-            }
-            
-            return true
-          },
-
-          resetTrip: () => {
-            set({
-              currentTrip: null,
-              clientDeliveries: {},
-              pendingSync: []
-            })
-          },
-
-          // Métodos privados para tracking
-          startLocationTracking: () => {
-            if (!navigator.geolocation) return
-
-            const watchId = navigator.geolocation.watchPosition(
-              (position) => {
-                const { latitude, longitude } = position.coords
-                get().updateLocation(latitude, longitude)
-                
-                // Enviar ubicación al servidor cada 3-5 minutos
-                get().sendLocationToServer(latitude, longitude)
-              },
-              (error) => {
-                console.error('Error getting location:', error)
-              },
-              {
-                enableHighAccuracy: true,
-                timeout: 10000,
-                maximumAge: 30000
-              }
-            )
-
-            // Guardar el ID del watcher para poder detenerlo
-            set({ locationWatchId: watchId })
-          },
-
-          sendLocationToServer: async (lat: number, lng: number) => {
-            const { currentTrip } = get()
-            if (!currentTrip) return
-
-            try {
-              const response = await fetch(`/api/despacho/${currentTrip.driverId}/location`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  latitude: lat,
-                  longitude: lng,
-                  assignmentId: currentTrip.assignmentId
-                })
-              })
-
-              if (!response.ok) {
-                console.error('Error sending location to server')
-              }
-            } catch (error) {
-              console.error('Error sending location:', error)
-            }
-          },
-
-          stopLocationTracking: () => {
-            const { locationWatchId } = get()
-            if (locationWatchId) {
-              navigator.geolocation.clearWatch(locationWatchId)
-              set({ locationWatchId: undefined })
+      updateClientDelivery: (clientId: number, updates: Partial<ClientDelivery>) => {
+        set(state => ({
+          clientDeliveries: {
+            ...state.clientDeliveries,
+            [clientId]: {
+              ...state.clientDeliveries[clientId],
+              ...updates
             }
           }
-        }),
-        {
-          name: 'mobile-dispatch-store',
-          partialize: (state) => ({
-            clientDeliveries: state.clientDeliveries,
-            currentTrip: state.currentTrip,
-            pendingSync: state.pendingSync,
-            autoTracking: state.autoTracking
-          })
-        }
-      ),
-      { name: 'mobile-dispatch-store' }
-    )
-  )
+        }))
+      },
 
-export const useMobileDispatchStore = createMobileDispatchStore() 
+      completeClientDelivery: (clientId: number) => {
+        const { clientDeliveries } = get()
+        const delivery = clientDeliveries[clientId]
+        
+        if (!delivery) return
+
+        const completedDelivery = {
+          ...delivery,
+          status: 'completed' as const,
+          endTime: new Date()
+        }
+
+        set(state => ({
+          clientDeliveries: {
+            ...state.clientDeliveries,
+            [clientId]: completedDelivery
+          }
+        }))
+
+        // Agregar a cola de sincronización
+        get().addToSyncQueue({
+          type: 'delivery',
+          data: { 
+            action: 'complete',
+            clientId,
+            delivery: completedDelivery
+          }
+        })
+      },
+
+      // Gestión de fotos
+      addPhotoToDelivery: (clientId: number, photo: DeliveryPhoto) => {
+        set(state => {
+          const delivery = state.clientDeliveries[clientId]
+          if (!delivery) return state
+
+          return {
+            clientDeliveries: {
+              ...state.clientDeliveries,
+              [clientId]: {
+                ...delivery,
+                photos: [...delivery.photos, photo]
+              }
+            }
+          }
+        })
+
+        // Agregar a cola de sincronización
+        get().addToSyncQueue({
+          type: 'photo',
+          data: { clientId, photo }
+        })
+      },
+
+      // Validaciones
+      validateNextDelivery: (clientId: number) => {
+        const { clientDeliveries } = get()
+        
+        // Por ahora, permitir cualquier entrega
+        // En el futuro se puede implementar lógica de secuencia
+        return true
+      },
+
+      // Conectividad
+      setOnlineStatus: (isOnline: boolean) => {
+        set({ isOnline })
+        
+        // Si volvemos online, intentar sincronizar
+        if (isOnline) {
+          setTimeout(() => {
+            get().syncWithServer()
+          }, 1000)
+        }
+      },
+
+      addToSyncQueue: (item: Omit<PendingSync, 'id' | 'timestamp' | 'retries'>) => {
+        const syncItem: PendingSync = {
+          ...item,
+          id: `${item.type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          timestamp: new Date(),
+          retries: 0
+        }
+
+        set(state => ({
+          pendingSync: [...state.pendingSync, syncItem]
+        }))
+      },
+
+      removeFromSyncQueue: (id: string) => {
+        set(state => ({
+          pendingSync: state.pendingSync.filter(item => item.id !== id)
+        }))
+      },
+
+      syncWithServer: async () => {
+        const { pendingSync, isOnline } = get()
+        
+        if (!isOnline || pendingSync.length === 0) return
+
+        console.log(`Sincronizando ${pendingSync.length} elementos...`)
+
+        // Procesar cada elemento en la cola
+        for (const item of pendingSync) {
+          try {
+            let endpoint = ''
+            let method = 'POST'
+            let body = item.data
+
+            switch (item.type) {
+              case 'location':
+                endpoint = `/api/despacho/${item.data.driverId}/location`
+                break
+              case 'photo':
+                endpoint = `/api/despacho/photos`
+                break
+              case 'delivery':
+                endpoint = `/api/despacho/delivery`
+                break
+              case 'trip':
+                endpoint = `/api/despacho/trip`
+                break
+              default:
+                continue
+            }
+
+            const response = await fetch(endpoint, {
+              method,
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(body)
+            })
+
+            if (response.ok) {
+              get().removeFromSyncQueue(item.id)
+              console.log(`✅ Sincronizado: ${item.type}`)
+            } else {
+              throw new Error(`HTTP ${response.status}`)
+            }
+          } catch (error) {
+            console.error(`❌ Error sincronizando ${item.type}:`, error)
+            
+            // Incrementar reintentos
+            set(state => ({
+              pendingSync: state.pendingSync.map(syncItem =>
+                syncItem.id === item.id
+                  ? { ...syncItem, retries: syncItem.retries + 1 }
+                  : syncItem
+              )
+            }))
+
+            // Remover después de 5 reintentos fallidos
+            if (item.retries >= 5) {
+              get().removeFromSyncQueue(item.id)
+              console.log(`🗑️ Removido de cola tras 5 reintentos: ${item.id}`)
+            }
+          }
+        }
+      },
+
+      // Utilidades
+      reset: () => {
+        set({
+          currentTrip: null,
+          clientDeliveries: {},
+          pendingSync: []
+        })
+      }
+    }),
+    {
+      name: 'mobile-dispatch-storage',
+      partialize: (state) => ({
+        currentTrip: state.currentTrip,
+        clientDeliveries: state.clientDeliveries,
+        pendingSync: state.pendingSync
+      })
+    }
+  )
+)
+
+// Hook para detectar cambios de conectividad
+if (typeof window !== 'undefined') {
+  const store = useMobileDispatchStore.getState()
+  
+  window.addEventListener('online', () => {
+    store.setOnlineStatus(true)
+  })
+  
+  window.addEventListener('offline', () => {
+    store.setOnlineStatus(false)
+  })
+}

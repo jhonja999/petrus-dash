@@ -1,3 +1,4 @@
+// app/api/mobile/sync/route.ts
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { verifyAuth } from "@/lib/auth"
@@ -6,7 +7,7 @@ export async function POST(request: NextRequest) {
   try {
     // Verificar autenticación
     const authResult = await verifyAuth(request)
-    if (!authResult.success) {
+    if (!authResult.success || !authResult.user) {
       return NextResponse.json(
         { error: "No autorizado" },
         { status: 401 }
@@ -62,16 +63,19 @@ async function handleTripStart(data: any, driverId: number) {
     )
   }
 
-  // Actualizar asignación
+  // Actualizar asignación (sin campo status por ahora)
+  const existingNotes = typeof assignment.notes === 'string' ? JSON.parse(assignment.notes) : (assignment.notes || {})
+  
   await prisma.assignment.update({
     where: { id: parseInt(assignmentId) },
     data: {
-      status: 'IN_PROGRESS',
+      // status: 'IN_PROGRESS', // Comentado hasta actualizar schema
       tripStartTime: new Date(startTime),
       notes: JSON.stringify({
-        ...JSON.parse(assignment.notes || '{}'),
+        ...existingNotes,
         tripStarted: true,
-        tripStartTime: startTime
+        tripStartTime: startTime,
+        status: 'IN_PROGRESS' // Guardamos en notes por ahora
       })
     }
   })
@@ -119,16 +123,19 @@ async function handleTripEnd(data: any, driverId: number) {
   })
 
   if (trip) {
+    const existingNotes = typeof trip.assignment.notes === 'string' ? JSON.parse(trip.assignment.notes) : (trip.assignment.notes || {})
+    
     await prisma.assignment.update({
       where: { id: trip.assignmentId },
       data: {
-        status: 'COMPLETED',
+        // status: 'COMPLETED', // Comentado hasta actualizar schema
         tripEndTime: new Date(endTime),
         notes: JSON.stringify({
-          ...JSON.parse(trip.assignment.notes || '{}'),
+          ...existingNotes,
           tripCompleted: true,
           tripEndTime: endTime,
-          totalDistance: totalDistance || 0
+          totalDistance: totalDistance || 0,
+          status: 'COMPLETED' // Guardamos en notes por ahora
         })
       }
     })
@@ -169,8 +176,8 @@ async function handleLocationUpdate(data: any, driverId: number) {
     }
   })
 
-  // Actualizar ruta del trayecto
-  const currentRoute = trip.route || []
+  // Actualizar ruta del trayecto - Fixed the spread operator issue
+  const currentRoute = Array.isArray(trip.route) ? trip.route : []
   const newRoute = [...currentRoute, { lat, lng, timestamp }]
 
   await prisma.trip.update({
@@ -193,8 +200,19 @@ async function handleDeliveryComplete(data: any, driverId: number) {
   const assignment = await prisma.assignment.findFirst({
     where: {
       driverId: driverId,
-      customerId: clientId,
-      status: { in: ['IN_PROGRESS', 'COMPLETED'] }
+      clientAssignments: {
+        some: {
+          customerId: clientId
+        }
+      }
+      // status: { in: ['IN_PROGRESS', 'COMPLETED'] } // Comentado hasta actualizar schema
+    },
+    include: {
+      clientAssignments: {
+        where: {
+          customerId: clientId
+        }
+      }
     }
   })
 
@@ -206,11 +224,13 @@ async function handleDeliveryComplete(data: any, driverId: number) {
   }
 
   // Actualizar notas de la asignación con la información de la entrega
-  const currentNotes = JSON.parse(assignment.notes || '{}')
+  const currentNotes = typeof assignment.notes === 'string' ? JSON.parse(assignment.notes) : (assignment.notes || {})
+  const existingDeliveries = currentNotes.deliveries || {}
+  
   const updatedNotes = {
     ...currentNotes,
     deliveries: {
-      ...currentNotes.deliveries,
+      ...existingDeliveries,
       [clientId]: {
         status: delivery.status,
         photos: delivery.photos,
@@ -235,8 +255,6 @@ async function handleDeliveryComplete(data: any, driverId: number) {
   // Si hay fotos, procesarlas
   if (delivery.photos && delivery.photos.length > 0) {
     for (const photo of delivery.photos) {
-      // Aquí podrías procesar las fotos si es necesario
-      // Por ejemplo, moverlas a la carpeta correcta, etc.
       console.log(`Foto procesada: ${photo.url} para cliente ${clientId}`)
     }
   }
@@ -245,4 +263,4 @@ async function handleDeliveryComplete(data: any, driverId: number) {
     success: true,
     message: "Entrega sincronizada correctamente"
   })
-} 
+}

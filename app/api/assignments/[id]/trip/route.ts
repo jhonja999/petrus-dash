@@ -1,3 +1,4 @@
+// app/api/assignments/[id]/trip/route.ts
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { verifyAuth } from "@/lib/auth"
@@ -9,7 +10,7 @@ export async function POST(
   try {
     // Verificar autenticación
     const authResult = await verifyAuth(request)
-    if (!authResult.success) {
+    if (!authResult.success || !authResult.user) {
       return NextResponse.json(
         { error: "No autorizado" },
         { status: 401 }
@@ -28,7 +29,11 @@ export async function POST(
       include: {
         driver: true,
         truck: true,
-        customer: true
+        clientAssignments: {
+          include: {
+            customer: true
+          }
+        }
       }
     })
 
@@ -41,15 +46,18 @@ export async function POST(
 
     if (action === 'start') {
       // Iniciar trayecto
+      const existingNotes = typeof assignment.notes === 'string' ? JSON.parse(assignment.notes) : (assignment.notes || {})
+      
       const updatedAssignment = await prisma.assignment.update({
         where: { id: parseInt(id) },
         data: {
-          status: 'IN_PROGRESS',
+          // status: 'IN_PROGRESS', // Comentado hasta actualizar schema
           tripStartTime: startTime ? new Date(startTime) : new Date(),
           notes: JSON.stringify({
-            ...JSON.parse(assignment.notes || '{}'),
+            ...existingNotes,
             tripStarted: true,
-            tripStartTime: startTime || new Date().toISOString()
+            tripStartTime: startTime || new Date().toISOString(),
+            status: 'IN_PROGRESS' // Guardamos en notes por ahora
           })
         }
       })
@@ -75,16 +83,19 @@ export async function POST(
 
     } else if (action === 'end') {
       // Finalizar trayecto
+      const existingNotes = typeof assignment.notes === 'string' ? JSON.parse(assignment.notes) : (assignment.notes || {})
+      
       const updatedAssignment = await prisma.assignment.update({
         where: { id: parseInt(id) },
         data: {
-          status: 'COMPLETED',
+          // status: 'COMPLETED', // Comentado hasta actualizar schema
           tripEndTime: endTime ? new Date(endTime) : new Date(),
           notes: JSON.stringify({
-            ...JSON.parse(assignment.notes || '{}'),
+            ...existingNotes,
             tripCompleted: true,
             tripEndTime: endTime || new Date().toISOString(),
-            totalDistance: totalDistance || 0
+            totalDistance: totalDistance || 0,
+            status: 'COMPLETED' // Guardamos en notes por ahora
           })
         }
       })
@@ -132,7 +143,7 @@ export async function GET(
   try {
     // Verificar autenticación
     const authResult = await verifyAuth(request)
-    if (!authResult.success) {
+    if (!authResult.success || !authResult.user) {
       return NextResponse.json(
         { error: "No autorizado" },
         { status: 401 }
@@ -152,7 +163,11 @@ export async function GET(
           include: {
             driver: true,
             truck: true,
-            customer: true
+            clientAssignments: {
+              include: {
+                customer: true
+              }
+            }
           }
         }
       }
@@ -177,4 +192,4 @@ export async function GET(
       { status: 500 }
     )
   }
-} 
+}
