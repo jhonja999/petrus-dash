@@ -78,6 +78,7 @@ model User {
   Assignment Assignment[]
   trips      Trip[]
   locations  DriverLocation[]
+  assignmentImages AssignmentImage[]
 
   @@map("users")
 }
@@ -131,6 +132,7 @@ model Assignment {
   discharges       Discharge[]
   clientAssignments ClientAssignment[]
   trips            Trip[]
+  assignmentImages AssignmentImage[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -240,4 +242,27 @@ model DriverLocation {
   @@map("driver_locations")
   @@index([driverId, timestamp])
   @@index([tripId])
+}
+
+model AssignmentImage {
+  id            Int      @id @default(autoincrement())
+  assignmentId  Int
+  type          String   // "loading" or "unloading"
+  filename      String   // Nombre del archivo guardado
+  originalName  String   // Nombre original del archivo
+  fileSize      Int      // Tamaño en bytes
+  mimeType      String   // Tipo MIME
+  uploadedBy    Int      // ID del usuario que subió la imagen
+  
+  assignment    Assignment @relation(fields: [assignmentId], references: [id])
+  uploadedByUser User      @relation(fields: [uploadedBy], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("assignment_images")
+  @@index([assignmentId])
+  @@index([type])
+  @@index([uploadedBy])
+  @@index([createdAt])
 }

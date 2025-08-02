@@ -123,6 +123,28 @@ export async function middleware(request: NextRequest) {
         }
       }
 
+      // If /despacho/[driverId]/mobile - check permissions (same as above)
+      if (pathParts.length === 3 && pathParts[2] === "mobile") {
+        const driverIdFromPath = pathParts[1]
+
+        // Admins and S_A can access any driver's mobile panel
+        if (user.role === "Admin" || user.role === "S_A") {
+          console.log(`✅ Middleware: Admin/SA accessing driver ${driverIdFromPath} mobile panel`)
+          return NextResponse.next()
+        }
+
+        // Operators can only access their own mobile panel
+        if (user.role === "Operador") {
+          if (driverIdFromPath === String(user.id)) {
+            console.log(`✅ Middleware: Operador ${user.id} accessing own mobile panel`)
+            return NextResponse.next()
+          } else {
+            console.log(`❌ Middleware: Operador ${user.id} trying to access driver ${driverIdFromPath} mobile panel`)
+            return NextResponse.redirect(new URL("/unauthorized", request.url))
+          }
+        }
+      }
+
       // If we reach here, deny access
       console.log(`❌ Middleware: Unrecognized despacho route pattern: ${pathname}`)
       return NextResponse.redirect(new URL("/unauthorized", request.url))

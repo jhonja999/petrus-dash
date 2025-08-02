@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -22,11 +22,31 @@ import {
   Loader2,
   RefreshCw,
   Navigation,
+  Camera,
+  Upload,
+  ImageIcon,
+  Plus,
+  X,
 } from "lucide-react"
 import Link from "next/link"
 import axios from "axios"
 import { useAuth } from "@/contexts/AuthContext"
 import { useToast } from "@/hooks/use-toast"
+
+// Cloudinary Upload Widget types
+declare global {
+  interface Window {
+    cloudinary: {
+      createUploadWidget: (
+        options: any,
+        callback: (error: any, result: any) => void
+      ) => {
+        open: () => void
+        close: () => void
+      }
+    }
+  }
+}
 
 // Estilos para animaciones
 const styles = `
@@ -82,6 +102,24 @@ interface ExtendedAssignment {
   clientAssignments?: ClientAssignment[]
 }
 
+interface AssignmentImage {
+  id: number
+  assignmentId: number
+  type: string
+  filename: string
+  originalName: string
+  fileSize: number
+  mimeType: string
+  uploadedBy: number
+  url: string
+  createdAt: string
+  uploadedByUser: {
+    id: number
+    name: string
+    lastname: string
+  }
+}
+
 // ✅ Función de sincronización para día actual
 const syncOperatorData = async (driverId: string) => {
   try {
@@ -126,6 +164,22 @@ export default function DespachoDriverPage() {
   // Estados para tracking de ubicación
   const [isLocationSharing, setIsLocationSharing] = useState(false)
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null)
+
+  // Estados para imágenes y Cloudinary
+  const [assignmentImages, setAssignmentImages] = useState<{ [key: string]: AssignmentImage[] }>({})
+  const [uploadingImages, setUploadingImages] = useState(false)
+  const [cloudinaryWidget, setCloudinaryWidget] = useState<any>(null)
+  const [currentUploadType, setCurrentUploadType] = useState<'loading' | 'unloading' | null>(null)
+  const [currentAssignmentId, setCurrentAssignmentId] = useState<string | null>(null)
+
+  // Estados para completar entrega con evidencia
+  const [deliveryEvidence, setDeliveryEvidence] = useState<{
+    [key: string]: {
+      quantity: string
+      isComplete: boolean
+      images: string[]
+    }
+  }>({})
 
   // Basic auth check
   useEffect(() => {
@@ -371,6 +425,29 @@ export default function DespachoDriverPage() {
     }
   }, [selectedDate])
 
+  // ✅ Inicializar Cloudinary y cargar imágenes
+  useEffect(() => {
+    // Cargar script de Cloudinary
+    const script = document.createElement('script')
+    script.src = 'https://upload-widget.cloudinary.com/global/all.js'
+    script.async = true
+    script.onload = () => {
+      initializeCloudinary()
+    }
+    document.head.appendChild(script)
+
+    return () => {
+      document.head.removeChild(script)
+    }
+  }, [])
+
+  // ✅ Cargar imágenes cuando cambien las asignaciones
+  useEffect(() => {
+    assignments.forEach(assignment => {
+      fetchAssignmentImages(assignment.id.toString())
+    })
+  }, [assignments])
+
   // ✅ Funciones del modal
   const openClientAssignmentModal = (clientAssignment: ClientAssignment, assignment: ExtendedAssignment) => {
     setSelectedClientAssignment(clientAssignment)
@@ -386,18 +463,46 @@ export default function DespachoDriverPage() {
     setMarcadorFinal("")
   }
 
-  // ✅ Corregir el cálculo: marcadorFinal es la cantidad entregada directamente
+  // ✅ Calcular cantidad entregada basada en evidencia
   const calculateDeliveredAmount = () => {
-    const deliveredAmount = Number.parseFloat(marcadorFinal) || 0
-    // La cantidad entregada es directamente el marcador final
-    return deliveredAmount > 0 ? Number.parseFloat(deliveredAmount.toFixed(2)) : 0
+    if (!selectedClientAssignment) return 0
+    
+    const evidence = deliveryEvidence[selectedClientAssignment.id]
+    
+    if (evidence?.isComplete) {
+      // Si se dejó completo, usar la cantidad asignada
+      return Number.parseFloat(selectedClientAssignment.allocatedQuantity.toString())
+    } else {
+      // Si es entrega parcial, usar la cantidad especificada
+      const deliveredAmount = Number.parseFloat(evidence?.quantity || marcadorFinal) || 0
+      return deliveredAmount > 0 ? Number.parseFloat(deliveredAmount.toFixed(2)) : 0
+    }
   }
 
   const completeClientAssignment = async () => {
-    if (!selectedClientAssignment || !marcadorInicial || !marcadorFinal) {
+    if (!selectedClientAssignment || !marcadorInicial) {
       toast({
         title: "❌ Error",
-        description: "Por favor complete todos los campos",
+        description: "Por favor complete todos los campos requeridos",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const evidence = deliveryEvidence[selectedClientAssignment.id]
+    if (!evidence) {
+      toast({
+        title: "❌ Error",
+        description: "Por favor seleccione el tipo de entrega",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!evidence.isComplete && (!evidence.quantity || Number(evidence.quantity) <= 0)) {
+      toast({
+        title: "❌ Error",
+        description: "Por favor especifique la cantidad entregada",
         variant: "destructive",
       })
       return
@@ -510,6 +615,127 @@ export default function DespachoDriverPage() {
       })
     } finally {
       setIsProcessing(false)
+    }
+  }
+
+  // ✅ Funciones para Cloudinary Upload Widget
+  const initializeCloudinary = () => {
+    if (typeof window !== 'undefined' && window.cloudinary) {
+      const widget = window.cloudinary.createUploadWidget(
+        {
+          cloudName: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'your-cloud-name',
+          uploadPreset: process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'your-upload-preset',
+          sources: ['local', 'camera'],
+          multiple: true,
+          maxFiles: 10,
+          resourceType: 'image',
+          folder: 'petrus-assignments',
+          tags: ['assignment-evidence'],
+          clientAllowedFormats: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+          maxFileSize: 10485760, // 10MB
+        },
+        (error: any, result: any) => {
+          if (!error && result.event === 'success') {
+            handleCloudinaryUpload(result.info.secure_url)
+          } else if (error) {
+            console.error('Cloudinary upload error:', error)
+            toast({
+              title: "❌ Error",
+              description: "Error al subir imagen a Cloudinary",
+              variant: "destructive",
+            })
+          }
+        }
+      )
+      setCloudinaryWidget(widget)
+    }
+  }
+
+  const handleCloudinaryUpload = (imageUrl: string) => {
+    if (!currentAssignmentId || !currentUploadType) return
+
+    const key = `${currentAssignmentId}-${currentUploadType}`
+    
+    // Guardar imagen en la base de datos
+    saveImageToDatabase(currentAssignmentId, currentUploadType, imageUrl)
+    
+    // Actualizar estado local
+    setAssignmentImages(prev => ({
+      ...prev,
+      [key]: [...(prev[key] || []), {
+        id: Date.now(), // Temporary ID
+        assignmentId: Number(currentAssignmentId),
+        type: currentUploadType,
+        filename: imageUrl.split('/').pop() || 'image.jpg',
+        originalName: 'Cloudinary Upload',
+        fileSize: 0,
+        mimeType: 'image/jpeg',
+        uploadedBy: user?.id || 0,
+        url: imageUrl,
+        createdAt: new Date().toISOString(),
+        uploadedByUser: {
+          id: user?.id || 0,
+          name: user?.name || '',
+          lastname: user?.lastname || ''
+        }
+      }]
+    }))
+
+    toast({
+      title: "✅ Imagen subida",
+      description: "Imagen subida correctamente a Cloudinary",
+    })
+  }
+
+  const saveImageToDatabase = async (assignmentId: string, type: 'loading' | 'unloading', imageUrl: string) => {
+    try {
+      await axios.post('/api/assignments/save-cloudinary-image', {
+        assignmentId: Number(assignmentId),
+        type: type,
+        imageUrl: imageUrl,
+        uploadedBy: user?.id
+      })
+    } catch (error) {
+      console.error('Error saving image to database:', error)
+    }
+  }
+
+  const openCloudinaryWidget = (assignmentId: string, type: 'loading' | 'unloading') => {
+    setCurrentAssignmentId(assignmentId)
+    setCurrentUploadType(type)
+    
+    if (cloudinaryWidget) {
+      cloudinaryWidget.open()
+    } else {
+      toast({
+        title: "❌ Error",
+        description: "Widget de Cloudinary no inicializado",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const fetchAssignmentImages = async (assignmentId: string) => {
+    try {
+      const response = await axios.get(`/api/assignments/upload-images?assignmentId=${assignmentId}`)
+      const images = response.data.images || []
+      
+      // Organizar imágenes por tipo
+      const organizedImages: { [key: string]: AssignmentImage[] } = {}
+      images.forEach((img: AssignmentImage) => {
+        const key = `${assignmentId}-${img.type}`
+        if (!organizedImages[key]) {
+          organizedImages[key] = []
+        }
+        organizedImages[key].push(img)
+      })
+      
+      setAssignmentImages(prev => ({
+        ...prev,
+        ...organizedImages
+      }))
+    } catch (error) {
+      console.error('Error fetching assignment images:', error)
     }
   }
 
@@ -649,6 +875,8 @@ export default function DespachoDriverPage() {
                 </Button>
               )}
 
+
+
               {/* ✅ Botón unificado de actualización/sincronización */}
               <Button
                 onClick={handleRefresh}
@@ -693,9 +921,9 @@ export default function DespachoDriverPage() {
         </div>
       )}
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="mx-auto px-4 sm:px-6 lg:px-8 py-8 max-w-7xl">
         {/* ✅ Header con estadísticas */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        <div className="grid gap-4 mb-8 grid-cols-1 md:grid-cols-4">
           <Card>
             <CardContent className="pt-6">
               <div className="text-center">
@@ -775,7 +1003,7 @@ export default function DespachoDriverPage() {
                       <Clock className="h-5 w-5 text-yellow-500" />
                       Entregas Pendientes ({pendingDeliveries.length})
                     </h3>
-                    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
                       {pendingDeliveries.map((delivery) => (
                         <Card
                           key={`${delivery.assignmentId}-${delivery.id}`}
@@ -1065,6 +1293,81 @@ export default function DespachoDriverPage() {
                           </div>
                         )}
 
+                        {/* ✅ Sección de imágenes con Cloudinary */}
+                        {isToday && (
+                          <div className="space-y-4 mt-4 pt-4 border-t">
+                            <h4 className="font-medium text-sm text-gray-700">📸 Documentación de Imágenes</h4>
+                            
+                            {/* Carga */}
+                            <div className="space-y-2">
+                              <Label className="text-xs font-medium text-gray-600">Imágenes de Carga</Label>
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  onClick={() => openCloudinaryWidget(assignment.id.toString(), 'loading')}
+                                  disabled={uploadingImages}
+                                  className="text-xs"
+                                >
+                                  <Camera className="h-3 w-3 mr-1" />
+                                  Subir Imágenes
+                                </Button>
+                              </div>
+                              
+                              {/* Mostrar imágenes subidas */}
+                              {assignmentImages[`${assignment.id}-loading`]?.length > 0 && (
+                                <div className="grid grid-cols-2 gap-2 mt-2">
+                                  {assignmentImages[`${assignment.id}-loading`].map((img, index) => (
+                                    <div key={img.id} className="relative">
+                                      <img 
+                                        src={img.url} 
+                                        alt={`Carga ${index + 1}`}
+                                        className="w-full h-20 object-cover rounded border"
+                                      />
+                                      <div className="absolute top-1 right-1 bg-black/50 text-white text-xs px-1 rounded">
+                                        {index + 1}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Descarga */}
+                            <div className="space-y-2">
+                              <Label className="text-xs font-medium text-gray-600">Imágenes de Descarga</Label>
+                              <div className="flex gap-2">
+                                <Button
+                                  size="sm"
+                                  onClick={() => openCloudinaryWidget(assignment.id.toString(), 'unloading')}
+                                  disabled={uploadingImages}
+                                  className="text-xs"
+                                >
+                                  <Camera className="h-3 w-3 mr-1" />
+                                  Subir Imágenes
+                                </Button>
+                              </div>
+                              
+                              {/* Mostrar imágenes subidas */}
+                              {assignmentImages[`${assignment.id}-unloading`]?.length > 0 && (
+                                <div className="grid grid-cols-2 gap-2 mt-2">
+                                  {assignmentImages[`${assignment.id}-unloading`].map((img, index) => (
+                                    <div key={img.id} className="relative">
+                                      <img 
+                                        src={img.url} 
+                                        alt={`Descarga ${index + 1}`}
+                                        className="w-full h-20 object-cover rounded border"
+                                      />
+                                      <div className="absolute top-1 right-1 bg-black/50 text-white text-xs px-1 rounded">
+                                        {index + 1}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
                         {assignment.notes && (
                           <div className="bg-gray-50 p-3 rounded-lg">
                             <p className="text-sm text-gray-700">
@@ -1106,6 +1409,114 @@ export default function DespachoDriverPage() {
               </div>
 
               <div className="space-y-4">
+                {/* Opción: Se dejó completo */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Tipo de Entrega</Label>
+                  <div className="flex gap-4">
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        name="deliveryType"
+                        value="partial"
+                        defaultChecked
+                        onChange={() => {
+                          setDeliveryEvidence(prev => ({
+                            ...prev,
+                            [`${selectedClientAssignment?.id}`]: {
+                              ...prev[`${selectedClientAssignment?.id}`],
+                              isComplete: false
+                            }
+                          }))
+                        }}
+                        className="text-blue-600"
+                      />
+                      <span className="text-sm">Entrega Parcial</span>
+                    </label>
+                    <label className="flex items-center space-x-2">
+                      <input
+                        type="radio"
+                        name="deliveryType"
+                        value="complete"
+                        onChange={() => {
+                          setDeliveryEvidence(prev => ({
+                            ...prev,
+                            [`${selectedClientAssignment?.id}`]: {
+                              ...prev[`${selectedClientAssignment?.id}`],
+                              isComplete: true,
+                              quantity: selectedClientAssignment?.allocatedQuantity.toString() || '0'
+                            }
+                          }))
+                        }}
+                        className="text-blue-600"
+                      />
+                      <span className="text-sm">Se dejó completo</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Cantidad entregada (solo para entregas parciales) */}
+                {!deliveryEvidence[`${selectedClientAssignment?.id}`]?.isComplete && (
+                  <div className="space-y-2">
+                    <Label htmlFor="deliveredQuantity">Cantidad Entregada (galones)</Label>
+                    <Input
+                      id="deliveredQuantity"
+                      type="number"
+                      step="0.01"
+                      value={deliveryEvidence[`${selectedClientAssignment?.id}`]?.quantity || ''}
+                      onChange={(e) => {
+                        setDeliveryEvidence(prev => ({
+                          ...prev,
+                          [`${selectedClientAssignment?.id}`]: {
+                            ...prev[`${selectedClientAssignment?.id}`],
+                            quantity: e.target.value
+                          }
+                        }))
+                        setMarcadorFinal(e.target.value)
+                      }}
+                      placeholder="Ej: 500.00"
+                      className="focus:ring-2 focus:ring-blue-500"
+                    />
+                    <p className="text-xs text-gray-500">Cantidad específica entregada al cliente</p>
+                  </div>
+                )}
+
+                {/* Evidencia fotográfica */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">📸 Evidencia Fotográfica</Label>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        if (selectedClientAssignment) {
+                          openCloudinaryWidget(selectedClientAssignment.assignmentId.toString(), 'unloading')
+                        }
+                      }}
+                      className="text-xs"
+                    >
+                      <Camera className="h-3 w-3 mr-1" />
+                      Subir Fotos
+                    </Button>
+                  </div>
+                  
+                  {/* Mostrar imágenes de evidencia */}
+                  {assignmentImages[`${selectedClientAssignment?.assignmentId}-unloading`]?.length > 0 && (
+                    <div className="grid grid-cols-3 gap-2 mt-2">
+                      {assignmentImages[`${selectedClientAssignment?.assignmentId}-unloading`].map((img, index) => (
+                        <div key={img.id} className="relative">
+                          <img 
+                            src={img.url} 
+                            alt={`Evidencia ${index + 1}`}
+                            className="w-full h-16 object-cover rounded border"
+                          />
+                          <div className="absolute top-1 right-1 bg-black/50 text-white text-xs px-1 rounded">
+                            {index + 1}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="marcadorInicial">Combustible Disponible en el Camión</Label>
                   <Input
@@ -1122,21 +1533,7 @@ export default function DespachoDriverPage() {
                   </p>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="marcadorFinal">Cantidad Entregada al Cliente</Label>
-                  <Input
-                    id="marcadorFinal"
-                    type="number"
-                    step="0.01"
-                    value={marcadorFinal}
-                    onChange={(e) => setMarcadorFinal(e.target.value)}
-                    placeholder="Ej: 500.00"
-                    className="focus:ring-2 focus:ring-blue-500"
-                  />
-                  <p className="text-xs text-gray-500">Galones de combustible entregados al cliente</p>
-                </div>
-
-                {marcadorInicial && marcadorFinal && (
+                {marcadorInicial && deliveryEvidence[selectedClientAssignment?.id || ''] && (
                   <div className={`p-4 rounded-lg ${calculateDeliveredAmount() > 0 ? "bg-green-50" : "bg-red-50"}`}>
                     <Label className={`text-sm ${calculateDeliveredAmount() > 0 ? "text-green-700" : "text-red-700"}`}>
                       Cantidad entregada:
@@ -1145,6 +1542,9 @@ export default function DespachoDriverPage() {
                       className={`font-bold text-xl ${calculateDeliveredAmount() > 0 ? "text-green-700" : "text-red-700"}`}
                     >
                       {calculateDeliveredAmount().toFixed(2)} gal
+                      {deliveryEvidence[selectedClientAssignment?.id || '']?.isComplete && (
+                        <span className="text-sm font-normal ml-2">(Entrega completa)</span>
+                      )}
                     </p>
 
                     {selectedClientAssignment && calculateDeliveredAmount() > 0 && (
@@ -1200,8 +1600,10 @@ export default function DespachoDriverPage() {
                   disabled={
                     isProcessing ||
                     !marcadorInicial ||
-                    !marcadorFinal ||
-                    calculateDeliveredAmount() <= 0 ||
+                    !deliveryEvidence[selectedClientAssignment?.id || ''] ||
+                    (!deliveryEvidence[selectedClientAssignment?.id || '']?.isComplete && 
+                     (!deliveryEvidence[selectedClientAssignment?.id || '']?.quantity || 
+                      Number(deliveryEvidence[selectedClientAssignment?.id || '']?.quantity) <= 0)) ||
                     calculateDeliveredAmount() > Number.parseFloat(marcadorInicial)
                   }
                   className="flex-1 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 transition-all duration-200 active:scale-95"

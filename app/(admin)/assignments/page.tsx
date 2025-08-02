@@ -9,11 +9,12 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useState, useMemo } from "react"
+import React, { useEffect, useState, useMemo } from "react"
 import axios from "axios"
-import { RefreshCw } from "lucide-react"
+import { RefreshCw, ImageIcon } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { FuelType } from "@/types/globals"
+import { AssignmentImageGallery } from "@/components/AssignmentImageGallery"
 
 export default function AssignmentsPage() {
   const authData = useAuth()
@@ -22,6 +23,7 @@ export default function AssignmentsPage() {
   const [mounted, setMounted] = useState(false)
   const [drivers, setDrivers] = useState([])
   const [refreshing, setRefreshing] = useState(false)
+  const [expandedAssignment, setExpandedAssignment] = useState<number | null>(null)
   const router = useRouter()
   const { toast } = useToast()
 
@@ -200,30 +202,50 @@ export default function AssignmentsPage() {
                         : "N/A"
 
                       return (
-                        <TableRow key={assignment.id}>
-                          <TableCell className="font-medium">{truckPlaca}</TableCell>
-                          <TableCell>{driverName}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{assignment.fuelType || "N/A"}</Badge>
-                          </TableCell>
-                          <TableCell>{totalLoaded}</TableCell>
-                          <TableCell className="font-semibold text-blue-600">{totalRemaining}</TableCell>
-                          <TableCell>{createdAt}</TableCell>
-                          <TableCell>
-                            <Badge
-                              className={
-                                assignment.isCompleted ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
-                              }
-                            >
-                              {assignment.isCompleted ? "Completada" : "Activa"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Button asChild size="sm" variant="outline" disabled={assignment.isCompleted}>
-                              <Link href={`/assignments/${assignment.id}/clients`}>Gestionar Clientes</Link>
-                            </Button>
-                          </TableCell>
-                        </TableRow>
+                        <React.Fragment key={assignment.id}>
+                          <TableRow>
+                            <TableCell className="font-medium">{truckPlaca}</TableCell>
+                            <TableCell>{driverName}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{assignment.fuelType || "N/A"}</Badge>
+                            </TableCell>
+                            <TableCell>{totalLoaded}</TableCell>
+                            <TableCell className="font-semibold text-blue-600">{totalRemaining}</TableCell>
+                            <TableCell>{createdAt}</TableCell>
+                            <TableCell>
+                              <Badge
+                                className={
+                                  assignment.isCompleted ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
+                                }
+                              >
+                                {assignment.isCompleted ? "Completada" : "Activa"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex gap-2">
+                                <Button asChild size="sm" variant="outline" disabled={assignment.isCompleted}>
+                                  <Link href={`/assignments/${assignment.id}/clients`}>Gestionar Clientes</Link>
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setExpandedAssignment(expandedAssignment === assignment.id ? null : assignment.id)}
+                                >
+                                  <ImageIcon className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                          {expandedAssignment === assignment.id && (
+                            <TableRow>
+                              <TableCell colSpan={8} className="p-0">
+                                <div className="p-4 bg-gray-50">
+                                  <AssignmentImageGallery assignmentId={assignment.id} />
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </React.Fragment>
                       )
                     })}
                   </TableBody>
