@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { AssignmentImageGallery } from "@/components/AssignmentImageGallery"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -165,12 +166,7 @@ export default function DespachoDriverPage() {
   const [isLocationSharing, setIsLocationSharing] = useState(false)
   const [currentLocation, setCurrentLocation] = useState<{ lat: number; lng: number } | null>(null)
 
-  // Estados para imágenes y Cloudinary
-  const [assignmentImages, setAssignmentImages] = useState<{ [key: string]: AssignmentImage[] }>({})
-  const [uploadingImages, setUploadingImages] = useState(false)
-  const [cloudinaryWidget, setCloudinaryWidget] = useState<any>(null)
-  const [currentUploadType, setCurrentUploadType] = useState<'loading' | 'unloading' | null>(null)
-  const [currentAssignmentId, setCurrentAssignmentId] = useState<string | null>(null)
+  // Eliminados estados de imágenes y CloudinaryWidget custom
 
   // Estados para completar entrega con evidencia
   const [deliveryEvidence, setDeliveryEvidence] = useState<{
@@ -425,28 +421,8 @@ export default function DespachoDriverPage() {
     }
   }, [selectedDate])
 
-  // ✅ Inicializar Cloudinary y cargar imágenes
-  useEffect(() => {
-    // Cargar script de Cloudinary
-    const script = document.createElement('script')
-    script.src = 'https://upload-widget.cloudinary.com/global/all.js'
-    script.async = true
-    script.onload = () => {
-      initializeCloudinary()
-    }
-    document.head.appendChild(script)
 
-    return () => {
-      document.head.removeChild(script)
-    }
-  }, [])
-
-  // ✅ Cargar imágenes cuando cambien las asignaciones
-  useEffect(() => {
-    assignments.forEach(assignment => {
-      fetchAssignmentImages(assignment.id.toString())
-    })
-  }, [assignments])
+  // Eliminados efectos de carga de imágenes y widget manual
 
   // ✅ Funciones del modal
   const openClientAssignmentModal = (clientAssignment: ClientAssignment, assignment: ExtendedAssignment) => {
@@ -1293,78 +1269,12 @@ export default function DespachoDriverPage() {
                           </div>
                         )}
 
-                        {/* ✅ Sección de imágenes con Cloudinary */}
+                        {/* ✅ Sección de imágenes con Cloudinary UNIFICADA */}
                         {isToday && (
                           <div className="space-y-4 mt-4 pt-4 border-t">
                             <h4 className="font-medium text-sm text-gray-700">📸 Documentación de Imágenes</h4>
-                            
-                            {/* Carga */}
-                            <div className="space-y-2">
-                              <Label className="text-xs font-medium text-gray-600">Imágenes de Carga</Label>
-                              <div className="flex gap-2">
-                                <Button
-                                  size="sm"
-                                  onClick={() => openCloudinaryWidget(assignment.id.toString(), 'loading')}
-                                  disabled={uploadingImages}
-                                  className="text-xs"
-                                >
-                                  <Camera className="h-3 w-3 mr-1" />
-                                  Subir Imágenes
-                                </Button>
-                              </div>
-                              
-                              {/* Mostrar imágenes subidas */}
-                              {assignmentImages[`${assignment.id}-loading`]?.length > 0 && (
-                                <div className="grid grid-cols-2 gap-2 mt-2">
-                                  {assignmentImages[`${assignment.id}-loading`].map((img, index) => (
-                                    <div key={img.id} className="relative">
-                                      <img 
-                                        src={img.url} 
-                                        alt={`Carga ${index + 1}`}
-                                        className="w-full h-20 object-cover rounded border"
-                                      />
-                                      <div className="absolute top-1 right-1 bg-black/50 text-white text-xs px-1 rounded">
-                                        {index + 1}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Descarga */}
-                            <div className="space-y-2">
-                              <Label className="text-xs font-medium text-gray-600">Imágenes de Descarga</Label>
-                              <div className="flex gap-2">
-                                <Button
-                                  size="sm"
-                                  onClick={() => openCloudinaryWidget(assignment.id.toString(), 'unloading')}
-                                  disabled={uploadingImages}
-                                  className="text-xs"
-                                >
-                                  <Camera className="h-3 w-3 mr-1" />
-                                  Subir Imágenes
-                                </Button>
-                              </div>
-                              
-                              {/* Mostrar imágenes subidas */}
-                              {assignmentImages[`${assignment.id}-unloading`]?.length > 0 && (
-                                <div className="grid grid-cols-2 gap-2 mt-2">
-                                  {assignmentImages[`${assignment.id}-unloading`].map((img, index) => (
-                                    <div key={img.id} className="relative">
-                                      <img 
-                                        src={img.url} 
-                                        alt={`Descarga ${index + 1}`}
-                                        className="w-full h-20 object-cover rounded border"
-                                      />
-                                      <div className="absolute top-1 right-1 bg-black/50 text-white text-xs px-1 rounded">
-                                        {index + 1}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
+                            <AssignmentImageGallery assignmentId={assignment.id} type="loading" />
+                            <AssignmentImageGallery assignmentId={assignment.id} type="unloading" />
                           </div>
                         )}
 

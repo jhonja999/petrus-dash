@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { verifyToken } from "@/lib/jwt"
 import { cookies } from "next/headers"
+
 import { writeFile, mkdir } from "fs/promises"
 import { join } from "path"
 import { existsSync } from "fs"
@@ -16,12 +17,14 @@ export async function POST(request: NextRequest) {
     const assignmentId = formData.get("assignmentId") as string;
     const type = formData.get("type") as string;
     const images = formData.getAll("images") as File[];
-    if (!assignmentId || !type || !images.length) return NextResponse.json({ error: "Datos incompletos" }, { status: 400 });
+    const cloudinaryUrls = formData.getAll("cloudinaryUrls") as string[];
+    if (!assignmentId || !type || (!images.length && !cloudinaryUrls.length)) return NextResponse.json({ error: "Datos incompletos" }, { status: 400 });
     if (!["loading", "unloading"].includes(type)) return NextResponse.json({ error: "Tipo de imagen inválido" }, { status: 400 });
     const assignment = await prisma.assignment.findUnique({ where: { id: Number(assignmentId) }, include: { driver: true } });
     if (!assignment) return NextResponse.json({ error: "Asignación no encontrada" }, { status: 404 });
     if (payload.role !== "Admin" && payload.role !== "S_A" && assignment.driverId !== payload.id) return NextResponse.json({ error: "No tienes permisos para esta asignación" }, { status: 403 });
     const uploadedImages: any[] = [];
+    // Guardar imágenes locales
     for (const image of images) {
       if (!image.type.startsWith("image/")) continue;
       const bytes = await image.arrayBuffer();
@@ -50,6 +53,28 @@ export async function POST(request: NextRequest) {
         filename,
         url: `/uploads/assignments/${assignmentId}/${type}/${filename}`,
         originalName: image.name,
+        uploadedAt: imageRecord.createdAt
+      });
+    }
+    // Guardar imágenes Cloudinary
+    for (const url of cloudinaryUrls) {
+      if (!url) continue;
+      const imageRecord = await prisma.assignmentImage.create({
+        data: {
+          assignmentId: Number(assignmentId),
+          type: type as 'loading' | 'unloading',
+          filename: url.split('/').pop() || url,
+          originalName: url.split('/').pop() || url,
+          fileSize: 0,
+          mimeType: 'image/cloudinary',
+          uploadedBy: payload.id,
+        }
+      });
+      uploadedImages.push({
+        id: imageRecord.id,
+        filename: url.split('/').pop() || url,
+        url,
+        originalName: url.split('/').pop() || url,
         uploadedAt: imageRecord.createdAt
       });
     }

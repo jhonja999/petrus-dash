@@ -186,6 +186,16 @@ export function CloudinaryUpload({
                               className="object-cover"
                             />
                           </div>
+                        ) : file.secure_url && file.format.match(/jpe?g|png|gif|webp/i) ? (
+                          <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-gray-100">
+                            <img
+                              src={file.secure_url}
+                              alt={file.original_filename}
+                              width={48}
+                              height={48}
+                              className="object-cover w-12 h-12"
+                            />
+                          </div>
                         ) : (
                           <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center">
                             <FileIcon className="h-6 w-6 text-gray-500" />
