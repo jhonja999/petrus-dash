@@ -7,14 +7,42 @@ import { AssignmentForm } from "@/components/AssignmentForm"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import React, { useEffect, useState, useMemo } from "react"
 import axios from "axios"
-import { RefreshCw, ImageIcon } from "lucide-react"
+import { 
+  RefreshCw, 
+  ImageIcon, 
+  Settings2, 
+  Users, 
+  Truck, 
+  ClipboardList, 
+  Eye,
+  ArrowRight,
+  Package,
+  Download,
+  X
+} from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import type { FuelType } from "@/types/globals"
 import { AssignmentImageGallery } from "@/components/AssignmentImageGallery"
+
+// Definir las columnas disponibles
+const AVAILABLE_COLUMNS = [
+  { key: 'truck', label: 'Camión', defaultVisible: true },
+  { key: 'driver', label: 'Conductor', defaultVisible: true },
+  { key: 'fuel', label: 'Combustible', defaultVisible: true },
+  { key: 'loaded', label: 'Carga Total', defaultVisible: true },
+  { key: 'remaining', label: 'Remanente', defaultVisible: true },
+  { key: 'date', label: 'Fecha', defaultVisible: false },
+  { key: 'status', label: 'Estado', defaultVisible: true },
+  { key: 'actions', label: 'Acciones', defaultVisible: true }
+]
 
 export default function AssignmentsPage() {
   const authData = useAuth()
@@ -23,7 +51,11 @@ export default function AssignmentsPage() {
   const [mounted, setMounted] = useState(false)
   const [drivers, setDrivers] = useState([])
   const [refreshing, setRefreshing] = useState(false)
-  const [expandedAssignment, setExpandedAssignment] = useState<number | null>(null)
+  const [selectedAssignment, setSelectedAssignment] = useState<any>(null)
+  const [showEvidenceModal, setShowEvidenceModal] = useState(false)
+  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(
+    AVAILABLE_COLUMNS.reduce((acc, col) => ({ ...acc, [col.key]: col.defaultVisible }), {})
+  )
   const router = useRouter()
   const { toast } = useToast()
 
@@ -114,6 +146,18 @@ export default function AssignmentsPage() {
     }
   }
 
+  const handleToggleColumn = (columnKey: string) => {
+    setVisibleColumns(prev => ({
+      ...prev,
+      [columnKey]: !prev[columnKey]
+    }))
+  }
+
+  const handleShowEvidence = (assignment: any) => {
+    setSelectedAssignment(assignment)
+    setShowEvidenceModal(true)
+  }
+
   // Si aún no se ha montado, renderizar un placeholder mínimo
   if (!mounted) {
     return (
@@ -169,107 +213,279 @@ export default function AssignmentsPage() {
         </div>
 
         <div className="lg:col-span-2">
-          <div className="bg-white rounded-lg shadow">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">Asignaciones Recientes ({assignments.length})</h2>
-            </div>
-            {assignments.length > 0 ? (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Camión</TableHead>
-                      <TableHead>Conductor</TableHead>
-                      <TableHead>Combustible</TableHead>
-                      <TableHead>Carga Total</TableHead>
-                      <TableHead>Remanente</TableHead>
-                      <TableHead>Fecha</TableHead>
-                      <TableHead>Estado</TableHead>
-                      <TableHead>Acciones</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {assignments.slice(0, 10).map((assignment) => {
-                      // Add safety checks for nested objects
-                      const truckPlaca = assignment?.truck?.placa || "N/A"
-                      const driverName = assignment?.driver
-                        ? `${assignment.driver.name} ${assignment.driver.lastname}`
-                        : "N/A"
-                      const totalLoaded = assignment?.totalLoaded?.toString() || "0"
-                      const totalRemaining = assignment?.totalRemaining?.toString() || "0"
-                      const createdAt = assignment?.createdAt
-                        ? new Date(assignment.createdAt).toLocaleDateString()
-                        : "N/A"
+          <Card>
+            <CardHeader className="pb-4">
+              <div className="flex justify-between items-center">
+                <CardTitle className="text-lg font-semibold">
+                  Asignaciones Recientes ({assignments.length})
+                </CardTitle>
+                
+                {/* Selector de columnas */}
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="flex items-center gap-2">
+                      <Settings2 className="h-4 w-4" />
+                      Columnas
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-56">
+                    <div className="space-y-2">
+                      <h4 className="font-medium text-sm">Mostrar columnas</h4>
+                      {AVAILABLE_COLUMNS.map((column) => (
+                        <div key={column.key} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={column.key}
+                            checked={visibleColumns[column.key]}
+                            onCheckedChange={() => handleToggleColumn(column.key)}
+                          />
+                          <label
+                            htmlFor={column.key}
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                          >
+                            {column.label}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </CardHeader>
+            
+            <CardContent className="p-0">
+              {assignments.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        {visibleColumns.truck && <TableHead>Camión</TableHead>}
+                        {visibleColumns.driver && <TableHead>Conductor</TableHead>}
+                        {visibleColumns.fuel && <TableHead>Combustible</TableHead>}
+                        {visibleColumns.loaded && <TableHead>Carga Total</TableHead>}
+                        {visibleColumns.remaining && <TableHead>Remanente</TableHead>}
+                        {visibleColumns.date && <TableHead>Fecha</TableHead>}
+                        {visibleColumns.status && <TableHead>Estado</TableHead>}
+                        {visibleColumns.actions && <TableHead>Gestión</TableHead>}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {assignments.slice(0, 10).map((assignment) => {
+                        // Add safety checks for nested objects
+                        const truckPlaca = assignment?.truck?.placa || "N/A"
+                        const driverName = assignment?.driver
+                          ? `${assignment.driver.name} ${assignment.driver.lastname}`
+                          : "N/A"
+                        const totalLoaded = assignment?.totalLoaded?.toString() || "0"
+                        const totalRemaining = assignment?.totalRemaining?.toString() || "0"
+                        const createdAt = assignment?.createdAt
+                          ? new Date(assignment.createdAt).toLocaleDateString()
+                          : "N/A"
 
-                      return (
-                        <React.Fragment key={assignment.id}>
-                          <TableRow>
-                            <TableCell className="font-medium">{truckPlaca}</TableCell>
-                            <TableCell>{driverName}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline">{assignment.fuelType || "N/A"}</Badge>
-                            </TableCell>
-                            <TableCell>{totalLoaded}</TableCell>
-                            <TableCell className="font-semibold text-blue-600">{totalRemaining}</TableCell>
-                            <TableCell>{createdAt}</TableCell>
-                            <TableCell>
-                              <Badge
-                                className={
-                                  assignment.isCompleted ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
-                                }
-                              >
-                                {assignment.isCompleted ? "Completada" : "Activa"}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex gap-2">
-                                <Button asChild size="sm" variant="outline" disabled={assignment.isCompleted}>
-                                  <Link href={`/assignments/${assignment.id}/clients`}>Gestionar Clientes</Link>
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => setExpandedAssignment(expandedAssignment === assignment.id ? null : assignment.id)}
+                        return (
+                          <TableRow key={assignment.id} className="hover:bg-gray-50">
+                            {visibleColumns.truck && (
+                              <TableCell className="font-medium">{truckPlaca}</TableCell>
+                            )}
+                            {visibleColumns.driver && (
+                              <TableCell>{driverName}</TableCell>
+                            )}
+                            {visibleColumns.fuel && (
+                              <TableCell>
+                                <Badge variant="outline">{assignment.fuelType || "N/A"}</Badge>
+                              </TableCell>
+                            )}
+                            {visibleColumns.loaded && (
+                              <TableCell>{totalLoaded}</TableCell>
+                            )}
+                            {visibleColumns.remaining && (
+                              <TableCell className="font-semibold text-blue-600">{totalRemaining}</TableCell>
+                            )}
+                            {visibleColumns.date && (
+                              <TableCell>{createdAt}</TableCell>
+                            )}
+                            {visibleColumns.status && (
+                              <TableCell>
+                                <Badge
+                                  className={
+                                    assignment.isCompleted 
+                                      ? "bg-green-100 text-green-800" 
+                                      : "bg-yellow-100 text-yellow-800"
+                                  }
                                 >
-                                  <ImageIcon className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                          {expandedAssignment === assignment.id && (
-                            <TableRow>
-                              <TableCell colSpan={8} className="p-0">
-                                <div className="p-4 bg-gray-50 space-y-6">
-                                  {/* Simulación de despachos, reemplaza por tus datos reales de despachos */}
-                                  {["carga", "descarga"].map((tipo) => (
-                                    <div key={tipo} className="mb-4">
-                                      <div className="flex items-center gap-2 mb-2">
-                                        <span className="font-bold capitalize text-gray-700">Evidencias de {tipo}</span>
-                                      </div>
-                                      <AssignmentImageGallery assignmentId={assignment.id} type={tipo === "carga" ? "loading" : "unloading"} />
-                                    </div>
-                                  ))}
+                                  {assignment.isCompleted ? "Completada" : "Activa"}
+                                </Badge>
+                              </TableCell>
+                            )}
+                            {visibleColumns.actions && (
+                              <TableCell>
+                                <div className="flex gap-2">
+                                  {/* Gestión Principal - Destacada */}
+                                  <Button 
+                                    asChild 
+                                    size="sm" 
+                                    className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1" 
+                                    disabled={assignment.isCompleted}
+                                  >
+                                    <Link href={`/assignments/${assignment.id}/clients`}>
+                                      <ClipboardList className="h-3 w-3" />
+                                      Gestionar
+                                      <ArrowRight className="h-3 w-3" />
+                                    </Link>
+                                  </Button>
+                                  
+                                  {/* Evidencias */}
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleShowEvidence(assignment)}
+                                    className="flex items-center gap-1"
+                                  >
+                                    <Eye className="h-3 w-3" />
+                                    Evidencias
+                                  </Button>
                                 </div>
                               </TableCell>
-                            </TableRow>
-                          )}
-                        </React.Fragment>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            ) : (
-              <div className="p-8 text-center">
-                <p className="text-gray-500 mb-4">No hay asignaciones registradas</p>
-                <Button asChild variant="outline">
-                  <Link href="/assignments/new">Crear Primera Asignación</Link>
-                </Button>
-              </div>
-            )}
-          </div>
+                            )}
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : (
+                <div className="p-8 text-center">
+                  <div className="flex flex-col items-center gap-4">
+                    <Package className="h-12 w-12 text-gray-400" />
+                    <div>
+                      <p className="text-gray-500 mb-2">No hay asignaciones registradas</p>
+                      <p className="text-sm text-gray-400 mb-4">Crea la primera asignación para comenzar</p>
+                    </div>
+                    <Button asChild variant="outline">
+                      <Link href="/assignments/new">Crear Primera Asignación</Link>
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
+
+      {/* Modal de Evidencias */}
+      <Dialog open={showEvidenceModal} onOpenChange={setShowEvidenceModal}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="flex items-center gap-2">
+                <ImageIcon className="h-5 w-5" />
+                Evidencias de Asignación
+                {selectedAssignment && (
+                  <Badge variant="outline" className="ml-2">
+                    {selectedAssignment.truck?.placa || "N/A"}
+                  </Badge>
+                )}
+              </DialogTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowEvidenceModal(false)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </DialogHeader>
+          
+          {selectedAssignment && (
+            <div className="space-y-6 mt-4">
+              {/* Información de la asignación */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Truck className="h-4 w-4" />
+                    Información de la Asignación
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-600">Camión:</span>
+                      <p className="font-semibold">{selectedAssignment.truck?.placa || "N/A"}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Conductor:</span>
+                      <p className="font-semibold">
+                        {selectedAssignment.driver 
+                          ? `${selectedAssignment.driver.name} ${selectedAssignment.driver.lastname}`
+                          : "N/A"
+                        }
+                      </p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Combustible:</span>
+                      <p className="font-semibold">{selectedAssignment.fuelType || "N/A"}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Estado:</span>
+                      <Badge
+                        className={
+                          selectedAssignment.isCompleted 
+                            ? "bg-green-100 text-green-800" 
+                            : "bg-yellow-100 text-yellow-800"
+                        }
+                      >
+                        {selectedAssignment.isCompleted ? "Completada" : "Activa"}
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Evidencias de Carga */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Download className="h-4 w-4 text-green-600" />
+                    Evidencias de Carga
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <AssignmentImageGallery 
+                    assignmentId={selectedAssignment.id} 
+                    type="loading" 
+                  />
+                </CardContent>
+              </Card>
+
+              {/* Evidencias de Descarga */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Package className="h-4 w-4 text-blue-600" />
+                    Evidencias de Descarga
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <AssignmentImageGallery 
+                    assignmentId={selectedAssignment.id} 
+                    type="unloading" 
+                  />
+                </CardContent>
+              </Card>
+
+              {/* Botón de gestión dentro del modal */}
+              <div className="flex justify-end pt-4 border-t">
+                <Button asChild className="bg-blue-600 hover:bg-blue-700">
+                  <Link href={`/assignments/${selectedAssignment.id}/clients`}>
+                    <ClipboardList className="h-4 w-4 mr-2" />
+                    Ir a Gestión de Clientes y Despachos
+                    <ArrowRight className="h-4 w-4 ml-2" />
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
