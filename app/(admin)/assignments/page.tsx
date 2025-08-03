@@ -7,7 +7,7 @@ import { AssignmentForm } from "@/components/AssignmentForm"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+// Modal eliminado
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
@@ -51,8 +51,7 @@ export default function AssignmentsPage() {
   const [mounted, setMounted] = useState(false)
   const [drivers, setDrivers] = useState([])
   const [refreshing, setRefreshing] = useState(false)
-  const [selectedAssignment, setSelectedAssignment] = useState<any>(null)
-  const [showEvidenceModal, setShowEvidenceModal] = useState(false)
+  const [expandedEvidenceId, setExpandedEvidenceId] = useState<number | null>(null)
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>(
     AVAILABLE_COLUMNS.reduce((acc, col) => ({ ...acc, [col.key]: col.defaultVisible }), {})
   )
@@ -153,9 +152,8 @@ export default function AssignmentsPage() {
     }))
   }
 
-  const handleShowEvidence = (assignment: any) => {
-    setSelectedAssignment(assignment)
-    setShowEvidenceModal(true)
+  const handleShowEvidence = (assignmentId: number) => {
+    setExpandedEvidenceId(expandedEvidenceId === assignmentId ? null : assignmentId)
   }
 
   // Si aún no se ha montado, renderizar un placeholder mínimo
@@ -337,8 +335,8 @@ export default function AssignmentsPage() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => handleShowEvidence(assignment)}
-                                    className="flex items-center gap-1"
+                                    onClick={() => handleShowEvidence(assignment.id)}
+                                    className={`flex items-center gap-1 ${expandedEvidenceId === assignment.id ? 'bg-blue-100 text-blue-800' : ''}`}
                                   >
                                     <Eye className="h-3 w-3" />
                                     Evidencias
@@ -371,121 +369,110 @@ export default function AssignmentsPage() {
         </div>
       </div>
 
-      {/* Modal de Evidencias */}
-      <Dialog open={showEvidenceModal} onOpenChange={setShowEvidenceModal}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <div className="flex items-center justify-between">
-              <DialogTitle className="flex items-center gap-2">
-                <ImageIcon className="h-5 w-5" />
-                Evidencias de Asignación
-                {selectedAssignment && (
-                  <Badge variant="outline" className="ml-2">
-                    {selectedAssignment.truck?.placa || "N/A"}
-                  </Badge>
-                )}
-              </DialogTitle>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowEvidenceModal(false)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
+      {/* Sección expandible lateral para evidencias */}
+      {expandedEvidenceId && (
+        <div className="fixed top-0 right-0 w-full max-w-lg h-full bg-white shadow-2xl z-40 overflow-y-auto border-l border-gray-200 animate-slide-in">
+          <div className="flex items-center justify-between px-6 py-4 border-b bg-gray-50 sticky top-0 z-10">
+            <div className="flex items-center gap-2">
+              <ImageIcon className="h-5 w-5" />
+              <span className="font-semibold text-lg">Evidencias de Asignación</span>
             </div>
-          </DialogHeader>
-          
-          {selectedAssignment && (
-            <div className="space-y-6 mt-4">
-              {/* Información de la asignación */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Truck className="h-4 w-4" />
-                    Información de la Asignación
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div>
-                      <span className="font-medium text-gray-600">Camión:</span>
-                      <p className="font-semibold">{selectedAssignment.truck?.placa || "N/A"}</p>
+            <Button variant="ghost" size="sm" onClick={() => setExpandedEvidenceId(null)}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          {/* Info de la asignación */}
+          {(() => {
+            const assignment = assignments.find(a => a.id === expandedEvidenceId);
+            if (!assignment) return null;
+            return (
+              <div className="space-y-6 p-6">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Truck className="h-4 w-4" />
+                      Información de la Asignación
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      <div>
+                        <span className="font-medium text-gray-600">Camión:</span>
+                        <p className="font-semibold">{assignment.truck?.placa || "N/A"}</p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-600">Conductor:</span>
+                        <p className="font-semibold">
+                          {assignment.driver 
+                            ? `${assignment.driver.name} ${assignment.driver.lastname}`
+                            : "N/A"
+                          }
+                        </p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-600">Combustible:</span>
+                        <p className="font-semibold">{assignment.fuelType || "N/A"}</p>
+                      </div>
+                      <div>
+                        <span className="font-medium text-gray-600">Estado:</span>
+                        <Badge
+                          className={
+                            assignment.isCompleted 
+                              ? "bg-green-100 text-green-800" 
+                              : "bg-yellow-100 text-yellow-800"
+                          }
+                        >
+                          {assignment.isCompleted ? "Completada" : "Activa"}
+                        </Badge>
+                      </div>
                     </div>
-                    <div>
-                      <span className="font-medium text-gray-600">Conductor:</span>
-                      <p className="font-semibold">
-                        {selectedAssignment.driver 
-                          ? `${selectedAssignment.driver.name} ${selectedAssignment.driver.lastname}`
-                          : "N/A"
-                        }
-                      </p>
-                    </div>
-                    <div>
-                      <span className="font-medium text-gray-600">Combustible:</span>
-                      <p className="font-semibold">{selectedAssignment.fuelType || "N/A"}</p>
-                    </div>
-                    <div>
-                      <span className="font-medium text-gray-600">Estado:</span>
-                      <Badge
-                        className={
-                          selectedAssignment.isCompleted 
-                            ? "bg-green-100 text-green-800" 
-                            : "bg-yellow-100 text-yellow-800"
-                        }
-                      >
-                        {selectedAssignment.isCompleted ? "Completada" : "Activa"}
-                      </Badge>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Evidencias de Carga */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Download className="h-4 w-4 text-green-600" />
-                    Evidencias de Carga
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <AssignmentImageGallery 
-                    assignmentId={selectedAssignment.id} 
-                    type="loading" 
-                  />
-                </CardContent>
-              </Card>
-
-              {/* Evidencias de Descarga */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Package className="h-4 w-4 text-blue-600" />
-                    Evidencias de Descarga
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <AssignmentImageGallery 
-                    assignmentId={selectedAssignment.id} 
-                    type="unloading" 
-                  />
-                </CardContent>
-              </Card>
-
-              {/* Botón de gestión dentro del modal */}
-              <div className="flex justify-end pt-4 border-t">
-                <Button asChild className="bg-blue-600 hover:bg-blue-700">
-                  <Link href={`/assignments/${selectedAssignment.id}/clients`}>
-                    <ClipboardList className="h-4 w-4 mr-2" />
-                    Ir a Gestión de Clientes y Despachos
-                    <ArrowRight className="h-4 w-4 ml-2" />
-                  </Link>
-                </Button>
+                  </CardContent>
+                </Card>
+                {/* Evidencias de Carga */}
+                <Card>
+                  <CardHeader className="pb-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Download className="h-4 w-4 text-green-600" />
+                      Evidencias de Carga
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <AssignmentImageGallery 
+                      assignmentId={assignment.id} 
+                      type="loading" 
+                    />
+                  </CardContent>
+                </Card>
+                {/* Evidencias de Descarga */}
+                <Card>
+                  <CardHeader className="pb-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Package className="h-4 w-4 text-blue-600" />
+                      Evidencias de Descarga
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <AssignmentImageGallery 
+                      assignmentId={assignment.id} 
+                      type="unloading" 
+                    />
+                  </CardContent>
+                </Card>
+                {/* Botón de gestión dentro de la sección */}
+                <div className="flex justify-end pt-4 border-t">
+                  <Button asChild className="bg-blue-600 hover:bg-blue-700">
+                    <Link href={`/assignments/${assignment.id}/clients`}>
+                      <ClipboardList className="h-4 w-4 mr-2" />
+                      Ir a Gestión de Clientes y Despachos
+                      <ArrowRight className="h-4 w-4 ml-2" />
+                    </Link>
+                  </Button>
+                </div>
               </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+            );
+          })()}
+        </div>
+      )}
     </div>
   )
 }

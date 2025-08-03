@@ -134,7 +134,6 @@ export function CloudinaryUpload({
           <CldUploadButton
             className="flex items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg hover:border-gray-400 transition-colors bg-gray-50 hover:bg-gray-100"
             onUpload={handleUpload}
-            signatureEndpoint="/api/sign-cloudinary-params"
             uploadPreset={process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET}
             options={{
               multiple,
