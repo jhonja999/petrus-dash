@@ -594,126 +594,8 @@ export default function DespachoDriverPage() {
     }
   }
 
-  // ✅ Funciones para Cloudinary Upload Widget
-  const initializeCloudinary = () => {
-    if (typeof window !== 'undefined' && window.cloudinary) {
-      const widget = window.cloudinary.createUploadWidget(
-        {
-          cloudName: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'your-cloud-name',
-          uploadPreset: process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'your-upload-preset',
-          sources: ['local', 'camera'],
-          multiple: true,
-          maxFiles: 10,
-          resourceType: 'image',
-          folder: 'petrus-assignments',
-          tags: ['assignment-evidence'],
-          clientAllowedFormats: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
-          maxFileSize: 10485760, // 10MB
-        },
-        (error: any, result: any) => {
-          if (!error && result.event === 'success') {
-            handleCloudinaryUpload(result.info.secure_url)
-          } else if (error) {
-            console.error('Cloudinary upload error:', error)
-            toast({
-              title: "❌ Error",
-              description: "Error al subir imagen a Cloudinary",
-              variant: "destructive",
-            })
-          }
-        }
-      )
-      setCloudinaryWidget(widget)
-    }
-  }
 
-  const handleCloudinaryUpload = (imageUrl: string) => {
-    if (!currentAssignmentId || !currentUploadType) return
-
-    const key = `${currentAssignmentId}-${currentUploadType}`
-    
-    // Guardar imagen en la base de datos
-    saveImageToDatabase(currentAssignmentId, currentUploadType, imageUrl)
-    
-    // Actualizar estado local
-    setAssignmentImages(prev => ({
-      ...prev,
-      [key]: [...(prev[key] || []), {
-        id: Date.now(), // Temporary ID
-        assignmentId: Number(currentAssignmentId),
-        type: currentUploadType,
-        filename: imageUrl.split('/').pop() || 'image.jpg',
-        originalName: 'Cloudinary Upload',
-        fileSize: 0,
-        mimeType: 'image/jpeg',
-        uploadedBy: user?.id || 0,
-        url: imageUrl,
-        createdAt: new Date().toISOString(),
-        uploadedByUser: {
-          id: user?.id || 0,
-          name: user?.name || '',
-          lastname: user?.lastname || ''
-        }
-      }]
-    }))
-
-    toast({
-      title: "✅ Imagen subida",
-      description: "Imagen subida correctamente a Cloudinary",
-    })
-  }
-
-  const saveImageToDatabase = async (assignmentId: string, type: 'loading' | 'unloading', imageUrl: string) => {
-    try {
-      await axios.post('/api/assignments/save-cloudinary-image', {
-        assignmentId: Number(assignmentId),
-        type: type,
-        imageUrl: imageUrl,
-        uploadedBy: user?.id
-      })
-    } catch (error) {
-      console.error('Error saving image to database:', error)
-    }
-  }
-
-  const openCloudinaryWidget = (assignmentId: string, type: 'loading' | 'unloading') => {
-    setCurrentAssignmentId(assignmentId)
-    setCurrentUploadType(type)
-    
-    if (cloudinaryWidget) {
-      cloudinaryWidget.open()
-    } else {
-      toast({
-        title: "❌ Error",
-        description: "Widget de Cloudinary no inicializado",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const fetchAssignmentImages = async (assignmentId: string) => {
-    try {
-      const response = await axios.get(`/api/assignments/upload-images?assignmentId=${assignmentId}`)
-      const images = response.data.images || []
-      
-      // Organizar imágenes por tipo
-      const organizedImages: { [key: string]: AssignmentImage[] } = {}
-      images.forEach((img: AssignmentImage) => {
-        const key = `${assignmentId}-${img.type}`
-        if (!organizedImages[key]) {
-          organizedImages[key] = []
-        }
-        organizedImages[key].push(img)
-      })
-      
-      setAssignmentImages(prev => ({
-        ...prev,
-        ...organizedImages
-      }))
-    } catch (error) {
-      console.error('Error fetching assignment images:', error)
-    }
-  }
+  // Toda la lógica de CloudinaryWidget, assignmentImages y funciones asociadas ha sido eliminada por el refactor. Ahora todo se maneja con AssignmentImageGallery.
 
   // ✅ Obtener entregas para el día seleccionado
   const getAllPendingDeliveries = () => {
@@ -1390,41 +1272,10 @@ export default function DespachoDriverPage() {
                   </div>
                 )}
 
-                {/* Evidencia fotográfica */}
+                {/* Evidencia fotográfica UNIFICADA */}
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">📸 Evidencia Fotográfica</Label>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        if (selectedClientAssignment) {
-                          openCloudinaryWidget(selectedClientAssignment.assignmentId.toString(), 'unloading')
-                        }
-                      }}
-                      className="text-xs"
-                    >
-                      <Camera className="h-3 w-3 mr-1" />
-                      Subir Fotos
-                    </Button>
-                  </div>
-                  
-                  {/* Mostrar imágenes de evidencia */}
-                  {assignmentImages[`${selectedClientAssignment?.assignmentId}-unloading`]?.length > 0 && (
-                    <div className="grid grid-cols-3 gap-2 mt-2">
-                      {assignmentImages[`${selectedClientAssignment?.assignmentId}-unloading`].map((img, index) => (
-                        <div key={img.id} className="relative">
-                          <img 
-                            src={img.url} 
-                            alt={`Evidencia ${index + 1}`}
-                            className="w-full h-16 object-cover rounded border"
-                          />
-                          <div className="absolute top-1 right-1 bg-black/50 text-white text-xs px-1 rounded">
-                            {index + 1}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <AssignmentImageGallery assignmentId={selectedClientAssignment.assignmentId} type="unloading" />
                 </div>
 
                 <div className="space-y-2">
