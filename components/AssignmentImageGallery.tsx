@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useEffect, useState } from "react"
+import { CloudinaryUpload } from "./CloudinaryUpload"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -27,10 +28,12 @@ interface AssignmentImage {
 
 interface AssignmentImageGalleryProps {
   assignmentId: number
+  dispatchId?: number
+  type?: string // 'carga' | 'descarga'
   className?: string
 }
 
-export function AssignmentImageGallery({ assignmentId, className }: AssignmentImageGalleryProps) {
+export function AssignmentImageGallery({ assignmentId, dispatchId, type, className }: AssignmentImageGalleryProps) {
   const [images, setImages] = useState<AssignmentImage[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -38,12 +41,15 @@ export function AssignmentImageGallery({ assignmentId, className }: AssignmentIm
 
   useEffect(() => {
     fetchImages()
-  }, [assignmentId])
+  }, [assignmentId, dispatchId, type])
 
   const fetchImages = async () => {
     try {
       setLoading(true)
-      const response = await axios.get(`/api/assignments/upload-images?assignmentId=${assignmentId}`)
+      let url = `/api/assignments/upload-images?assignmentId=${assignmentId}`
+      if (dispatchId) url += `&dispatchId=${dispatchId}`
+      if (type) url += `&type=${type}`
+      const response = await axios.get(url)
       setImages(response.data.images)
     } catch (error) {
       console.error("Error fetching images:", error)
@@ -122,6 +128,13 @@ export function AssignmentImageGallery({ assignmentId, className }: AssignmentIm
           <div className="text-center py-8">
             <ImageIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-600">No hay imágenes subidas para esta asignación</p>
+            <div className="mt-4 flex justify-center">
+              <CloudinaryUpload
+                label="Subir evidencia"
+                context={{ assignmentId: String(assignmentId), type: type || "" }}
+                onUpload={fetchImages}
+              />
+            </div>
           </div>
         </CardContent>
       </Card>

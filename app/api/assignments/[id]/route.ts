@@ -59,6 +59,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "Token inválido" }, { status: 401 })
     }
 
+    // Permisos granulares: solo Admin o S_A pueden modificar
+    if (payload.role !== "Admin" && payload.role !== "S_A") {
+      return NextResponse.json({ error: "Acceso denegado" }, { status: 403 })
+    }
+
     const { id } = await params
     const assignmentId = Number.parseInt(id)
 
@@ -69,28 +74,41 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const body = await request.json()
     const { isCompleted, notes } = body
 
-    // Update the assignment
-    const updatedAssignment = await prisma.assignment.update({
-      where: { id: assignmentId },
-      data: {
-        isCompleted,
-        notes,
-        completedAt: isCompleted ? new Date() : null,
-      },
-      include: {
-        driver: true,
-        truck: true,
-        discharges: {
-          include: {
-            customer: true,
+    // Validar estado antes de permitir cambios
+    const assignment = await prisma.assignment.findUnique({ where: { id: assignmentId } })
+    if (!assignment) {
+      return NextResponse.json({ error: "Asignación no encontrada" }, { status: 404 })
+    }
+    if (assignment.isCompleted) {
+      return NextResponse.json({ error: "No se puede modificar una asignación ya completada" }, { status: 400 })
+    }
+
+    // Manejo de transacción si se requiere actualizar varias tablas
+    const updatedAssignment = await prisma.$transaction(async (tx) => {
+      const updated = await tx.assignment.update({
+        where: { id: assignmentId },
+        data: {
+          isCompleted,
+          notes,
+          completedAt: isCompleted ? new Date() : null,
+        },
+        include: {
+          driver: true,
+          truck: true,
+          discharges: {
+            include: {
+              customer: true,
+            },
+          },
+          clientAssignments: {
+            include: {
+              customer: true,
+            },
           },
         },
-        clientAssignments: {
-          include: {
-            customer: true,
-          },
-        },
-      },
+      })
+      // Aquí puedes agregar otras operaciones relacionadas si es necesario
+      return updated
     })
 
     // Transform the response to match the expected format in the frontend

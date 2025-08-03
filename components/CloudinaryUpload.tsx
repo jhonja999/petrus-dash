@@ -227,7 +227,7 @@ export function CloudinaryUpload({
 
       {/* Photo Type Suggestions */}
       <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-        <h5 className="text-sm font-medium text-blue-900 mb-2">Fotos requeridas por despacho:</h5>
+        <h5 className="text-sm font-medium text-blue-900 mb-2">Fotos de despacho:</h5>
         <div className="flex flex-wrap gap-2">
           {Object.entries(PHOTO_TYPES).map(([key, type]) => {
             const Icon = type.icon

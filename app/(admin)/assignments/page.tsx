@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation"
 import React, { useEffect, useState, useMemo } from "react"
 import axios from "axios"
 import { RefreshCw, ImageIcon } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogClose } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
 import type { FuelType } from "@/types/globals"
 import { AssignmentImageGallery } from "@/components/AssignmentImageGallery"
@@ -24,6 +25,7 @@ export default function AssignmentsPage() {
   const [drivers, setDrivers] = useState([])
   const [refreshing, setRefreshing] = useState(false)
   const [expandedAssignment, setExpandedAssignment] = useState<number | null>(null)
+  const [galleryAssignment, setGalleryAssignment] = useState<null | { id: number, placa: string, driver: string }>(null)
   const router = useRouter()
   const { toast } = useToast()
 
@@ -141,7 +143,7 @@ export default function AssignmentsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Gestión de Asignaciones</h1>
           <p className="text-sm text-gray-600">Asignar camiones y combustible a conductores</p>
@@ -170,27 +172,27 @@ export default function AssignmentsPage() {
 
         <div className="lg:col-span-2">
           <div className="bg-white rounded-lg shadow">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">Asignaciones Recientes ({assignments.length})</h2>
+            <div className="px-4 py-4 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sticky top-0 z-10 bg-white">
+              <h2 className="text-lg font-semibold text-gray-900">Asignaciones Recientes <span className="text-xs text-gray-500">({assignments.length})</span></h2>
+              <span className="text-xs text-gray-500 hidden sm:inline">Desliza horizontalmente para ver más columnas</span>
             </div>
             {assignments.length > 0 ? (
               <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
+                <Table className="min-w-full text-sm">
+                  <TableHeader className="sticky top-0 bg-white z-10">
                     <TableRow>
-                      <TableHead>Camión</TableHead>
-                      <TableHead>Conductor</TableHead>
-                      <TableHead>Combustible</TableHead>
-                      <TableHead>Carga Total</TableHead>
-                      <TableHead>Remanente</TableHead>
-                      <TableHead>Fecha</TableHead>
-                      <TableHead>Estado</TableHead>
-                      <TableHead>Acciones</TableHead>
+                      <TableHead className="min-w-[120px]">Camión</TableHead>
+                      <TableHead className="min-w-[120px]">Conductor</TableHead>
+                      <TableHead className="min-w-[90px]">Combustible</TableHead>
+                      <TableHead className="min-w-[90px]">Carga Total</TableHead>
+                      <TableHead className="min-w-[90px]">Remanente</TableHead>
+                      <TableHead className="min-w-[100px]">Fecha</TableHead>
+                      <TableHead className="min-w-[90px]">Estado</TableHead>
+                      <TableHead className="min-w-[120px]">Acciones</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {assignments.slice(0, 10).map((assignment) => {
-                      // Add safety checks for nested objects
                       const truckPlaca = assignment?.truck?.placa || "N/A"
                       const driverName = assignment?.driver
                         ? `${assignment.driver.name} ${assignment.driver.lastname}`
@@ -202,50 +204,36 @@ export default function AssignmentsPage() {
                         : "N/A"
 
                       return (
-                        <React.Fragment key={assignment.id}>
-                          <TableRow>
-                            <TableCell className="font-medium">{truckPlaca}</TableCell>
-                            <TableCell>{driverName}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline">{assignment.fuelType || "N/A"}</Badge>
-                            </TableCell>
-                            <TableCell>{totalLoaded}</TableCell>
-                            <TableCell className="font-semibold text-blue-600">{totalRemaining}</TableCell>
-                            <TableCell>{createdAt}</TableCell>
-                            <TableCell>
-                              <Badge
-                                className={
-                                  assignment.isCompleted ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"
-                                }
+                        <TableRow key={assignment.id} className="align-top">
+                          <TableCell className="font-medium whitespace-nowrap">{truckPlaca}</TableCell>
+                          <TableCell className="whitespace-nowrap">{driverName}</TableCell>
+                          <TableCell><Badge variant="outline">{assignment.fuelType || "N/A"}</Badge></TableCell>
+                          <TableCell>{totalLoaded}</TableCell>
+                          <TableCell className="font-semibold text-blue-600">{totalRemaining}</TableCell>
+                          <TableCell>{createdAt}</TableCell>
+                          <TableCell>
+                            <Badge className={assignment.isCompleted ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}>
+                              {assignment.isCompleted ? "Completada" : "Activa"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col sm:flex-row gap-2">
+                              <Button asChild size="sm" variant="outline" disabled={assignment.isCompleted} className="w-full sm:w-auto">
+                                <Link href={`/assignments/${assignment.id}/clients`}>Gestionar</Link>
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="w-full sm:w-auto"
+                                onClick={() => setGalleryAssignment({ id: assignment.id, placa: truckPlaca, driver: driverName })}
+                                title="Ver evidencias"
                               >
-                                {assignment.isCompleted ? "Completada" : "Activa"}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex gap-2">
-                                <Button asChild size="sm" variant="outline" disabled={assignment.isCompleted}>
-                                  <Link href={`/assignments/${assignment.id}/clients`}>Gestionar Clientes</Link>
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => setExpandedAssignment(expandedAssignment === assignment.id ? null : assignment.id)}
-                                >
-                                  <ImageIcon className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                          {expandedAssignment === assignment.id && (
-                            <TableRow>
-                              <TableCell colSpan={8} className="p-0">
-                                <div className="p-4 bg-gray-50">
-                                  <AssignmentImageGallery assignmentId={assignment.id} />
-                                </div>
-                              </TableCell>
-                            </TableRow>
-                          )}
-                        </React.Fragment>
+                                <ImageIcon className="h-4 w-4" />
+                                <span className="sr-only">Evidencias</span>
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
                       )
                     })}
                   </TableBody>
@@ -262,6 +250,38 @@ export default function AssignmentsPage() {
           </div>
         </div>
       </div>
+
+      {/* Drawer/Modal para galería de evidencias */}
+      <Dialog open={!!galleryAssignment} onOpenChange={() => setGalleryAssignment(null)}>
+        <DialogContent className="max-w-2xl w-full">
+          <DialogHeader>
+            <DialogTitle>
+              Evidencias de Asignación
+              {galleryAssignment && (
+                <span className="block text-xs font-normal text-gray-500 mt-1">
+                  Camión: <span className="font-semibold">{galleryAssignment.placa}</span> | Conductor: <span className="font-semibold">{galleryAssignment.driver}</span>
+                </span>
+              )}
+            </DialogTitle>
+            <DialogClose asChild>
+              <Button variant="ghost" size="icon" className="absolute right-2 top-2">
+                <span className="sr-only">Cerrar</span>
+                ×
+              </Button>
+            </DialogClose>
+          </DialogHeader>
+          <div className="space-y-6">
+            {galleryAssignment && ["carga", "descarga"].map((tipo) => (
+              <div key={tipo} className="mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="font-bold capitalize text-gray-700">Evidencias de {tipo}</span>
+                </div>
+                <AssignmentImageGallery assignmentId={galleryAssignment.id} type={tipo === "carga" ? "loading" : "unloading"} />
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
