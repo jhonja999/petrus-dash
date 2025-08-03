@@ -247,13 +247,14 @@ model DriverLocation {
 model AssignmentImage {
   id            Int      @id @default(autoincrement())
   assignmentId  Int
+  dispatchId    Int?     // Nuevo: ID del despacho/entrega (opcional)
   type          String   // "loading" or "unloading"
   filename      String   // Nombre del archivo guardado
   originalName  String   // Nombre original del archivo
   fileSize      Int      // Tamaño en bytes
   mimeType      String   // Tipo MIME
   uploadedBy    Int      // ID del usuario que subió la imagen
-  
+
   assignment    Assignment @relation(fields: [assignmentId], references: [id])
   uploadedByUser User      @relation(fields: [uploadedBy], references: [id])
 
@@ -262,6 +263,7 @@ model AssignmentImage {
 
   @@map("assignment_images")
   @@index([assignmentId])
+  @@index([dispatchId])
   @@index([type])
   @@index([uploadedBy])
   @@index([createdAt])

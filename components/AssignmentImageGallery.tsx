@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { ImageIcon, Download, Eye, Calendar, User } from "lucide-react"
 import axios from "axios"
 
-interface AssignmentImage {
+export interface AssignmentImage {
   id: number
   assignmentId: number
   type: string
@@ -34,9 +34,11 @@ interface AssignmentImageGalleryProps {
   className?: string
   thumbnail?: boolean // Si true, solo muestra el primer thumbnail
   size?: number // px para thumbnail
+  onCount?: (count: number) => void // Nueva prop para exponer el contador
+  onList?: (images: AssignmentImage[]) => void // Nueva prop para exponer la lista
 }
 
-export function AssignmentImageGallery({ assignmentId, dispatchId, type, className, thumbnail = false, size = 32 }: AssignmentImageGalleryProps) {
+export function AssignmentImageGallery({ assignmentId, dispatchId, type, className, thumbnail = false, size = 32, onCount, onList }: AssignmentImageGalleryProps) {
   const [images, setImages] = useState<AssignmentImage[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -46,6 +48,11 @@ export function AssignmentImageGallery({ assignmentId, dispatchId, type, classNa
     fetchImages()
   }, [assignmentId, dispatchId, type])
 
+  useEffect(() => {
+    if (onCount) onCount(images.length)
+    if (onList) onList(images)
+  }, [images, onCount, onList])
+
   const fetchImages = async () => {
     try {
       setLoading(true)
@@ -53,11 +60,11 @@ export function AssignmentImageGallery({ assignmentId, dispatchId, type, classNa
       if (dispatchId) url += `&dispatchId=${dispatchId}`
       if (type) url += `&type=${type}`
       const response = await axios.get(url)
-      
       // Ensure images have secure URLs
+      const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'dju8gpddp';
       const processedImages = response.data.images.map((image: AssignmentImage) => ({
         ...image,
-        url: image.url.startsWith('http') ? image.url : `https://res.cloudinary.com/your-cloud-name/image/upload/${image.url}`
+        url: image.url && image.url.startsWith('http') ? image.url : `https://res.cloudinary.com/${cloudName}/image/upload/${image.url}`
       }))
       setImages(processedImages)
     } catch (error) {
@@ -88,18 +95,18 @@ export function AssignmentImageGallery({ assignmentId, dispatchId, type, classNa
     if (loading || images.length === 0) {
       return <span className="inline-block bg-gray-200 rounded mr-2" style={{width: size, height: size}} />
     }
+    // Mostrar el primer thumbnail de la lista de imágenes
     return (
       <div 
         className="inline-block rounded overflow-hidden mr-2 border border-gray-300"
         style={{ width: size, height: size, minWidth: size, minHeight: size }}
       >
-        <Image
+        <img
           src={images[0].url}
-          alt="Evidencia"
+          alt={images[0].originalName || "Evidencia"}
           width={size}
           height={size}
-          className="object-cover w-full h-full"
-          priority
+          style={{ objectFit: "cover", width: "100%", height: "100%" }}
         />
       </div>
     )
@@ -143,7 +150,7 @@ export function AssignmentImageGallery({ assignmentId, dispatchId, type, classNa
             <div className="mt-4 flex justify-center">
               <CloudinaryUpload
                 label="Subir evidencia"
-                context={{ assignmentId: String(assignmentId), type: type || "" }}
+                context={{ assignmentId: String(assignmentId), dispatchId: dispatchId ? String(dispatchId) : undefined, type: type || "" }}
                 onUpload={fetchImages}
               />
             </div>
@@ -257,4 +264,4 @@ export function AssignmentImageGallery({ assignmentId, dispatchId, type, classNa
       )}
     </>
   )
-} 
+}

@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData();
     const assignmentId = formData.get("assignmentId") as string;
     const type = formData.get("type") as string;
+    const dispatchId = formData.get("dispatchId") as string | null;
     const images = formData.getAll("images") as File[];
     const cloudinaryUrls = formData.getAll("cloudinaryUrls") as string[];
     if (!assignmentId || !type || (!images.length && !cloudinaryUrls.length)) return NextResponse.json({ error: "Datos incompletos" }, { status: 400 });
@@ -46,6 +47,7 @@ export async function POST(request: NextRequest) {
           fileSize: image.size,
           mimeType: image.type,
           uploadedBy: payload.id,
+          ...(dispatchId ? { dispatchId: Number(dispatchId) } : {}),
         }
       });
       uploadedImages.push({
@@ -68,6 +70,7 @@ export async function POST(request: NextRequest) {
           fileSize: 0,
           mimeType: 'image/cloudinary',
           uploadedBy: payload.id,
+          ...(dispatchId ? { dispatchId: Number(dispatchId) } : {}),
         }
       });
       uploadedImages.push({
@@ -90,9 +93,11 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const assignmentId = Number(searchParams.get('assignmentId'));
     const type = searchParams.get('type') || undefined;
+    const dispatchId = searchParams.get('dispatchId');
     if (!assignmentId) return NextResponse.json({ error: 'assignmentId requerido' }, { status: 400 });
     const where: any = { assignmentId: Number(assignmentId) };
     if (type && ["loading", "unloading"].includes(type)) where.type = type;
+    if (dispatchId) where.dispatchId = Number(dispatchId);
     const images = await prisma.assignmentImage.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -102,22 +107,13 @@ export async function GET(req: NextRequest) {
         }
       }
     });
-    const imagesWithUrls = images.map((img: any) => {
-      // Si es Cloudinary, la URL es absoluta (tiene https), si no, es local
-      let url = img.filename.startsWith('http') || img.filename.startsWith('https')
-        ? img.filename
-        : img.mimeType === 'image/cloudinary'
-          ? img.filename // fallback por si se guardó la url completa
-          : `/uploads/assignments/${assignmentId}/${img.type}/${img.filename}`;
-      // Si la url no tiene http pero el mimeType es cloudinary, anteponer https://res.cloudinary.com
-      if (img.mimeType === 'image/cloudinary' && !url.startsWith('http')) {
-        url = `https://res.cloudinary.com/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload/${img.filename}`;
-      }
-      return {
-        ...img,
-        url,
-      };
-    });
+    const imagesWithUrls = images.map((img: any) => ({
+      ...img,
+      url:
+        img.url && img.url.startsWith('http')
+          ? img.url
+          : `/uploads/assignments/${assignmentId}/${img.type}/${img.filename}`
+    }));
     return NextResponse.json({ success: true, images: imagesWithUrls });
   } catch (error) {
     console.error("❌ Error fetching images:", error);

@@ -33,6 +33,8 @@ import Link from "next/link"
 import axios from "axios"
 import { useAuth } from "@/contexts/AuthContext"
 import { useToast } from "@/hooks/use-toast"
+import { CloudinaryUpload } from "@/components/CloudinaryUpload"
+import CloudinaryUploadSimple from "@/components/CloudinaryUploadSimple"
 
 // Cloudinary Upload Widget types
 declare global {
@@ -114,7 +116,7 @@ interface AssignmentImage {
   uploadedBy: number
   url: string
   createdAt: string
-  uploadedByUser: {
+  uploadedByUser?: {
     id: number
     name: string
     lastname: string
@@ -931,83 +933,143 @@ export default function DespachoDriverPage() {
                       Entregas Completadas ({completedDeliveries.length})
                     </h3>
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                      {completedDeliveries.map((delivery) => (
-                        <Card
-                          key={`${delivery.assignmentId}-${delivery.id}`}
-                          className="hover:shadow-lg transition-shadow duration-300 border-l-4 border-l-green-500"
-                        >
-                          <CardHeader className="pb-3">
-                            <div className="flex justify-between items-start">
-                              <CardTitle className="text-lg flex items-center gap-2">
-                                {/* Thumbnail de evidencia si existe */}
-                                <AssignmentImageGallery assignmentId={delivery.assignmentId} type="unloading" thumbnail size={32} />
-                                {delivery.customer?.companyname || "Cliente Desconocido"}
-                              </CardTitle>
-                              <Badge className="bg-green-100 text-green-700">
-                                <CheckCircle className="h-3 w-3 mr-1" />
-                                Completado
-                              </Badge>
-                            </div>
-                            <CardDescription>
-                              Asignación #{delivery.assignment.id} • {delivery.assignment.truck.placa}
-                            </CardDescription>
-                          </CardHeader>
-                          <CardContent className="space-y-3">
-                            <div className="flex flex-col gap-1">
-                              <div className="flex justify-between items-center">
-                                <span className="text-sm text-gray-600">Cantidad asignada:</span>
-                                <span className="font-medium">{Number(delivery.allocatedQuantity).toFixed(2)} gal</span>
+                      {completedDeliveries.map((delivery) => {
+                        const [evidenceCount, setEvidenceCount] = useState<number>(0)
+                        const [evidenceList, setEvidenceList] = useState<AssignmentImage[]>([])
+                        // Log evidenceList for debugging
+                        if (evidenceList.length === 0) {
+                          console.log(`🟡 No se encontraron imágenes para entrega completada: assignmentId=${delivery.assignmentId}, dispatchId=${delivery.id}`)
+                        } else {
+                          console.log(`🟢 Imágenes encontradas para entrega completada: assignmentId=${delivery.assignmentId}, dispatchId=${delivery.id}`, evidenceList)
+                        }
+                        return (
+                          <Card
+                            key={`${delivery.assignmentId}-${delivery.id}`}
+                            className="hover:shadow-lg transition-shadow duration-300 border-l-4 border-l-green-500"
+                          >
+                            <CardHeader className="pb-3">
+                              <div className="flex justify-between items-start">
+                                <CardTitle className="text-lg flex items-center gap-2">
+                                  {/* Thumbnail y contador de evidencias */}
+                                    <AssignmentImageGallery
+                                      assignmentId={delivery.assignmentId}
+                                      dispatchId={delivery.id}
+                                      type="unloading"
+                                      thumbnail
+                                      size={32}
+                                      onCount={setEvidenceCount}
+                                      onList={setEvidenceList}
+                                    />
+                                    {/* Log thumbnail rendering */}
+                                    {evidenceList.length === 0 && (
+                                      <span className="text-xs text-red-500 ml-2">Sin imágenes</span>
+                                    )}
+                                  {delivery.customer?.companyname || "Cliente Desconocido"}
+                                  <span className="ml-2 text-xs text-gray-500 font-semibold">
+                                    {evidenceCount} evidencias
+                                  </span>
+                                </CardTitle>
+                                <Badge className="bg-green-100 text-green-700">
+                                  <CheckCircle className="h-3 w-3 mr-1" />
+                                  Completado
+                                </Badge>
                               </div>
-
-                              <div className="flex justify-between items-center">
-                                <span className="text-sm text-gray-600">Cantidad entregada:</span>
-                                <span className="font-medium text-green-600">
-                                  {Number(delivery.deliveredQuantity).toFixed(2)} gal
-                                </span>
+                              <CardDescription>
+                                Asignación #{delivery.assignment.id} • {delivery.assignment.truck.placa}
+                              </CardDescription>
+                            </CardHeader>
+                            {/* Sección de evidencias subidas */}
+                            {evidenceList.length > 0 && (
+                              <div className="mt-2">
+                                <h4 className="text-xs font-semibold text-gray-700 mb-1">Evidencias subidas:</h4>
+                                <div className="flex flex-wrap gap-2">
+                                  {evidenceList.map(img => {
+                                    if (!img.url) {
+                                      console.warn(`⚠️ Imagen sin URL encontrada:`, img)
+                                      return (
+                                        <div key={img.id} className="flex items-center gap-2 border rounded p-1 bg-red-50">
+                                          <span className="text-xs text-red-500">Imagen sin URL</span>
+                                        </div>
+                                      )
+                                    }
+                                    return (
+                                      <div key={img.id} className="flex items-center gap-2 border rounded p-1 bg-gray-50">
+                                        <img src={img.url} alt={img.originalName || 'Sin nombre'} width={32} height={32} style={{objectFit:'cover',borderRadius:4}} onError={() => console.error(`❌ Error cargando imagen: ${img.url}`)} />
+                                        <div className="flex flex-col">
+                                          <span className="text-xs font-medium">{img.originalName || 'Sin nombre'}</span>
+                                          <span className="text-xs text-gray-500">{img.createdAt ? new Date(img.createdAt).toLocaleString() : 'Sin fecha'}</span>
+                                          {img.uploadedByUser ? (
+                                            <span className="text-xs text-gray-400">Por: {img.uploadedByUser.name} {img.uploadedByUser.lastname}</span>
+                                          ) : (
+                                            <span className="text-xs text-gray-400">Sin usuario</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )
+                                  })}
+                                </div>
                               </div>
-
-                              {Math.abs(Number(delivery.allocatedQuantity) - Number(delivery.deliveredQuantity)) >
-                              0.01 ? (
+                            )}
+                            {evidenceList.length === 0 && (
+                              <div className="mt-2 text-xs text-red-500">No se encontraron evidencias subidas para esta entrega.</div>
+                            )}
+                            <CardContent className="space-y-3">
+                              <div className="flex flex-col gap-1">
                                 <div className="flex justify-between items-center">
-                                  <span className="text-sm text-gray-600">Diferencia:</span>
-                                  <span
-                                    className={`font-medium ${
-                                      Number(delivery.deliveredQuantity) > Number(delivery.allocatedQuantity)
-                                        ? "text-blue-600"
-                                        : "text-orange-600"
-                                    }`}
-                                  >
-                                    {Math.abs(
-                                      Number(delivery.allocatedQuantity) - Number(delivery.deliveredQuantity),
-                                    ).toFixed(2)}{" "}
-                                    gal
-                                    {Number(delivery.deliveredQuantity) > Number(delivery.allocatedQuantity)
-                                      ? " (extra)"
-                                      : " (menos)"}
+                                  <span className="text-sm text-gray-600">Cantidad asignada:</span>
+                                  <span className="font-medium">{Number(delivery.allocatedQuantity).toFixed(2)} gal</span>
+                                </div>
+
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-gray-600">Cantidad entregada:</span>
+                                  <span className="font-medium text-green-600">
+                                    {Number(delivery.deliveredQuantity).toFixed(2)} gal
                                   </span>
                                 </div>
-                              ) : (
-                                <div className="flex justify-between items-center">
-                                  <span className="text-sm text-gray-600">Diferencia:</span>
-                                  <span className="font-medium text-green-600">0.00 gal (cantidad exacta)</span>
-                                </div>
-                              )}
-                            </div>
 
-                            <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
-                              <p>RUC: {delivery.customer?.ruc || "N/A"}</p>
-                              <p>
-                                Completado:{" "}
-                                {delivery.completedAt
-                                  ? new Date(delivery.completedAt).toLocaleString()
-                                  : delivery.assignment.completedAt
-                                    ? new Date(delivery.assignment.completedAt).toLocaleString()
-                                    : "N/A"}
-                              </p>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      ))}
+                                {Math.abs(Number(delivery.allocatedQuantity) - Number(delivery.deliveredQuantity)) >
+                                0.01 ? (
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-sm text-gray-600">Diferencia:</span>
+                                    <span
+                                      className={`font-medium ${
+                                        Number(delivery.deliveredQuantity) > Number(delivery.allocatedQuantity)
+                                          ? "text-blue-600"
+                                          : "text-orange-600"
+                                      }`}
+                                    >
+                                      {Math.abs(
+                                        Number(delivery.allocatedQuantity) - Number(delivery.deliveredQuantity),
+                                      ).toFixed(2)}{" "}
+                                      gal
+                                      {Number(delivery.deliveredQuantity) > Number(delivery.allocatedQuantity)
+                                        ? " (extra)"
+                                        : " (menos)"}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-sm text-gray-600">Diferencia:</span>
+                                    <span className="font-medium text-green-600">0.00 gal (cantidad exacta)</span>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
+                                <p>RUC: {delivery.customer?.ruc || "N/A"}</p>
+                                <p>
+                                  Completado:{" "}
+                                  {delivery.completedAt
+                                    ? new Date(delivery.completedAt).toLocaleString()
+                                    : delivery.assignment.completedAt
+                                      ? new Date(delivery.assignment.completedAt).toLocaleString()
+                                      : "N/A"}
+                                </p>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        )
+                      })}
                     </div>
                   </div>
                 )}
@@ -1163,6 +1225,11 @@ export default function DespachoDriverPage() {
                             <h4 className="font-medium text-sm text-gray-700">📸 Documentación de Imágenes</h4>
                             <AssignmentImageGallery assignmentId={assignment.id} type="loading" />
                             <AssignmentImageGallery assignmentId={assignment.id} type="unloading" />
+                            {/* Prueba directa de subida y preview */}
+                            <div className="pt-2">
+                              <h4 className="text-xs font-semibold text-blue-600 mb-1">Test subida directa</h4>
+                              <CloudinaryUploadSimple assignmentId={assignment.id.toString()} type="loading" />
+                            </div>
                           </div>
                         )}
 
@@ -1281,7 +1348,9 @@ export default function DespachoDriverPage() {
                 {/* Evidencia fotográfica UNIFICADA */}
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">📸 Evidencia Fotográfica</Label>
-                  <AssignmentImageGallery key={modalGalleryKey} assignmentId={selectedClientAssignment.assignmentId} type="unloading" />
+                  <AssignmentImageGallery key={modalGalleryKey} assignmentId={selectedClientAssignment.assignmentId} dispatchId={selectedClientAssignment.id} type="unloading" />
+                  {/* Prueba directa de subida y preview en modal */}
+                  <CloudinaryUploadSimple assignmentId={String(selectedClientAssignment.assignmentId)} dispatchId={String(selectedClientAssignment.id)} type="unloading" onUpload={() => setModalGalleryKey(Date.now())} />
                 </div>
 
                 <div className="space-y-2">
