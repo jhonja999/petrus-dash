@@ -1,0 +1,103 @@
+"use client"
+
+import { useState } from "react"
+import axios from "axios"
+import { CldUploadButton } from "next-cloudinary"
+import { Button } from "@/components/ui/button"
+import { Upload } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
+
+interface CloudinaryUploadProps {
+  onUpload?: () => void
+  context: {
+    assignmentId: string
+    type: string
+  }
+  className?: string
+  label?: string
+}
+
+export function CloudinaryUpload({
+  onUpload,
+  context,
+  className = "",
+  label = "Subir Archivos",
+}: CloudinaryUploadProps) {
+  const [isUploading, setIsUploading] = useState(false)
+  const { toast } = useToast()
+
+  const handleUpload = async (result: any) => {
+    if (result.event !== "success") return
+    
+    setIsUploading(true)
+    try {
+      if (result?.info) {
+        // Save the image info to your backend
+        await axios.post('/api/assignments/upload-images', {
+          assignmentId: context.assignmentId,
+          type: context.type,
+          filename: result.info.public_id,
+          originalName: result.info.original_filename,
+          fileSize: result.info.bytes,
+          mimeType: result.info.format,
+          url: result.info.secure_url
+        })
+
+        toast({
+          title: "Archivo subido",
+          description: "La imagen se subió correctamente"
+        })
+
+        // Notify parent component to refresh images
+        onUpload?.()
+      }
+    } catch (error) {
+      console.error('Error al guardar la imagen:', error)
+      toast({
+        variant: "destructive",
+        title: "Error al subir el archivo",
+        description: "No se pudo guardar la información de la imagen"
+      })
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  return (
+    <CldUploadButton
+      onUpload={handleUpload}
+      uploadPreset="next-cloudinary"
+      options={{
+        maxFiles: 5,
+        sources: ['local', 'camera', 'url'],
+        resourceType: 'image',
+        clientAllowedFormats: ['jpg', 'jpeg', 'png', 'webp'],
+        maxFileSize: 5000000,
+        folder: 'dispatch-photos',
+        context: {
+          assignmentId: context.assignmentId,
+          type: context.type
+        }
+      }}
+    >
+      <Button 
+        type="button"
+        variant="outline"
+        disabled={isUploading}
+        className={className}
+      >
+        {isUploading ? (
+          <span className="flex items-center gap-2">
+            <Upload className="h-4 w-4 animate-spin" />
+            Subiendo...
+          </span>
+        ) : (
+          <span className="flex items-center gap-2">
+            <Upload className="h-4 w-4" />
+            {label}
+          </span>
+        )}
+      </Button>
+    </CldUploadButton>
+  )
+}

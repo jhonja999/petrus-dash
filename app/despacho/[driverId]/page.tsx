@@ -141,6 +141,7 @@ const syncOperatorData = async (driverId: string) => {
 }
 
 export default function DespachoDriverPage() {
+  const [modalGalleryKey, setModalGalleryKey] = useState(0)
   const params = useParams()
   const router = useRouter()
   const { user, isLoading, isAuthenticated } = useAuth()
@@ -430,6 +431,7 @@ export default function DespachoDriverPage() {
     setIsModalOpen(true)
     setMarcadorInicial(assignment.totalRemaining.toString())
     setMarcadorFinal("")
+    setModalGalleryKey(Date.now()) // fuerza remount de la galería
   }
 
   const closeModal = () => {
@@ -869,7 +871,9 @@ export default function DespachoDriverPage() {
                         >
                           <CardHeader className="pb-3">
                             <div className="flex justify-between items-start">
-                              <CardTitle className="text-lg">
+                              <CardTitle className="text-lg flex items-center gap-2">
+                                {/* Thumbnail de evidencia si existe */}
+                                <AssignmentImageGallery assignmentId={delivery.assignmentId} type="unloading" thumbnail size={32} />
                                 {delivery.customer?.companyname || "Cliente Desconocido"}
                               </CardTitle>
                               <Badge className="bg-yellow-100 text-yellow-700">
@@ -934,7 +938,9 @@ export default function DespachoDriverPage() {
                         >
                           <CardHeader className="pb-3">
                             <div className="flex justify-between items-start">
-                              <CardTitle className="text-lg">
+                              <CardTitle className="text-lg flex items-center gap-2">
+                                {/* Thumbnail de evidencia si existe */}
+                                <AssignmentImageGallery assignmentId={delivery.assignmentId} type="unloading" thumbnail size={32} />
                                 {delivery.customer?.companyname || "Cliente Desconocido"}
                               </CardTitle>
                               <Badge className="bg-green-100 text-green-700">
@@ -1275,7 +1281,7 @@ export default function DespachoDriverPage() {
                 {/* Evidencia fotográfica UNIFICADA */}
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">📸 Evidencia Fotográfica</Label>
-                  <AssignmentImageGallery assignmentId={selectedClientAssignment.assignmentId} type="unloading" />
+                  <AssignmentImageGallery key={modalGalleryKey} assignmentId={selectedClientAssignment.assignmentId} type="unloading" />
                 </div>
 
                 <div className="space-y-2">

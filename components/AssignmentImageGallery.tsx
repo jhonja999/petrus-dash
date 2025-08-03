@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useEffect, useState } from "react"
+import Image from "next/image"
 import { CloudinaryUpload } from "./CloudinaryUpload"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -31,9 +32,11 @@ interface AssignmentImageGalleryProps {
   dispatchId?: number
   type?: string // 'carga' | 'descarga'
   className?: string
+  thumbnail?: boolean // Si true, solo muestra el primer thumbnail
+  size?: number // px para thumbnail
 }
 
-export function AssignmentImageGallery({ assignmentId, dispatchId, type, className }: AssignmentImageGalleryProps) {
+export function AssignmentImageGallery({ assignmentId, dispatchId, type, className, thumbnail = false, size = 32 }: AssignmentImageGalleryProps) {
   const [images, setImages] = useState<AssignmentImage[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -50,7 +53,13 @@ export function AssignmentImageGallery({ assignmentId, dispatchId, type, classNa
       if (dispatchId) url += `&dispatchId=${dispatchId}`
       if (type) url += `&type=${type}`
       const response = await axios.get(url)
-      setImages(response.data.images)
+      
+      // Ensure images have secure URLs
+      const processedImages = response.data.images.map((image: AssignmentImage) => ({
+        ...image,
+        url: image.url.startsWith('http') ? image.url : `https://res.cloudinary.com/your-cloud-name/image/upload/${image.url}`
+      }))
+      setImages(processedImages)
     } catch (error) {
       console.error("Error fetching images:", error)
       setError("Error al cargar las imágenes")
@@ -75,24 +84,27 @@ export function AssignmentImageGallery({ assignmentId, dispatchId, type, classNa
     return type === "loading" ? "bg-blue-100 text-blue-700" : "bg-green-100 text-green-700"
   }
 
-  if (loading) {
+  if (thumbnail) {
+    if (loading || images.length === 0) {
+      return <span className="inline-block bg-gray-200 rounded mr-2" style={{width: size, height: size}} />
+    }
     return (
-      <Card className={className}>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <ImageIcon className="h-5 w-5" />
-            Documentación de Imágenes
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4" />
-            <p className="text-gray-600">Cargando imágenes...</p>
-          </div>
-        </CardContent>
-      </Card>
+      <div 
+        className="inline-block rounded overflow-hidden mr-2 border border-gray-300"
+        style={{ width: size, height: size, minWidth: size, minHeight: size }}
+      >
+        <Image
+          src={images[0].url}
+          alt="Evidencia"
+          width={size}
+          height={size}
+          className="object-cover w-full h-full"
+          priority
+        />
+      </div>
     )
   }
+  // ...resto de la galería...
 
   if (error) {
     return (
@@ -155,14 +167,13 @@ export function AssignmentImageGallery({ assignmentId, dispatchId, type, classNa
             {images.map((image) => (
               <div key={image.id} className="border rounded-lg overflow-hidden hover:shadow-md transition-shadow">
                 <div className="aspect-video bg-gray-100 relative group">
-                  <img
+                  <Image
                     src={image.url}
                     alt={image.originalName}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      const target = e.target as HTMLImageElement
-                      target.src = "/placeholder-image.jpg"
-                    }}
+                    className="object-cover"
+                    fill
+                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                    priority={false}
                   />
                   <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-200 flex items-center justify-center">
                     <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex gap-2">

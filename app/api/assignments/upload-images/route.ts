@@ -102,10 +102,22 @@ export async function GET(req: NextRequest) {
         }
       }
     });
-    const imagesWithUrls = images.map((img: any) => ({
-      ...img,
-      url: `/uploads/assignments/${assignmentId}/${img.type}/${img.filename}`
-    }));
+    const imagesWithUrls = images.map((img: any) => {
+      // Si es Cloudinary, la URL es absoluta (tiene https), si no, es local
+      let url = img.filename.startsWith('http') || img.filename.startsWith('https')
+        ? img.filename
+        : img.mimeType === 'image/cloudinary'
+          ? img.filename // fallback por si se guardó la url completa
+          : `/uploads/assignments/${assignmentId}/${img.type}/${img.filename}`;
+      // Si la url no tiene http pero el mimeType es cloudinary, anteponer https://res.cloudinary.com
+      if (img.mimeType === 'image/cloudinary' && !url.startsWith('http')) {
+        url = `https://res.cloudinary.com/${process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}/image/upload/${img.filename}`;
+      }
+      return {
+        ...img,
+        url,
+      };
+    });
     return NextResponse.json({ success: true, images: imagesWithUrls });
   } catch (error) {
     console.error("❌ Error fetching images:", error);

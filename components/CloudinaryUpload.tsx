@@ -1,254 +1,158 @@
 "use client"
 
 import { useState } from "react"
-import { CldUploadButton, CldImage } from "next-cloudinary"
+import axios from "axios"
+import { CldUploadButton } from "next-cloudinary"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { X, Upload, Camera, FileText, CheckCircle } from "lucide-react"
+import { Upload, AlertCircle } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
-interface UploadedFile {
-  public_id: string
-  secure_url: string
-  original_filename: string
-  format: string
-  bytes: number
-  width?: number
-  height?: number
-  resource_type: string
-  created_at: string
-}
-
 interface CloudinaryUploadProps {
-  onUpload?: (files: UploadedFile[]) => void
-  maxFiles?: number
-  acceptedTypes?: string[]
-  folder?: string
-  tags?: string[]
-  context?: Record<string, string>
+  onUpload?: () => void
+  context: {
+    assignmentId: string
+    type: string
+  }
   className?: string
-  multiple?: boolean
-  required?: boolean
   label?: string
-  description?: string
-}
-
-const PHOTO_TYPES = {
-  loading_start: { label: "Inicio de Carga", icon: Camera, color: "bg-blue-100 text-blue-800" },
-  loading_end: { label: "Término de Carga", icon: CheckCircle, color: "bg-green-100 text-green-800" },
-  delivery: { label: "Entrega", icon: Camera, color: "bg-orange-100 text-orange-800" },
-  client_confirmation: { label: "Conformidad Cliente", icon: FileText, color: "bg-purple-100 text-purple-800" },
-  odometer: { label: "Odómetro", icon: Camera, color: "bg-gray-100 text-gray-800" },
 }
 
 export function CloudinaryUpload({
   onUpload,
-  maxFiles = 5,
-  acceptedTypes = ["image/jpeg", "image/png", "application/pdf"],
-  folder = "dispatch-photos",
-  tags = [],
-  context = {},
+  context,
   className = "",
-  multiple = true,
-  required = false,
   label = "Subir Archivos",
-  description = "JPG, PNG, PDF - Máximo 5MB por archivo",
 }: CloudinaryUploadProps) {
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
   const [isUploading, setIsUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const { toast } = useToast()
 
-  const handleUpload = (result: any, { widget }: any) => {
-    if (result.event !== "success") return
-
-    if (result?.info) {
-      const newFile: UploadedFile = {
-        public_id: result.info.public_id,
-        secure_url: result.info.secure_url,
-        original_filename: result.info.original_filename || "archivo",
-        format: result.info.format,
-        bytes: result.info.bytes,
-        width: result.info.width,
-        height: result.info.height,
-        resource_type: result.info.resource_type,
-        created_at: result.info.created_at,
+  const handleUpload = async (result: any) => {
+    console.log("Upload result:", result)
+    
+    if (result.event !== "success") {
+      if (result.event === "error") {
+        console.error("Cloudinary upload error:", result.info)
+        setUploadError(`Error de upload: ${result.info?.error?.message || 'Error desconocido'}`)
+        toast({
+          variant: "destructive",
+          title: "Error en Cloudinary",
+          description: result.info?.error?.message || "Error al subir archivo"
+        })
       }
-
-      const updatedFiles = multiple ? [...uploadedFiles, newFile].slice(0, maxFiles) : [newFile]
-
-      setUploadedFiles(updatedFiles)
-      onUpload?.(updatedFiles)
-
-      toast({
-        title: "Archivo subido",
-        description: `${newFile.original_filename} se subió correctamente`,
-      })
+      return
     }
+    
+    setIsUploading(true)
+    setUploadError(null)
+    
+    try {
+      if (result?.info) {
+        console.log("Saving image info:", result.info)
+        
+        // Save the image info to your backend
+        await axios.post('/api/assignments/upload-images', {
+          assignmentId: context.assignmentId,
+          type: context.type,
+          filename: result.info.public_id,
+          originalName: result.info.original_filename,
+          fileSize: result.info.bytes,
+          mimeType: result.info.format,
+          url: result.info.secure_url,
+          cloudinaryData: result.info // Store full Cloudinary response
+        })
 
-    widget.close()
+        toast({
+          title: "Archivo subido exitosamente",
+          description: `${result.info.original_filename} se subió correctamente`
+        })
+
+        // Notify parent component to refresh images
+        onUpload?.()
+      }
+    } catch (error) {
+      console.error('Error al guardar la imagen en backend:', error)
+      setUploadError("Error al guardar en base de datos")
+      toast({
+        variant: "destructive",
+        title: "Error al guardar",
+        description: "No se pudo guardar la información de la imagen en la base de datos"
+      })
+    } finally {
+      setIsUploading(false)
+    }
   }
 
-  const removeFile = (publicId: string) => {
-    const updatedFiles = uploadedFiles.filter((file) => file.public_id !== publicId)
-    setUploadedFiles(updatedFiles)
-    onUpload?.(updatedFiles)
-
+  const handleError = (error: any) => {
+    console.error("Upload widget error:", error)
+    setUploadError(`Error del widget: ${error.message || 'Error desconocido'}`)
     toast({
-      title: "Archivo eliminado",
-      description: "El archivo se eliminó correctamente",
+      variant: "destructive",
+      title: "Error de upload",
+      description: "No se pudo inicializar el widget de upload"
     })
   }
 
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return "0 Bytes"
-    const k = 1024
-    const sizes = ["Bytes", "KB", "MB", "GB"]
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
-  }
-
-  const getFileIcon = (format: string, resourceType: string) => {
-    if (resourceType === "image") return Camera
-    if (format === "pdf") return FileText
-    return Upload
-  }
-
-  const isDisabled = uploadedFiles.length >= maxFiles
-
   return (
-    <div className={`space-y-4 ${className}`}>
-      {/* Upload Button */}
-      <div className="flex flex-col space-y-2">
-        <div className="flex items-center justify-between">
-          <label className="text-sm font-medium text-gray-700">
-            {label}
-            {required && <span className="text-red-500 ml-1">*</span>}
-          </label>
-          <Badge variant="outline" className="text-xs">
-            {uploadedFiles.length}/{maxFiles}
-          </Badge>
+    <div className="space-y-2">
+      <CldUploadButton
+        onUpload={handleUpload}
+        onError={handleError}
+        uploadPreset={process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "ml_default"}
+        options={{
+          maxFiles: 5,
+          multiple: true,
+          sources: ['local', 'camera'],
+          resourceType: 'auto', // Permite imágenes y otros archivos
+          clientAllowedFormats: ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+          maxFileSize: 10000000, // 10MB
+          folder: 'dispatch-photos',
+          tags: [`assignment-${context.assignmentId}`, `type-${context.type}`, 'petrus-dispatch'],
+          // Configuraciones adicionales para mejor UX
+          showPoweredBy: false,
+          theme: 'minimal',
+          styles: {
+            palette: {
+              window: "#FFFFFF",
+              windowBorder: "#90A0B3",
+              tabIcon: "#0078FF",
+              menuIcons: "#5A616A",
+              textDark: "#000000",
+              textLight: "#FFFFFF",
+              link: "#0078FF",
+              action: "#FF620C",
+              inactiveTabIcon: "#C4C4C4",
+              error: "#F44235",
+              inProgress: "#0078FF",
+              complete: "#20B832",
+              sourceBg: "#E4EBF1"
+            }
+          }
+        }}
+      >
+        <div 
+          className={`inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-slate-200 bg-white hover:bg-slate-100 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:hover:bg-slate-800 dark:hover:text-slate-50 h-10 px-4 py-2 ${className} ${isUploading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+        >
+          {isUploading ? (
+            <span className="flex items-center gap-2">
+              <Upload className="h-4 w-4 animate-spin" />
+              Guardando...
+            </span>
+          ) : (
+            <span className="flex items-center gap-2">
+              <Upload className="h-4 w-4" />
+              {label}
+            </span>
+          )}
         </div>
-
-        <div className={`${isDisabled ? "opacity-50 cursor-not-allowed" : ""}`}>
-          <CldUploadButton
-            className="flex items-center justify-center w-full h-32 border-2 border-dashed border-gray-300 rounded-lg hover:border-gray-400 transition-colors bg-gray-50 hover:bg-gray-100"
-            onUpload={handleUpload}
-            uploadPreset={process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET}
-            options={{
-              multiple,
-              maxFiles: maxFiles - uploadedFiles.length,
-              maxFileSize: 5000000, // 5MB
-              clientAllowedFormats: acceptedTypes.map((type) => type.split("/")[1]),
-              folder,
-              tags: [...tags, "dispatch", "petrus"],
-              context,
-              sources: ["local", "camera"],
-              showAdvancedOptions: false,
-              cropping: false,
-              resourceType: "auto",
-            }}
-          >
-            <div className="text-center">
-              <Upload className="mx-auto h-8 w-8 text-gray-400 mb-2" />
-              <div className="text-sm text-gray-600">
-                <span className="font-medium text-blue-600 hover:text-blue-500">Haz clic para subir</span>
-                {" o arrastra archivos aquí"}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">{description}</p>
-            </div>
-          </CldUploadButton>
-        </div>
-      </div>
-
-      {/* Uploaded Files Preview */}
-      {uploadedFiles.length > 0 && (
-        <div className="space-y-2">
-          <h4 className="text-sm font-medium text-gray-700">Archivos subidos:</h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {uploadedFiles.map((file) => {
-              const FileIcon = getFileIcon(file.format, file.resource_type)
-
-              return (
-                <Card key={file.public_id} className="relative group">
-                  <CardContent className="p-3">
-                    <div className="flex items-start space-x-3">
-                      {/* Preview */}
-                      <div className="flex-shrink-0">
-                        {file.resource_type === "image" ? (
-                          <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-gray-100">
-                            <CldImage
-                              src={file.public_id}
-                              alt={file.original_filename}
-                              width={48}
-                              height={48}
-                              crop="fill"
-                              className="object-cover"
-                            />
-                          </div>
-                        ) : file.secure_url && file.format.match(/jpe?g|png|gif|webp/i) ? (
-                          <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-gray-100">
-                            <img
-                              src={file.secure_url}
-                              alt={file.original_filename}
-                              width={48}
-                              height={48}
-                              className="object-cover w-12 h-12"
-                            />
-                          </div>
-                        ) : (
-                          <div className="w-12 h-12 rounded-lg bg-gray-100 flex items-center justify-center">
-                            <FileIcon className="h-6 w-6 text-gray-500" />
-                          </div>
-                        )}
-                      </div>
-
-                      {/* File Info */}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">{file.original_filename}</p>
-                        <p className="text-xs text-gray-500">
-                          {file.format.toUpperCase()} • {formatFileSize(file.bytes)}
-                        </p>
-                        {file.width && file.height && (
-                          <p className="text-xs text-gray-400">
-                            {file.width} × {file.height}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Remove Button */}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 h-auto"
-                        onClick={() => removeFile(file.public_id)}
-                      >
-                        <X className="h-4 w-4 text-red-500" />
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
+      </CldUploadButton>
+      
+      {uploadError && (
+        <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-2 rounded-md">
+          <AlertCircle className="h-4 w-4" />
+          {uploadError}
         </div>
       )}
-
-      {/* Photo Type Suggestions */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-        <h5 className="text-sm font-medium text-blue-900 mb-2">Fotos de despacho:</h5>
-        <div className="flex flex-wrap gap-2">
-          {Object.entries(PHOTO_TYPES).map(([key, type]) => {
-            const Icon = type.icon
-            return (
-              <Badge key={key} className={`${type.color} text-xs`}>
-                <Icon className="h-3 w-3 mr-1" />
-                {type.label}
-              </Badge>
-            )
-          })}
-        </div>
-      </div>
     </div>
   )
 }
