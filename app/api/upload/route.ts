@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import cloudinary from '@/lib/cloudinary';
-import sharp from 'sharp';
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'application/pdf'];
 
@@ -19,21 +18,7 @@ export async function POST(req: NextRequest) {
   const arrayBuffer = await file.arrayBuffer();
   let buffer = Buffer.from(arrayBuffer);
 
-  // Compress image if jpg/png
-  if (file.type === 'image/jpeg' || file.type === 'image/png') {
-    try {
-      buffer = Buffer.from(
-        await sharp(buffer)
-          .resize({ width: 1280, withoutEnlargement: true })
-          .jpeg({ quality: 80 })
-          .toBuffer()
-      );
-    } catch (err) {
-      return NextResponse.json({ error: 'Error al comprimir imagen', details: err }, { status: 500 });
-    }
-  }
-
-  // Upload to Cloudinary
+  // Subir directamente a Cloudinary sin compresión
   try {
     const uploadResult = await new Promise((resolve, reject) => {
       cloudinary.uploader.upload_stream(
