@@ -212,18 +212,8 @@ export default function DespachoDriverPage() {
   // Helper for assignment completion (admin/operator)
   const completeAssignment = async (assignmentId: number) => {
     try {
-      // Verifica que haya al menos una evidencia
-      const res = await axios.get(`/api/assignments/upload-images?assignmentId=${assignmentId}&type=evidence`)
-      if (!res.data.images || res.data.images.length === 0) {
-        toast({
-          title: "❌ Error",
-          description: "Debes subir al menos una evidencia antes de completar la asignación.",
-          variant: "destructive"
-        })
-        return
-      }
-      // Completa la asignación en la base de datos
-      await axios.post(`/api/assignments/complete`, { assignmentId })
+      // Completa la asignación en la base de datos usando el endpoint correcto
+      await axios.post(`/api/assignments/${assignmentId}/complete`)
       toast({
         title: "✅ Asignación completada",
         description: `La asignación #${assignmentId} ha sido completada exitosamente.`,
@@ -272,7 +262,22 @@ export default function DespachoDriverPage() {
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold">Panel de Asignaciones y Reportes</h1>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => router.back()}
+            >
+              <ArrowLeft className="h-4 w-4 mr-1" />
+            </Button>
+            <h1 className="text-2xl font-bold">Panel de Asignaciones y Reportes</h1>
+          </div>
+          <Button
+            variant="default"
+            onClick={() => router.push("/dashboard")}
+          >
+            Dashboard
+          </Button>
         </div>
       </header>
 

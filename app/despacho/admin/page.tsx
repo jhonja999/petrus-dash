@@ -21,12 +21,67 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, Users, Calendar, Search, Filter } from "lucide-react";
+import { CheckCircle } from "lucide-react";
 import Link from "next/link";
 import axios from "axios";
 import type { Discharge, Assignment, User } from "@/types/globals.d";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function DespachoAdminPage() {
+  // Fecha formateada para evitar SSR hydration mismatch
+  const [todayFormatted, setTodayFormatted] = useState<string>("");
+  useEffect(() => {
+    setTodayFormatted(new Date().toLocaleDateString());
+  }, []);
+  // Toast para feedback
+  const { toast } = require("@/hooks/use-toast");
+  // Estado para el botón de completar
+  const [isCompleting, setIsCompleting] = useState<number | null>(null);
+
+  // Completar asignación con confirmación y evidencia
+  const completeAssignment = async (assignmentId: number) => {
+    if (!window.confirm("¿Está seguro que desea completar esta asignación? Esta acción no se puede deshacer.")) {
+      return;
+    }
+    setIsCompleting(assignmentId);
+    try {
+      // Verifica que haya al menos una evidencia
+      const res = await axios.get(`/api/assignments/upload-images?assignmentId=${assignmentId}&type=evidence`);
+      if (!res.data.images || res.data.images.length === 0) {
+        toast({
+          title: "❌ Error",
+          description: "Debes subir al menos una evidencia antes de completar la asignación.",
+          variant: "destructive"
+        });
+        setIsCompleting(null);
+        return;
+      }
+      // Completa la asignación en la base de datos usando el endpoint correcto
+      await axios.post(`/api/assignments/${assignmentId}/complete`);
+      toast({
+        title: "✅ Asignación completada",
+        description: "La asignación #" + assignmentId + " ha sido completada exitosamente.",
+        className: "border-green-200 bg-green-50"
+      });
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (err) {
+      let errorMsg = "No se pudo completar la asignación.";
+      if (err && typeof err === 'object') {
+        if ('response' in err && err.response && (err.response as any)?.data && (err.response as any)?.data?.error) {
+          errorMsg = (err.response as any)?.data?.error || errorMsg;
+        } else if ('message' in err && typeof err.message === 'string') {
+          errorMsg = err.message;
+        }
+      }
+      toast({
+        title: "❌ Error",
+        description: errorMsg,
+        variant: "destructive"
+      });
+    } finally {
+      setIsCompleting(null);
+    }
+  };
   const router = useRouter();
   const { user, isLoading, isAuthenticated, isAdmin } = useAuth();
 
@@ -66,12 +121,12 @@ export default function DespachoAdminPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        setError(null)
-        console.log(`🔄 Admin: Obteniendo todos los datos de despacho`)
+        setError(null);
+        console.log("🔄 Admin: Obteniendo todos los datos de despacho");
 
         // Auto-completar asignaciones antiguas de todos los conductores
         try {
-          const driversResponse = await axios.get("/api/users?role=Operador")
+          const driversResponse = await axios.get("/api/users?role=Operador");
           const operatorDrivers = driversResponse.data
 
           for (const driver of operatorDrivers) {
@@ -80,7 +135,7 @@ export default function DespachoAdminPage() {
                 driverId: driver.id 
               })
             } catch (error) {
-              console.log(`⚠️ Auto-complete failed for driver ${driver.id}`)
+              console.log("⚠️ Auto-complete failed for driver " + driver.id);
             }
           }
           console.log("✅ Auto-completed assignments for all drivers")
@@ -91,7 +146,7 @@ export default function DespachoAdminPage() {
         // Hacer las llamadas por separado para identificar cuál está fallando
         try {
           const dischargesResponse = await axios.get("/api/discharges")
-          console.log(`✅ Admin: Despachos obtenidos`, dischargesResponse.data)
+          console.log("✅ Admin: Despachos obtenidos", dischargesResponse.data);
           
           // La API puede retornar un array directo o un objeto con discharges
           const dischargesData = Array.isArray(dischargesResponse.data) 
@@ -100,13 +155,13 @@ export default function DespachoAdminPage() {
             
           setAllDischarges(dischargesData)
         } catch (error) {
-          console.error("❌ Admin: Error al obtener despachos:", error)
+          console.error("❌ Admin: Error al obtener despachos:", error);
           setAllDischarges([])
         }
 
         try {
           const assignmentsResponse = await axios.get("/api/assignments")
-          console.log(`✅ Admin: Asignaciones obtenidas`, assignmentsResponse.data)
+          console.log("✅ Admin: Asignaciones obtenidas", assignmentsResponse.data);
           
           // La API puede retornar un array directo o un objeto con assignments
           const assignmentsData = Array.isArray(assignmentsResponse.data)
@@ -115,13 +170,13 @@ export default function DespachoAdminPage() {
             
           setAllAssignments(assignmentsData)
         } catch (error) {
-          console.error("❌ Admin: Error al obtener asignaciones:", error)
+          console.error("❌ Admin: Error al obtener asignaciones:", error);
           setAllAssignments([])
         }
 
         try {
           const driversResponse = await axios.get("/api/users?role=Operador")
-          console.log(`✅ Admin: Conductores obtenidos`)
+          console.log("✅ Admin: Conductores obtenidos");
           setDrivers(driversResponse.data)
         } catch (error) {
           console.error("❌ Admin: Error al obtener conductores:", error)
@@ -202,6 +257,11 @@ export default function DespachoAdminPage() {
                   Volver
                 </Link>
               </Button>
+              <Button asChild variant="default" size="sm">
+                <Link href="/dashboard">
+                  Dashboard
+                </Link>
+              </Button>
               <Users className="h-8 w-8 text-blue-600" />
               <div>
                 <h1 className="text-xl font-bold text-gray-900">
@@ -214,7 +274,7 @@ export default function DespachoAdminPage() {
             </div>
             <Badge className="bg-blue-100 text-blue-800">
               <Calendar className="h-3 w-3 mr-1" />
-              {new Date().toLocaleDateString()}
+              {todayFormatted}
             </Badge>
           </div>
         </div>
@@ -446,6 +506,18 @@ export default function DespachoAdminPage() {
                         </p>
                       )}
                     </div>
+                    {/* Botón Completar Asignación (solo si no está completada) */}
+                    {!assignment.isCompleted && (
+                      <div className="flex justify-end mt-4">
+                        <Button
+                          onClick={() => completeAssignment(assignment.id)}
+                          className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white"
+                        >
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          {isCompleting === assignment.id ? "Completando..." : "Completar Asignación"}
+                        </Button>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}
