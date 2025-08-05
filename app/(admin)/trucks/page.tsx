@@ -2,13 +2,12 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { TruckTable } from "@/components/TruckTable"
-import { TruckGridView } from "@/components/TruckGridView"
+import TruckTable from "@/components/TruckTable"
 import { useToast } from "@/hooks/use-toast"
 import { useTruckManagementStore } from "@/stores/truckManagementStore"
 import Link from "next/link"
 import { Plus, RefreshCw, Grid3X3, List } from "lucide-react"
-import type { Truck } from "@/types/globals"
+import type { Truck, FuelType, TruckState } from "@/types/globals"
 import axios from "axios"
 
 export default function TrucksPage() {
@@ -21,7 +20,7 @@ export default function TrucksPage() {
     getFilteredTrucks 
   } = useTruckManagementStore()
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid')
+  // Vista solo tabla, sin grid
   const { toast } = useToast()
   const [mounted, setMounted] = useState(false)
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true)
@@ -135,24 +134,7 @@ export default function TrucksPage() {
               <p className="text-sm text-gray-600">Administra la flota de vehículos</p>
             </div>
             <div className="flex items-center space-x-4">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant={viewMode === 'grid' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setViewMode('grid')}
-                >
-                  <Grid3X3 className="h-4 w-4 mr-2" />
-                  Vista Grid
-                </Button>
-                <Button
-                  variant={viewMode === 'table' ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setViewMode('table')}
-                >
-                  <List className="h-4 w-4 mr-2" />
-                  Vista Tabla
-                </Button>
-              </div>
+            {/* Vista solo tabla, sin grid/toggle */}
               <Button
                 onClick={handleRefreshStatus}
                 disabled={isRefreshing}
@@ -177,17 +159,15 @@ export default function TrucksPage() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {viewMode === 'grid' ? (
-          <TruckGridView />
-        ) : (
-          <div className="bg-white rounded-lg shadow">
-            <div className="px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Lista de Camiones ({filteredTrucks.length})
-              </h2>
-            </div>
-            <div className="p-6">
-              {loading ? (
+        <div className="bg-white rounded-lg shadow">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Lista de Camiones {mounted ? `(${filteredTrucks.length})` : ''}
+            </h2>
+          </div>
+          <div className="p-6">
+            {mounted ? (
+              loading ? (
                 <div className="text-center py-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
                   <p className="mt-2 text-gray-600">Cargando camiones...</p>
@@ -206,10 +186,12 @@ export default function TrucksPage() {
                   onRefreshTrucks={refreshTrucks}
                   isAdmin={true}
                 />
-              )}
-            </div>
+              )
+            ) : (
+              <div className="text-center py-8 text-gray-400">Cargando...</div>
+            )}
           </div>
-        )}
+        </div>
       </main>
     </div>
   )

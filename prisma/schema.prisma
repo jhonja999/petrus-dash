@@ -254,6 +254,7 @@ model AssignmentImage {
   fileSize      Int      // Tamaño en bytes
   mimeType      String   // Tipo MIME
   uploadedBy    Int      // ID del usuario que subió la imagen
+  url           String   // URL del archivo de imagen
 
   assignment    Assignment @relation(fields: [assignmentId], references: [id])
   uploadedByUser User      @relation(fields: [uploadedBy], references: [id])

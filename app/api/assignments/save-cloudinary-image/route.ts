@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { verifyToken } from "@/lib/jwt"
 import { cookies } from "next/headers"
@@ -16,49 +16,48 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { assignmentId, type, imageUrl, uploadedBy } = body
+    const { assignmentId, dispatchId, type, imageUrl, publicId, originalName, fileSize, format, uploadedBy } = body
 
-    if (!assignmentId || !type || !imageUrl || !uploadedBy) {
+    if (!assignmentId || !type || !imageUrl) {
       return NextResponse.json({ error: "Datos incompletos" }, { status: 400 })
     }
 
-    if (!["loading", "unloading"].includes(type)) {
-      return NextResponse.json({ error: "Tipo de imagen inválido" }, { status: 400 })
-    }
-
-    // Verificar que la asignación existe y pertenece al usuario
+    // Validar que la asignación existe
     const assignment = await prisma.assignment.findUnique({
       where: { id: Number(assignmentId) },
-      include: { driver: true }
+      include: { driver: true },
     })
 
     if (!assignment) {
       return NextResponse.json({ error: "Asignación no encontrada" }, { status: 404 })
     }
 
-    // Verificar permisos: solo el conductor asignado o admins pueden subir imágenes
+    // Verificar permisos
     if (payload.role !== "Admin" && payload.role !== "S_A" && assignment.driverId !== payload.id) {
       return NextResponse.json({ error: "No tienes permisos para esta asignación" }, { status: 403 })
     }
 
-    // Extraer nombre del archivo de la URL de Cloudinary
-    const urlParts = imageUrl.split('/')
-    const filename = urlParts[urlParts.length - 1].split('?')[0] // Remove query parameters
+    // Extraer información de la URL de Cloudinary
+    const urlParts = imageUrl.split("/")
+    const filename = urlParts[urlParts.length - 1].split("?")[0]
+    const cloudinaryPublicId = publicId || filename.split(".")[0]
 
-    // Guardar referencia en la base de datos
+    // Crear el registro de imagen
     const imageRecord = await prisma.assignmentImage.create({
       data: {
         assignmentId: Number(assignmentId),
-        type: type as 'loading' | 'unloading',
+        dispatchId: dispatchId ? Number(dispatchId) : null,
+        type: type,
         filename: filename,
-        originalName: `Cloudinary_${filename}`,
-        fileSize: 0, // Cloudinary doesn't provide file size in URL
-        mimeType: 'image/jpeg', // Default, could be determined from URL extension
-        uploadedBy: Number(uploadedBy),
-      }
+        originalName: originalName || `Cloudinary_${filename}`,
+        fileSize: fileSize || 0,
+        mimeType: format ? `image/${format}` : "image/jpeg",
+        uploadedBy: uploadedBy || payload.id,
+        url: imageUrl,
+      },
     })
 
-    console.log(`✅ Saved Cloudinary image to database: ${imageRecord.id}`)
+    console.log(`✅ Imagen de Cloudinary guardada: ${imageRecord.id}`)
 
     return NextResponse.json({
       success: true,
@@ -68,12 +67,19 @@ export async function POST(request: NextRequest) {
         filename: filename,
         url: imageUrl,
         originalName: imageRecord.originalName,
-        uploadedAt: imageRecord.createdAt
-      }
+        uploadedAt: imageRecord.createdAt,
+        type: type,
+        uploadedBy: imageRecord.uploadedBy,
+      },
     })
-
-  } catch (error) {
+  } catch (error: any) {
     console.error("❌ Error saving Cloudinary image:", error)
-    return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "Error interno del servidor",
+        details: error.message,
+      },
+      { status: 500 },
+    )
   }
-} 
+}

@@ -22,14 +22,16 @@ import {
 } from 'lucide-react'
 import { useTruckManagementStore } from '@/stores/truckManagementStore'
 import { useToast } from '@/hooks/use-toast'
-import type { Truck as TruckType } from '@/stores/truckManagementStore'
+import type { StoreTruck } from '@/stores/truckManagementStore'
+import { $Enums } from "@prisma/client";
+type TruckState = $Enums.TruckState;
 
 interface DynamicTruckCardProps {
-  truck: TruckType
-  onStateChange?: (newState: string) => void
-  onFuelUpdate?: (newLevel: number) => void
-  onDriverAssign?: (driverId: number) => void
-  realTimeUpdates?: boolean
+  truck: StoreTruck;
+  onStateChange?: (newState: string) => void;
+  onFuelUpdate?: (newLevel: number) => void;
+  onDriverAssign?: (driverId: number) => void;
+  realTimeUpdates?: boolean;
 }
 
 export function DynamicTruckCard({ 
@@ -70,7 +72,8 @@ export function DynamicTruckCard({
   const handleStateChange = async (newState: string) => {
     try {
       setIsUpdating(true)
-      await updateTruckState(truck.id, newState)
+      // Para actualizar el estado del camión:
+      await updateTruckState(truck.id, newState as TruckState)
       onStateChange?.(newState)
       
       toast({
@@ -172,7 +175,7 @@ export function DynamicTruckCard({
           </div>
           <div>
             <Label className="text-sm font-medium text-gray-600">Capacidad</Label>
-            <p className="text-sm">{truck.capacitygal} galones</p>
+            <p className="text-sm">{truck.capacitygal.toString()} galones</p>
           </div>
         </div>
 
@@ -228,7 +231,7 @@ export function DynamicTruckCard({
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className={`text-lg font-bold ${getFuelColor()}`}>
-                  {truck.lastRemaining} galones
+                  {truck.lastRemaining.toString()} galones
                 </span>
                 <span className="text-sm text-gray-500">
                   {fuelPercentage.toFixed(1)}%
@@ -311,4 +314,4 @@ export function DynamicTruckCard({
       </CardContent>
     </Card>
   )
-} 
+}

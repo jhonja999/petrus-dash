@@ -1,38 +1,44 @@
-import { create } from 'zustand'
-import { devtools, persist } from 'zustand/middleware'
-import axios from 'axios'
+import { create } from 'zustand';
+import { devtools, persist } from 'zustand/middleware';
+import axios from 'axios';
+import type { FuelType, TruckState as TruckStateEnum } from '@/types/globals';
 
-export interface Truck {
-  id: number
-  placa: string
-  typefuel: string
-  capacitygal: number | string
-  lastRemaining: number | string
-  state: string
-  createdAt?: string
-  updatedAt?: string
-}
+// Re-export types that components might need
+export type { FuelType, TruckStateEnum };
 
+// Internal interfaces
 export interface TruckState {
-  id: number
-  currentFuel: number
-  fuelType: string
-  assignedDriver: number | null
-  maintenanceStatus: 'none' | 'scheduled' | 'in_progress' | 'completed'
-  location: { lat: number; lng: number } | null
-  lastActivity: Date
+  id: number;
+  currentFuel: number;
+  fuelType: string;
+  assignedDriver: number | null;
+  maintenanceStatus: 'none' | 'scheduled' | 'in_progress' | 'completed';
+  location: { lat: number; lng: number } | null;
+  lastActivity: Date;
 }
 
 export interface TruckFilters {
-  state: string | 'all'
-  fuelType: string | 'all'
+  state: TruckStateEnum | 'all'
+  fuelType: FuelType | 'all'
   searchTerm: string
   assignedOnly: boolean
 }
 
+// Define una interfaz Truck local para el store
+export interface StoreTruck {
+  id: number;
+  placa: string;
+  typefuel: FuelType;
+  capacitygal: number;
+  lastRemaining: number;
+  state: TruckStateEnum;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 interface TruckManagementStore {
   // Estado principal
-  trucks: Truck[]
+  trucks: StoreTruck[]
   loading: boolean
   error: string | null
   lastUpdated: Date | null
@@ -45,8 +51,8 @@ interface TruckManagementStore {
   
   // Acciones principales
   fetchTrucks: () => Promise<void>
-  updateTruck: (id: number, updates: Partial<Truck>) => Promise<void>
-  updateTruckState: (id: number, state: string) => Promise<void>
+  updateTruck: (id: number, updates: Partial<StoreTruck>) => Promise<void>
+  updateTruckState: (id: number, state: TruckStateEnum) => Promise<void>
   updateFuelLevel: (id: number, remaining: number) => Promise<void>
   assignDriver: (truckId: number, driverId: number) => Promise<void>
   unassignDriver: (truckId: number) => Promise<void>
@@ -56,45 +62,90 @@ interface TruckManagementStore {
   clearFilters: () => void
   
   // Getters computados
-  getActiveTrucks: () => Truck[]
-  getAvailableTrucks: () => Truck[]
-  getTrucksByState: (state: string) => Truck[]
-  getTrucksByFuelType: (fuelType: string) => Truck[]
-  getFilteredTrucks: () => Truck[]
+  getActiveTrucks: () => StoreTruck[]
+  getAvailableTrucks: () => StoreTruck[]
+  getTrucksByState: (state: TruckStateEnum) => StoreTruck[]
+  getTrucksByFuelType: (fuelType: FuelType) => StoreTruck[]
+  getFilteredTrucks: () => StoreTruck[]
   
   // Sincronización
   syncWithAssignments: () => Promise<void>
   refreshTrucks: () => Promise<void>
   
   // Utilidades
-  validateTruckData: (data: any) => Truck[]
+  validateTruckData: (data: any) => StoreTruck[]
   handleApiError: (error: any, context: string) => string
   
   // Validaciones de negocio
-  validateStateChange: (truck: Truck, newState: string) => boolean
-  validateFuelLevel: (truck: Truck, newLevel: number) => boolean
+  validateStateChange: (truck: StoreTruck, newState: TruckStateEnum) => boolean
+  validateFuelLevel: (truck: StoreTruck, newLevel: number) => boolean
 }
 
+
+type State = {
+  trucks: StoreTruck[];
+  loading: boolean;
+  error: string | null;
+  lastUpdated: Date | null;
+  truckStates: Record<number, TruckState>;
+  filters: TruckFilters;
+}
+
+type Actions = {
+  // Acciones principales
+  fetchTrucks: () => Promise<void>;
+  updateTruck: (id: number, updates: Partial<StoreTruck>) => Promise<void>;
+  updateTruckState: (id: number, state: TruckStateEnum) => Promise<void>;
+  updateFuelLevel: (id: number, remaining: number) => Promise<void>;
+  assignDriver: (truckId: number, driverId: number) => Promise<void>;
+  unassignDriver: (truckId: number) => Promise<void>;
+  
+  // Filtros y búsqueda
+  setFilter: (key: keyof TruckFilters, value: any) => void;
+  clearFilters: () => void;
+  
+  // Getters computados
+  getActiveTrucks: () => StoreTruck[];
+  getAvailableTrucks: () => StoreTruck[];
+  getTrucksByState: (state: TruckStateEnum) => StoreTruck[];
+  getTrucksByFuelType: (fuelType: FuelType) => StoreTruck[];
+  getFilteredTrucks: () => StoreTruck[];
+  
+  // Sincronización
+  syncWithAssignments: () => Promise<void>;
+  refreshTrucks: () => Promise<void>;
+  
+  // Utilidades
+  validateTruckData: (data: any) => StoreTruck[];
+  handleApiError: (error: any, context: string) => string;
+  
+  // Validaciones de negocio
+  validateStateChange: (truck: StoreTruck, newState: TruckStateEnum) => boolean;
+  validateFuelLevel: (truck: StoreTruck, newLevel: number) => boolean;
+}
+
+type Store = State & Actions;
+
 const createTruckManagementStore = () =>
-  create<TruckManagementStore>()(
+  create<Store>()(
     devtools(
       persist(
         (set, get) => ({
           // Estado inicial
-          trucks: [],
+          trucks: [] as StoreTruck[],
           loading: false,
           error: null,
           lastUpdated: null,
-          truckStates: {},
+          truckStates: {} as Record<number, TruckState>,
           filters: {
             state: 'all',
             fuelType: 'all',
             searchTerm: '',
             assignedOnly: false
-          },
+          } as TruckFilters,
 
           // Validación de datos
-          validateTruckData: (data: any): Truck[] => {
+          validateTruckData: (data: any): StoreTruck[] => {
             if (!Array.isArray(data)) {
               console.warn('⚠️ TruckManagementStore: Data is not an array:', data)
               return []
@@ -103,16 +154,12 @@ const createTruckManagementStore = () =>
             return data.map((truck: any) => ({
               id: truck.id || 0,
               placa: truck.placa || '',
-              typefuel: truck.typefuel || '',
-              capacitygal: typeof truck.capacitygal === 'string' 
-                ? parseFloat(truck.capacitygal) || 0 
-                : truck.capacitygal || 0,
-              lastRemaining: typeof truck.lastRemaining === 'string' 
-                ? parseFloat(truck.lastRemaining) || 0 
-                : truck.lastRemaining || 0,
+              typefuel: truck.typefuel || 'DIESEL_B5',
+              capacitygal: Number(truck.capacitygal) || 0,
+              lastRemaining: Number(truck.lastRemaining) || 0,
               state: truck.state || 'Activo',
-              createdAt: truck.createdAt,
-              updatedAt: truck.updatedAt
+              createdAt: truck.createdAt ? new Date(truck.createdAt).toISOString() : undefined,
+              updatedAt: truck.updatedAt ? new Date(truck.updatedAt).toISOString() : undefined
             }))
           },
 
@@ -129,11 +176,11 @@ const createTruckManagementStore = () =>
                 method: error.config?.method
               })
               
-              if (error.response?.status === 404) {
+            if (error.response?.status === 404) {
                 return `${context}: Recurso no encontrado`
               }
-              if (error.response?.status >= 500) {
-                return `${context}: Error del servidor (${error.response?.status}) - ${error.response?.data?.error || 'Error interno'}`
+              if (error.response && typeof error.response.status === 'number' && error.response.status >= 500) {
+                return `${context}: Error del servidor (${error.response.status}) - ${error.response.data?.error || 'Error interno'}`
               }
               return error.response?.data?.error || `${context}: Error desconocido`
             }
@@ -169,7 +216,7 @@ const createTruckManagementStore = () =>
             }
           },
 
-          updateTruck: async (id: number, updates: Partial<Truck>) => {
+          updateTruck: async (id: number, updates: Partial<StoreTruck>) => {
             try {
               const response = await axios.put(`/api/trucks/${id}`, updates)
               const updatedTruck = response.data
@@ -188,7 +235,7 @@ const createTruckManagementStore = () =>
             }
           },
 
-          updateTruckState: async (id: number, state: string) => {
+          updateTruckState: async (id: number, state: TruckStateEnum) => {
             try {
               await get().updateTruck(id, { state })
               
@@ -213,8 +260,6 @@ const createTruckManagementStore = () =>
           updateFuelLevel: async (id: number, remaining: number) => {
             try {
               await get().updateTruck(id, { lastRemaining: remaining })
-              
-              // Actualizar estado dinámico
               set(state => ({
                 truckStates: {
                   ...state.truckStates,
@@ -295,27 +340,27 @@ const createTruckManagementStore = () =>
           },
 
           // Getters computados
-          getActiveTrucks: () => {
+          getActiveTrucks: (): StoreTruck[] => {
             const { trucks } = get()
-            return trucks.filter(truck => truck.state === 'Activo')
+            return trucks.filter((truck: StoreTruck) => truck.state === 'Activo' as TruckStateEnum)
           },
 
-          getAvailableTrucks: () => {
+          getAvailableTrucks: (): StoreTruck[] => {
             const { trucks } = get()
-            return trucks.filter(truck => 
+            return trucks.filter((truck: StoreTruck) => 
               truck.state === 'Activo' && 
-              Number(truck.lastRemaining) > 0
+              truck.lastRemaining > 0
             )
           },
 
-          getTrucksByState: (state: string) => {
+          getTrucksByState: (state: TruckStateEnum): StoreTruck[] => {
             const { trucks } = get()
-            return trucks.filter(truck => truck.state === state)
+            return trucks.filter((truck: StoreTruck) => truck.state === state)
           },
 
-          getTrucksByFuelType: (fuelType: string) => {
+          getTrucksByFuelType: (fuelType: FuelType): StoreTruck[] => {
             const { trucks } = get()
-            return trucks.filter(truck => truck.typefuel === fuelType)
+            return trucks.filter((truck: StoreTruck) => truck.typefuel === fuelType)
           },
 
           getFilteredTrucks: () => {
@@ -338,7 +383,7 @@ const createTruckManagementStore = () =>
               }
               
               // Filtro por asignación
-              if (filters.assignedOnly && truck.state !== 'Asignado') {
+              if (filters.assignedOnly && truck.state !== 'Asignado' as TruckStateEnum) {
                 return false
               }
               
@@ -355,10 +400,10 @@ const createTruckManagementStore = () =>
               // Actualizar estados de camiones basado en asignaciones
               for (const assignment of activeAssignments) {
                 if (!assignment.isCompleted) {
-                  await get().updateTruckState(assignment.truckId, 'Asignado')
+                  await get().updateTruckState(assignment.truckId, 'Asignado' as TruckStateEnum)
                   await get().assignDriver(assignment.truckId, assignment.driverId)
                 } else {
-                  await get().updateTruckState(assignment.truckId, 'Activo')
+                  await get().updateTruckState(assignment.truckId, 'Activo' as TruckStateEnum)
                   await get().unassignDriver(assignment.truckId)
                 }
               }
@@ -376,20 +421,20 @@ const createTruckManagementStore = () =>
           },
 
           // Validaciones de negocio
-          validateStateChange: (truck: Truck, newState: string): boolean => {
+          validateStateChange: (truck: StoreTruck, newState: TruckStateEnum): boolean => {
             // No permitir cambiar estado si está en asignación activa
-            if (truck.state === 'Asignado' && newState !== 'Activo') {
+            if (truck.state === 'Asignado' as TruckStateEnum && newState !== 'Activo' as TruckStateEnum) {
               return false
             }
             
             // No permitir asignar si está en mantenimiento
-            if (truck.state === 'Mantenimiento' && newState === 'Asignado') {
+            if (truck.state === 'Mantenimiento' as TruckStateEnum && newState === 'Asignado' as TruckStateEnum) {
               return false
             }
             
             // No permitir cambiar a activo si tiene combustible crítico
-            if (newState === 'Activo') {
-              const fuelPercentage = (Number(truck.lastRemaining) / Number(truck.capacitygal)) * 100
+            if (newState === 'Activo' as TruckStateEnum) {
+              const fuelPercentage = (truck.lastRemaining / truck.capacitygal) * 100
               if (fuelPercentage < 5) {
                 return false
               }
@@ -398,7 +443,7 @@ const createTruckManagementStore = () =>
             return true
           },
 
-          validateFuelLevel: (truck: Truck, newLevel: number): boolean => {
+          validateFuelLevel: (truck: StoreTruck, newLevel: number): boolean => {
             // No permitir combustible negativo
             if (newLevel < 0) {
               return false
@@ -426,4 +471,4 @@ const createTruckManagementStore = () =>
     )
   )
 
-export const useTruckManagementStore = createTruckManagementStore() 
+export const useTruckManagementStore = createTruckManagementStore()

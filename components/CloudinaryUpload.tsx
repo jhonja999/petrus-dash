@@ -1,13 +1,47 @@
 "use client"
 
-import { useState } from "react"
-import axios from "axios"
+import { useEffect, useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
-import { Upload, AlertCircle } from "lucide-react"
+import { Camera, Upload, Loader2, AlertCircle } from 'lucide-react'
 import { useToast } from "@/hooks/use-toast"
+import axios from "axios"
+
+// Declarar el tipo para el widget de Cloudinary
+export type CloudinaryUploadOptions = {
+  cloudName: string
+  uploadPreset: string
+  sources: string[]
+  multiple?: boolean
+  maxFiles?: number
+  resourceType?: string
+  clientAllowedFormats?: string[]
+  maxImageWidth?: number
+  maxImageHeight?: number
+  maxImageFileSize?: number
+  folder?: string
+  tags?: string[]
+  context?: Record<string, string>
+}
+
+export type CloudinaryWidget = {
+  open: () => void
+  close: () => void
+  destroy: () => void
+}
+
+declare global {
+  interface Window {
+    cloudinary: {
+      createUploadWidget: (
+        options: CloudinaryUploadOptions,
+        callback: (error: any, result: any) => void
+      ) => CloudinaryWidget
+    }
+  }
+}
 
 interface CloudinaryUploadProps {
-  onUpload?: () => void
+  onUpload?: (results: CloudinaryUploadResult[]) => void
   context: {
     assignmentId: string
     type: string
@@ -15,126 +49,224 @@ interface CloudinaryUploadProps {
   }
   className?: string
   label?: string
+  multiple?: boolean
+  folder?: string
+}
+
+interface CloudinaryUploadResult {
+  public_id: string
+  secure_url: string
+  original_filename: string
+  bytes: number
+  format: string
+  created_at: string
 }
 
 export function CloudinaryUpload({
   onUpload,
   context,
   className = "",
-  label = "Subir Archivos",
+  label = "Subir Evidencia",
+  multiple = true,
+  folder
 }: CloudinaryUploadProps) {
-  console.log("[CloudinaryUpload] Renderizado, props:", { context, onUpload, className, label });
   const [isUploading, setIsUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
-  const [lastImageUrl, setLastImageUrl] = useState<string | null>(null)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [widget, setWidget] = useState<CloudinaryWidget | null>(null)
+  const [scriptLoaded, setScriptLoaded] = useState(false)
   const { toast } = useToast()
+  const widgetRef = useRef<CloudinaryWidget | null>(null)
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
-      setLastImageUrl(URL.createObjectURL(e.target.files[0]));
-      setUploadError(null);
+  // Cargar el script de Cloudinary
+  useEffect(() => {
+    if (window.cloudinary) {
+      setScriptLoaded(true)
+      return
     }
-  };
 
-  const handleUpload = async () => {
-    if (!selectedFile) {
-      setUploadError("Selecciona un archivo primero");
-      return;
+    const script = document.createElement('script')
+    script.src = 'https://widget.cloudinary.com/v2.0/global/all.js'
+    script.async = true
+    script.onload = () => {
+      setScriptLoaded(true)
     }
-    setIsUploading(true);
-    setUploadError(null);
-    try {
-      // 1. Subir imagen a Cloudinary
-      const cloudinaryForm = new FormData();
-      cloudinaryForm.append("file", selectedFile);
-      cloudinaryForm.append("upload_preset", process.env.NEXT_PUBLIC_CLOUDINARY_PRESET || "petrus-evidence");
-      const cloudinaryRes = await fetch("https://api.cloudinary.com/v1_1/" + (process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || "dju8gpddp") + "/image/upload", {
-        method: "POST",
-        body: cloudinaryForm
-      });
-      const cloudinaryData = await cloudinaryRes.json();
-      if (!cloudinaryData.secure_url) {
-        setUploadError("Error al subir a Cloudinary: " + (cloudinaryData.error?.message || "Sin URL"));
-        toast({
-          variant: "destructive",
-          title: "Error Cloudinary",
-          description: cloudinaryData.error?.message || "No se pudo subir la imagen a Cloudinary"
-        });
-        setIsUploading(false);
-        return;
+    script.onerror = () => {
+      setUploadError("Error al cargar el widget de Cloudinary")
+    }
+    document.head.appendChild(script)
+
+    return () => {
+      if (script.parentNode) {
+        script.parentNode.removeChild(script)
       }
-      setLastImageUrl(cloudinaryData.secure_url);
-      // 2. Enviar URL a backend
-      const formData = new FormData();
-      formData.append("assignmentId", context.assignmentId);
-      formData.append("type", context.type);
-      if (context.dispatchId) formData.append("dispatchId", context.dispatchId);
-      formData.append("cloudinaryUrls", cloudinaryData.secure_url);
-      for (let pair of formData.entries()) {
-        console.log(`[CloudinaryUpload] FormData: ${pair[0]} =`, pair[1]);
+    }
+  }, [])
+
+  // Crear el widget cuando el script esté cargado
+  useEffect(() => {
+    if (!scriptLoaded || !window.cloudinary) return
+
+    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || 'dju8gpddp'
+    const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || 'petrus-evidence'
+
+    const uploadOptions: CloudinaryUploadOptions = {
+      cloudName,
+      uploadPreset,
+      sources: ['local', 'camera', 'image_search', 'url'],
+      multiple: multiple,
+      maxFiles: multiple ? 10 : 1,
+      resourceType: 'image',
+      clientAllowedFormats: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
+      maxImageWidth: 2000,
+      maxImageHeight: 2000,
+      maxImageFileSize: 10000000, // 10MB
+      folder: folder || `assignments/${context.assignmentId}`,
+      tags: [
+        `assignment_${context.assignmentId}`,
+        `type_${context.type}`,
+        ...(context.dispatchId ? [`dispatch_${context.dispatchId}`] : [])
+      ],
+      context: {
+        assignmentId: context.assignmentId,
+        type: context.type,
+        ...(context.dispatchId && { dispatchId: context.dispatchId })
       }
-      try {
-        const backendResponse = await axios.post("/api/assignments/upload-images", formData, {
-          headers: { "Content-Type": "multipart/form-data" }
-        });
-        toast({
-          title: "Archivo subido exitosamente",
-          description: `${selectedFile.name} se subió correctamente a Cloudinary y sistema`
-        });
-        if (onUpload) onUpload();
-      } catch (error: any) {
-        let errorMsg = "Error al guardar en backend";
-        if (error?.response?.data) {
-          errorMsg += ": " + (error.response.data.error || JSON.stringify(error.response.data));
+    }
+
+    const newWidget = window.cloudinary.createUploadWidget(
+      uploadOptions,
+      async (error: any, result: any) => {
+        if (error) {
+          console.error('Cloudinary upload error:', error)
+          setUploadError(`Error de Cloudinary: ${error.message || 'Error desconocido'}`)
+          setIsUploading(false)
+          return
         }
-        setUploadError(errorMsg);
-        toast({
-          variant: "destructive",
-          title: "Error al guardar",
-          description: errorMsg
-        });
-        console.error("[CloudinaryUpload] Backend error:", error);
+
+        if (result && result.event === "success") {
+          console.log('Cloudinary upload success:', result.info)
+          
+          try {
+            // Guardar la referencia en la base de datos
+            await saveImageToDatabase(result.info)
+          } catch (dbError) {
+            console.error('Error saving to database:', dbError)
+            setUploadError("Error al guardar en la base de datos")
+          }
+        }
+
+        if (result && result.event === "close") {
+          setIsUploading(false)
+        }
+
+        if (result && result.event === "display-changed") {
+          if (result.info === "shown") {
+            setIsUploading(true)
+            setUploadError(null)
+          }
+        }
       }
-    } finally {
-      setIsUploading(false);
+    )
+
+    setWidget(newWidget)
+    widgetRef.current = newWidget
+
+    return () => {
+      if (widgetRef.current) {
+        widgetRef.current.destroy()
+      }
     }
-  };
-  // ...existing code above...
+  }, [scriptLoaded, context, multiple, folder])
+
+  const saveImageToDatabase = async (uploadResult: CloudinaryUploadResult) => {
+    try {
+      const response = await axios.post('/api/assignments/save-cloudinary-image', {
+        assignmentId: context.assignmentId,
+        dispatchId: context.dispatchId,
+        type: context.type,
+        imageUrl: uploadResult.secure_url,
+        publicId: uploadResult.public_id,
+        originalName: uploadResult.original_filename || 'imagen',
+        fileSize: uploadResult.bytes,
+        format: uploadResult.format,
+        uploadedBy: 1 // Por ahora hardcodeado, deberías obtenerlo del contexto de auth
+      })
+
+      if (response.data.success) {
+        toast({
+          title: "✅ Imagen subida exitosamente",
+          description: `${uploadResult.original_filename} se subió correctamente`,
+          className: "border-green-200 bg-green-50"
+        })
+
+        if (onUpload) {
+          onUpload([uploadResult])
+        }
+      }
+    } catch (error: any) {
+      console.error('Error saving image to database:', error)
+      const errorMessage = error.response?.data?.error || "Error al guardar la imagen"
+      setUploadError(errorMessage)
+      toast({
+        title: "❌ Error",
+        description: errorMessage,
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleOpenWidget = () => {
+    if (!widget) {
+      setUploadError("Widget no disponible")
+      return
+    }
+
+    setUploadError(null)
+    widget.open()
+  }
+
+  if (!scriptLoaded) {
+    return (
+      <div className={`flex items-center justify-center p-4 ${className}`}>
+        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+        <span className="text-sm text-gray-600">Cargando widget...</span>
+      </div>
+    )
+  }
+
   return (
-    <div className={className}>
-      <label className="block mb-2 text-sm font-medium text-gray-700">Selecciona una imagen para subir</label>
-      <input
-        type="file"
-        accept="image/*"
-        onChange={handleFileChange}
-        className="mb-2 block w-full text-sm text-gray-600 border border-gray-300 rounded"
-        disabled={isUploading}
-      />
+    <div className={`space-y-2 ${className}`}>
       <Button
         type="button"
-        onClick={handleUpload}
-        disabled={isUploading || !selectedFile}
-        className="w-full flex items-center gap-2 mb-2"
+        onClick={handleOpenWidget}
+        disabled={isUploading || !widget}
+        className="w-full flex items-center gap-2"
+        variant="outline"
       >
-        <Upload className="h-4 w-4" />
-        {isUploading ? "Subiendo..." : label}
+        {isUploading ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Subiendo...
+          </>
+        ) : (
+          <>
+            <Camera className="h-4 w-4" />
+            <Upload className="h-4 w-4" />
+            {label}
+          </>
+        )}
       </Button>
-      {/* Preview de la última imagen seleccionada */}
-      {lastImageUrl && (
-        <div className="mt-2">
-          <span className="text-xs text-gray-500">Vista previa:</span>
-          <img src={lastImageUrl} alt="Preview" style={{maxWidth:120, maxHeight:120, borderRadius:8, marginTop:4}} />
-        </div>
-      )}
+
       {uploadError && (
         <div className="flex items-center gap-2 text-sm text-red-600 bg-red-50 p-2 rounded-md">
-          <AlertCircle className="h-4 w-4" />
-          {uploadError}
+          <AlertCircle className="h-4 w-4 flex-shrink-0" />
+          <span>{uploadError}</span>
         </div>
       )}
+
+      <p className="text-xs text-gray-500">
+        📸 Puedes tomar fotos con la cámara o subir desde archivos
+      </p>
     </div>
-  );
-// ...existing code above...
+  )
 }
