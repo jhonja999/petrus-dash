@@ -46,6 +46,7 @@ import axios from "axios"
 import { useAuth } from "@/contexts/AuthContext"
 import { useToast } from "@/hooks/use-toast"
 import { CloudinaryUpload } from "@/components/CloudinaryUpload"
+import { Info } from "lucide-react"
 
 // Cloudinary Upload Widget types
 import type { CloudinaryUploadOptions, CloudinaryWidget } from "@/components/CloudinaryUpload"
@@ -741,30 +742,66 @@ export default function DespachoDriverPage() {
                     <CardContent className="space-y-4">
                       <div>
                         <Label>Estado de Entregas</Label>
-                        <div className="mt-2 space-y-2">
+                        <div className="mt-2 space-y-4">
                           {assignment.clientAssignments?.map((ca) => (
-                            <div key={ca.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-md">
-                              <div className="flex-1">
-                                <p className="font-medium">{ca.customer.companyname}</p>
-                                <p className="text-sm text-gray-500">
-                                  {Number(ca.allocatedQuantity).toFixed(2)} gal
-                                  {ca.status === "completed" && ca.deliveredQuantity && (
-                                    <span className="text-green-600 ml-2">
-                                      → {Number(ca.deliveredQuantity).toFixed(2)} gal entregados
-                                    </span>
+                            <div key={ca.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                              <div className="flex items-start justify-between mb-3">
+                                <div className="flex-1">
+                                  <p className="font-medium text-gray-900">{ca.customer.companyname}</p>
+                                  <p className="text-sm text-gray-500">RUC: {ca.customer.ruc}</p>
+                                  {ca.status === "completed" && ca.completedAt && (
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      Completado: {new Date(ca.completedAt).toLocaleString()}
+                                    </p>
                                   )}
-                                </p>
+                                </div>
+                                <div className="flex flex-col items-end gap-2">
+                                  <Badge 
+                                    variant="secondary"
+                                    className={
+                                      ca.status === "completed" 
+                                        ? "bg-green-100 text-green-800" 
+                                        : "bg-yellow-100 text-yellow-800"
+                                    }
+                                  >
+                                    {ca.status === "completed" ? "Completado" : "Pendiente"}
+                                  </Badge>
+                                  <p className="text-sm font-medium">
+                                    {Number(ca.deliveredQuantity || ca.allocatedQuantity).toFixed(2)} gal
+                                    <span className="text-xs text-gray-500 ml-1">
+                                      {ca.status === "completed" ? "entregados" : "asignados"}
+                                    </span>
+                                  </p>
+                                </div>
                               </div>
-                              <Badge 
-                                variant="secondary"
-                                className={
-                                  ca.status === "completed" 
-                                    ? "bg-green-100 text-green-800" 
-                                    : "bg-yellow-100 text-yellow-800"
-                                }
-                              >
-                                {ca.status === "completed" ? "Completado" : "Pendiente"}
-                              </Badge>
+
+                              {/* Evidencias para entregas completadas */}
+                              {ca.status === "completed" && (
+                                <div className="mt-3 pt-3 border-t border-gray-200">
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {/* Evidencias de Carga */}
+                                    <div className="space-y-2">
+                                      <Label className="text-xs text-gray-700">Evidencias de Carga</Label>
+                                      <AssignmentImageGallery
+                                        assignmentId={assignment.id}
+                                        dispatchId={ca.id}
+                                        type="start"
+                                        showUpload={user?.role === "Admin"}
+                                      />
+                                    </div>
+                                    {/* Evidencias de Descarga */}
+                                    <div className="space-y-2">
+                                      <Label className="text-xs text-gray-700">Evidencias de Descarga</Label>
+                                      <AssignmentImageGallery
+                                        assignmentId={assignment.id}
+                                        dispatchId={ca.id}
+                                        type="unloading"
+                                        showUpload={user?.role === "Admin"}
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -1143,7 +1180,7 @@ export default function DespachoDriverPage() {
                             </CardDescription>
                           </div>
                           <div className="flex flex-col items-end gap-2">
-                            <Badge className="bg-green-600 text-white">
+                            <Badge className="bg-green-600 text-white mb-2">
                               ✓ Completado
                             </Badge>
                             <div className="text-right text-sm">
@@ -1157,6 +1194,53 @@ export default function DespachoDriverPage() {
                           </div>
                         </div>
                       </CardHeader>
+                      <CardContent>
+                        <div className="border-t border-green-200 pt-4 mt-2">
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            {/* Evidencias de Carga */}
+                            <div className="space-y-2">
+                              <h4 className="text-sm font-medium text-green-800 flex items-center gap-2">
+                                <Upload className="h-4 w-4" />
+                                Evidencias de Carga
+                              </h4>
+                              <div className="bg-white rounded-lg border border-green-100 p-3">
+                                <AssignmentImageGallery
+                                  assignmentId={clientAssignment.assignmentId}
+                                  dispatchId={clientAssignment.id}
+                                  type="start"
+                                  showUpload={user?.role === "Admin"}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Evidencias de Descarga */}
+                            <div className="space-y-2">
+                              <h4 className="text-sm font-medium text-green-800 flex items-center gap-2">
+                                <Download className="h-4 w-4" />
+                                Evidencias de Descarga
+                              </h4>
+                              <div className="bg-white rounded-lg border border-green-100 p-3">
+                                <AssignmentImageGallery
+                                  assignmentId={clientAssignment.assignmentId}
+                                  dispatchId={clientAssignment.id}
+                                  type="unloading"
+                                  showUpload={user?.role === "Admin"}
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Información adicional para admin */}
+                          {user?.role === "Admin" && (
+                            <div className="mt-4 pt-4 border-t border-green-200">
+                              <p className="text-xs text-green-700 flex items-center gap-2">
+                                <Info className="h-3 w-3" />
+                                Puede subir evidencias adicionales usando los botones de carga en cada sección
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
                     </Card>
                   ))}
                 </div>

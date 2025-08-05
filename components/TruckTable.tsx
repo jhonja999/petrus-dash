@@ -51,7 +51,6 @@ function TruckTable({ trucks, onUpdateState, isAdmin }: TruckTableProps) {
         <TableHeader>
           <TableRow className="bg-gray-50">
             <TableHead className="font-semibold">Placa</TableHead>
-            <TableHead className="font-semibold">Tipo Combustible</TableHead>
             <TableHead className="font-semibold">Capacidad (Gal)</TableHead>
             <TableHead className="font-semibold">Remanente</TableHead>
             <TableHead className="font-semibold">Estado</TableHead>
@@ -62,7 +61,6 @@ function TruckTable({ trucks, onUpdateState, isAdmin }: TruckTableProps) {
           {trucks.map((truck: StoreTruck) => (
             <TableRow key={truck.id} className="hover:bg-gray-50">
               <TableCell className="font-medium">{truck.placa}</TableCell>
-              <TableCell>{fuelTypeLabels[String(truck.typefuel) as keyof typeof fuelTypeLabels]}</TableCell>
               <TableCell>{truck.capacitygal.toString()}</TableCell>
               <TableCell className="font-semibold text-blue-600">{truck.lastRemaining.toString()}</TableCell>
               <TableCell>
@@ -142,11 +140,27 @@ function TruckTable({ trucks, onUpdateState, isAdmin }: TruckTableProps) {
             <div className="mb-2">
               <span className="font-semibold">Tipo de combustible:</span> {fuelTypeLabels[String(modalTruck.typefuel) as keyof typeof fuelTypeLabels]}
             </div>
-            {/* Aquí podrías mostrar más detalles del despacho, como usuario asignado, última actividad, etc. */}
-            <div className="mb-2 flex items-center gap-2">
-              <UserIcon className="h-4 w-4 text-gray-600" />
-              <span className="font-semibold">Usuario asignado:</span>
-              <span>{/* Aquí podrías mostrar el nombre del usuario si tienes ese dato */}N/A</span>
+            <div className="mb-2">
+              <span className="font-semibold">Capacidad:</span> {modalTruck.capacitygal.toString()} gal
+            </div>
+            <div className="mb-4">
+              <span className="font-semibold">Remanente:</span> {modalTruck.lastRemaining.toString()} gal
+            </div>
+            <div className="border-t pt-4">
+              <div className="flex items-center gap-2 mb-2">
+                <UserIcon className="h-4 w-4 text-blue-600" />
+                <span className="font-semibold text-gray-700">Operador asignado</span>
+              </div>
+              {modalTruck.driver ? (
+                <div className="bg-gray-50 rounded-md p-3 space-y-1">
+                  <p className="font-medium">{modalTruck.driver.name} {modalTruck.driver.lastname}</p>
+                  <p className="text-sm text-gray-600">DNI: {modalTruck.driver.dni}</p>
+                </div>
+              ) : (
+                <div className="text-gray-500 text-sm italic">
+                  No hay operador asignado
+                </div>
+              )}
             </div>
             <div className="mt-4 flex gap-2">
               <Button asChild variant="outline" size="sm">

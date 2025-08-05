@@ -5,8 +5,21 @@ declare global {
   var prismaGlobal: PrismaClient | undefined
 }
 
+// Create a function to initialize the Prisma client with connection handling
+const initPrismaClient = () => {
+  try {
+    const client = new PrismaClient()
+    // Test the connection
+    client.$connect()
+    return client
+  } catch (error) {
+    console.error('Failed to initialize Prisma client:', error)
+    throw error
+  }
+}
+
 // Use the global PrismaClient instance if it exists, otherwise create a new one
-export const prisma = global.prismaGlobal || new PrismaClient()
+export const prisma = global.prismaGlobal || initPrismaClient()
 
 // In development, store the PrismaClient instance globally to prevent hot-reloading issues
 if (process.env.NODE_ENV !== "production") {

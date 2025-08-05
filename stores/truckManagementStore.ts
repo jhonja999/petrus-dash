@@ -34,6 +34,12 @@ export interface StoreTruck {
   state: TruckStateEnum;
   createdAt?: string;
   updatedAt?: string;
+  driver?: {
+    id: number;
+    name: string;
+    lastname: string;
+    dni: string;
+  };
 }
 
 interface TruckManagementStore {
