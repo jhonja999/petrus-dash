@@ -280,7 +280,7 @@ export default function DespachoDriverPage() {
     }
   }, [])
 
-  // ✅ Cargar asignaciones con entregas históricas
+  // ✅ Cargar asignaciones y entregas históricas
   useEffect(() => {
     const fetchAssignments = async () => {
       setLoading(true)
@@ -290,14 +290,14 @@ export default function DespachoDriverPage() {
         const today = new Date().toISOString().split("T")[0]
         let res
 
-        // ✅ Si es HOY, obtener TODAS las asignaciones (activas + completadas del día)
+        // ✅ Si es HOY, obtener TODAS las asignaciones ACTIVAS
         if (selectedDate === today) {
-          console.log("📊 Fetching TODAY's assignments (active + completed)")
-          res = await axios.get(`/api/assignments/today?driverId=${driverId}&includeCompleted=true`)
+          console.log("📊 Fetching ACTIVE assignments (not filtered by date)")
+          res = await axios.get(`/api/assignments/active?driverId=${driverId}`)
         } else {
-          // Si es una fecha específica del pasado, obtener asignaciones históricas
-          console.log(`📊 Fetching historical assignments for date: ${selectedDate}`)
-          res = await axios.get(`/api/assignments/historical?driverId=${driverId}&date=${selectedDate}`)
+          // Si es una fecha específica del pasado, filtrar por esa fecha
+          console.log(`📊 Fetching assignments for specific date: ${selectedDate}`)
+          res = await axios.get(`/api/assignments/dashboard?driverId=${driverId}&date=${selectedDate}`)
         }
 
         setAssignments(res.data.assignments || res.data)
@@ -393,9 +393,9 @@ export default function DespachoDriverPage() {
       // ✅ Obtener asignaciones con endpoint correcto
       let res
       if (selectedDate === today) {
-        res = await axios.get(`/api/assignments/today?driverId=${driverId}&includeCompleted=true`)
+        res = await axios.get(`/api/assignments/active?driverId=${driverId}`)
       } else {
-        res = await axios.get(`/api/assignments/historical?driverId=${driverId}&date=${selectedDate}`)
+        res = await axios.get(`/api/assignments/dashboard?driverId=${driverId}&date=${selectedDate}`)
       }
 
       clearTimeout(timeoutId)
@@ -623,8 +623,8 @@ export default function DespachoDriverPage() {
           </div>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full sm:w-auto">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-gray-500" />
+            <div className="flex items-center gap-4">
+             
               <Input
                 type="date"
                 value={selectedDate}
